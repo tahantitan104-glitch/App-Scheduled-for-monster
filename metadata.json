@@ -1,0 +1,6 @@
+{
+  "name": "Resolve",
+  "description": "Offline-first Android focus control and scheduled device restriction application.",
+  "requestFramePermissions": [],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}

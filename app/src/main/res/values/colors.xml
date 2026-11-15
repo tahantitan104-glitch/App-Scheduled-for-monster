@@ -1,0 +1,9 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <color name="forest_deep">#FF07110E</color>
+    <color name="forest_secondary">#FF101C17</color>
+    <color name="forest_surface">#FF17251E</color>
+    <color name="mint_accent">#FF9BE3B4</color>
+    <color name="sage_accent">#FF6FAE88</color>
+    <color name="text_primary">#FFF2F5F1</color>
+</resources>

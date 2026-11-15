@@ -1,0 +1,2158 @@
+RESOLVE
+
+MASTER PRODUCT BLUEPRINT & COMPLETE ANDROID APPLICATION REBUILD PROMPT
+
+PROJECT IDENTITY
+
+Application Name: RESOLVE
+
+Developer: "Tahan Official"
+
+Project Type: Native Android Focus Control and Scheduled Device Restriction Application
+
+Platform: Android
+
+Primary Development Environment: Google AI Studio
+
+Programming Language: Kotlin
+
+UI Framework: Jetpack Compose
+
+Architecture: MVVM + Clean Architecture
+
+Minimum Android Version: Android 9 (API 28)
+
+Preferred Distribution: Personal Installable APK
+
+Application Package ID for the clean rebuild: "com.resolve.focus"
+
+Primary Design Language: Premium, Minimal, Interactive, Dark Forest Green
+
+Application Runtime: Fully Local and Offline-First
+
+---
+
+1. YOUR ROLE AND PRIMARY OBJECTIVE
+
+Act as a senior Android architect, Kotlin developer, Android Device Policy Controller (DPC) specialist, UI/UX designer, security engineer, and quality assurance engineer.
+
+Your task is to rebuild the complete application under its new identity:
+
+RESOLVE
+
+The previous application was named EXIST.
+
+All relevant product decisions, functional requirements, UI concepts, security requirements, and technical lessons from the previous development must be consolidated into this single master blueprint.
+
+This document is the authoritative source of truth for RESOLVE.
+
+If older code, documentation, or previous prompts conflict with this document, follow this master blueprint.
+
+Do not blindly preserve incomplete or incorrectly implemented functionality.
+
+Do not create a new collection of disconnected demo screens.
+
+The objective is to deliver one coherent, fully integrated Android application.
+
+The completed application must be:
+
+- Minimal.
+- Premium.
+- Fast.
+- Reliable.
+- Easy to understand.
+- Fully functional within supported Android capabilities.
+- Private.
+- Offline-first.
+- Properly structured.
+- Maintainable.
+- Honest about security capabilities.
+
+The core purpose of RESOLVE is to help users control when they can use their phone freely, when it becomes restricted, and which applications remain available during a restricted session.
+
+---
+
+2. FIRST: COMPLETE PROJECT AUDIT AND REBUILD STRATEGY
+
+Before implementation, inspect the existing EXIST project and all relevant source files.
+
+Review:
+
+- Kotlin source files.
+- Gradle configuration.
+- AndroidManifest.xml.
+- Application architecture.
+- Existing domain models.
+- ViewModels.
+- Repositories.
+- Database implementation.
+- Installed-app discovery.
+- Allowlist implementation.
+- Session engine.
+- Countdown engine.
+- Scheduling system.
+- Recovery-code system.
+- DevicePolicyManager implementation.
+- DeviceAdminReceiver.
+- Lock Task implementation.
+- Services and receivers.
+- UI navigation.
+- Baby Cloud assets.
+- Theme and design tokens.
+- Settings screen.
+- Testing infrastructure.
+- Existing documentation.
+
+Identify which parts are:
+
+- Correct and reusable.
+- Incomplete.
+- Incorrect.
+- Duplicated.
+- Unnecessarily complicated.
+- Purely decorative.
+- Not technically supported.
+
+Rebuild strategy
+
+Rebuild the application as a unified product using the requirements in this document.
+
+You may refactor or replace incomplete implementations when technically necessary.
+
+However:
+
+1. Do not discard valid functionality without a reason.
+2. Do not overwrite the original project without a backup.
+3. Preserve a recoverable copy of the previous source code.
+4. Avoid duplicate session engines.
+5. Avoid duplicate repositories.
+6. Avoid creating unnecessary application modules.
+7. Maintain one authoritative source for each important application state.
+
+Create a clear implementation plan internally, then proceed with the actual project implementation.
+
+Do not stop after producing a theoretical plan.
+
+Modify and generate the actual project files wherever the environment supports file editing.
+
+If Google AI Studio cannot directly build native Android APKs, produce a complete Android Studio-compatible Gradle project.
+
+Do not pretend that a web preview or generated code snippet is an installed Android application.
+
+---
+
+3. BRANDING AND APPLICATION IDENTITY
+
+The new application name is:
+
+RESOLVE
+
+Remove the old EXIST branding completely.
+
+Update:
+
+- Application display name.
+- Launcher label.
+- App icon.
+- Splash screen.
+- Theme.
+- Internal documentation.
+- UI wordmark.
+- Build metadata.
+- Project documentation.
+
+Use the package identity:
+
+"com.resolve.focus"
+
+Before changing the package identity, review the implications for the previous EXIST installation.
+
+Device Owner provisioning and installed application identity must be handled carefully.
+
+Do not assume that existing Device Owner provisioning or previously stored data automatically transfers to the new package.
+
+Do not uninstall or replace an existing Device Owner application blindly.
+
+Do not initiate a factory reset.
+
+Provide a migration and provisioning-impact report before any operation that could require reprovisioning the device.
+
+Developer information
+
+The Settings/About area must display exactly:
+
+Developed by "Tahan Official"
+
+Do not add unnecessary marketing descriptions or fake company information.
+
+---
+
+4. PRODUCT PHILOSOPHY
+
+RESOLVE is not a general productivity dashboard.
+
+It is not a social networking application.
+
+It is not a game.
+
+It is not an AI chatbot.
+
+It is a dedicated focus-control and scheduled phone-restriction application.
+
+Its primary functions are:
+
+1. Instant Lock.
+2. Delayed Lock.
+3. Schedule Lock.
+4. Allowed Applications.
+5. Phone Call Access.
+6. Recovery Code.
+7. Session History.
+8. Essential Settings.
+
+Everything else should be considered unnecessary unless it directly improves one of these functions.
+
+Keep the application simple and purposeful.
+
+Avoid feature creep.
+
+---
+
+5. THE THREE PRIMARY LOCKING MODES
+
+The entire application must be organized around three distinct modes.
+
+These modes have different timing behavior.
+
+They must never be confused or implemented as variations of the same countdown.
+
+MODE A — INSTANT LOCK
+
+Purpose
+
+Instant Lock immediately restricts the phone for a duration selected by the user.
+
+Configuration
+
+The user selects:
+
+- Lock Duration.
+- Allowed Applications.
+- Phone Call Access.
+- Recovery Code.
+
+Example:
+
+- Lock Duration: 1 hour.
+- Allowed Apps: 3 applications.
+- Phone Calls: Enabled.
+- Recovery: 16-digit code.
+
+Expected behavior
+
+1. User selects Instant Lock.
+2. User configures the required options.
+3. User reviews the configuration.
+4. User presses Start Instant Lock.
+5. RESOLVE prepares the enforcement policy.
+6. RESOLVE enters the supported Android Lock Task Mode.
+7. The full-screen Resolve Lock Screen appears immediately.
+8. The restricted-session timer starts after enforcement has been confirmed.
+9. Normal Home Screen access is restricted.
+10. Only permitted applications and necessary Phone functionality remain accessible.
+11. The user can enter the recovery code.
+12. After the configured lock duration expires, RESOLVE exits the restriction state.
+
+Example timeline
+
+User selects a one-hour Instant Lock.
+
+At the moment the session successfully enters Lock Task Mode:
+
+"LOCK START = 00:00"
+
+The phone remains restricted for one hour.
+
+When the hour ends:
+
+"LOCK COMPLETE"
+
+Normal device usability is restored through supported Android mechanisms.
+
+Important rules
+
+- No preliminary free-use period.
+- No unnecessary 10-second, 30-second, or 60-second startup countdown.
+- No duplicate lock triggers.
+- No fake active-security indicator.
+- No timer reset caused by screen recreation.
+
+---
+
+MODE B — DELAYED LOCK
+
+This is a core differentiating feature of RESOLVE.
+
+Delayed Lock is designed to prevent users from continuing to use distracting applications longer than the time they originally intended.
+
+It allows the phone to remain normally usable for a chosen period, then automatically enters restricted Lock Mode.
+
+Delayed Lock is not a short countdown before locking.
+
+It contains two independent durations.
+
+Duration 1: FREE USE WINDOW
+
+The period during which the phone remains normally usable.
+
+Duration 2: LOCK DURATION
+
+The period during which the phone remains restricted after the Free Use Window ends.
+
+Both must be configurable independently.
+
+Example configuration
+
+The user selects:
+
+- Mode: Delayed Lock.
+- Free Use Window: 30 minutes.
+- Lock Duration: 1 hour.
+- Allowed Apps During Lock: 5 applications.
+- Phone Calls: Enabled.
+- Recovery Code: 16 digits.
+
+Exact expected behavior
+
+T = 00:00 — Delayed Lock begins
+
+The user confirms the configuration.
+
+RESOLVE stores the session configuration and schedules the automatic lock transition.
+
+The phone remains normally usable.
+
+The user may use:
+
+- Facebook.
+- YouTube.
+- Games.
+- Browsers.
+- Messaging applications.
+- Other installed applications.
+
+The selected Allowed Apps list does not restrict normal usage during this period.
+
+The Free Use Window is not itself a restricted session.
+
+T = 00:30 — Free Use Window expires
+
+The transition deadline arrives.
+
+RESOLVE must automatically initiate the actual Lock Mode transition.
+
+The user must not need to:
+
+- Open RESOLVE manually.
+- Press another button.
+- Confirm a popup.
+- Return to the Home Screen.
+- Activate Instant Lock manually.
+
+Automatic transition
+
+RESOLVE must use a documented and supported Android mechanism to bring its Lock Activity into the foreground and establish actual Lock Task Mode.
+
+The previously active non-allowlisted application must become inaccessible.
+
+The user should see the full-screen RESOLVE Lock Screen.
+
+After transition — LOCK DURATION begins
+
+The one-hour restricted-session countdown starts only after the enforcement state has been successfully established.
+
+During this period:
+
+- Ordinary unapproved third-party applications are restricted.
+- The normal Home Screen is inaccessible through ordinary navigation.
+- Selected applications remain usable.
+- Phone calls remain accessible.
+- The configured recovery code can terminate the session.
+- The countdown continues accurately.
+
+T = 01:30 — Lock Duration expires
+
+RESOLVE exits the supported enforcement state.
+
+Normal phone usage is restored.
+
+Important timing rules
+
+The two timers are independent.
+
+The Free Use Window begins when Delayed Lock is confirmed.
+
+The Lock Duration begins only when Lock Task enforcement becomes active.
+
+Do not start both countdowns simultaneously.
+
+Do not subtract the Free Use Window from the Lock Duration.
+
+Do not automatically restart a new Free Use Window after the phone is reopened.
+
+Do not transform Delayed Lock into per-app usage tracking.
+
+The entire device becomes restricted when the Free Use Window ends.
+
+Additional delayed-lock requirements
+
+Allow custom Free Use durations such as:
+
+- 10 minutes.
+- 15 minutes.
+- 30 minutes.
+- 45 minutes.
+- 1 hour.
+- 2 hours.
+- Custom durations.
+
+The user must be able to configure any valid custom duration within the application's documented limits.
+
+---
+
+MODE C — SCHEDULE LOCK
+
+Purpose
+
+Schedule Lock automatically starts a restricted session at a specified future date and time.
+
+This is different from Delayed Lock.
+
+Delayed Lock means:
+
+"Let me use the phone normally for a period, then lock it."
+
+Schedule Lock means:
+
+"Start restricting my phone automatically at this scheduled time."
+
+Supported schedule types
+
+1. One-time.
+2. Daily.
+3. Custom Weekly.
+
+One-time
+
+The user configures:
+
+- Date.
+- Start Time.
+- Lock Duration.
+- Allowed Applications.
+- Phone Call Access.
+- Recovery Code.
+
+At the configured date and time, RESOLVE initiates the lock.
+
+Daily
+
+The user configures:
+
+- Start Time.
+- Lock Duration.
+- Allowed Applications.
+- Phone Call Access.
+- Enabled/Disabled status.
+
+The restriction repeats each day.
+
+Custom Weekly
+
+The user selects:
+
+- Specific weekdays.
+- Start Time.
+- Lock Duration.
+- Allowed Applications.
+- Phone Call Access.
+- Enabled/Disabled status.
+
+Schedule behavior
+
+At the scheduled start time:
+
+1. Validate the schedule.
+2. Validate the stored configuration.
+3. Validate the Device Owner state.
+4. Validate the allowed application list.
+5. Prepare enforcement.
+6. Enter actual Lock Task Mode.
+7. Show the RESOLVE Lock Screen.
+8. Begin the configured Lock Duration.
+
+No additional user confirmation should be required at the scheduled time, provided all required capabilities are available and the user has explicitly enabled the schedule.
+
+Schedule management
+
+Users must be able to:
+
+- Create a schedule.
+- Edit a schedule.
+- Enable a schedule.
+- Disable a schedule.
+- Delete a schedule.
+- Review the next scheduled start.
+- View previous scheduled sessions in History.
+
+Duplicate and overlapping schedule handling
+
+Prevent duplicate active sessions.
+
+If two schedules overlap, validate the conflict before saving.
+
+Do not create multiple simultaneous Lock Task session engines.
+
+If a schedule trigger occurs while another lock session is already active, preserve the active session and record the overlapping trigger according to a documented rule.
+
+Missed schedule behavior
+
+Handle:
+
+- Device powered off.
+- Device reboot.
+- Missed alarm.
+- Time changes.
+- Time-zone changes.
+- Duplicate triggers.
+
+If the scheduled session has already expired before the device becomes available, do not start a stale session.
+
+If the device becomes available while a scheduled session should still be active, restore the appropriate state using the stored schedule data and the established restart policy.
+
+Use the device's local time zone.
+
+Never hardcode a fixed time zone.
+
+---
+
+6. REUSABLE AND RELIABLE TIME CONFIGURATION SYSTEM
+
+All three locking modes must use a single consistent duration-selection design.
+
+Do not create three different timer interfaces.
+
+Primary design objective
+
+Time configuration should be easy, direct, visually engaging, and quick.
+
+The user should not have to repeatedly press plus/minus buttons to configure durations.
+
+6.1 Main Duration Display
+
+Use a large, elegant duration display.
+
+Example:
+
+"03 : 40"
+
+Hours and minutes must be clearly distinguishable.
+
+The user should be able to understand the selected duration immediately.
+
+6.2 Independent Drag-Based Selection
+
+Create a smooth interactive wheel-based time selector or an equally usable custom drag selector.
+
+Provide separate controls for:
+
+- Hours.
+- Minutes.
+
+The controls must operate independently.
+
+Users should be able to drag either value without unexpectedly changing the other.
+
+CRITICAL BUG TO FIX
+
+The previous time picker had a state-management bug.
+
+Example:
+
+The user wants to select:
+
+"3 hours 40 minutes"
+
+But the existing implementation behaves incorrectly:
+
+- Selecting 1 hour unexpectedly changes minutes to 59.
+- Selecting minutes resets or changes the hour value.
+- The selected duration shifts during interaction.
+- The hour and minute values do not remain independently selected.
+
+This is unacceptable.
+
+Required solution
+
+Use one authoritative duration representation, preferably total minutes stored as a Long integer, with carefully controlled derived hour and minute values.
+
+Alternatively, maintain separate authoritative hour and minute fields with a single validated reducer.
+
+In either design:
+
+- Changing hours must preserve minutes.
+- Changing minutes must preserve hours.
+- Both controls must update the same session configuration.
+- The displayed total duration must always match the selected values.
+- UI recomposition must never reset either value.
+- Dragging one wheel must not recreate or reset the other wheel.
+- State restoration must preserve the exact duration.
+
+Example:
+
+Initial state:
+
+"00:00"
+
+Select 3 hours:
+
+"03:00"
+
+Then select 40 minutes:
+
+"03:40"
+
+The final duration must remain exactly 3 hours and 40 minutes.
+
+The reverse selection order must also work.
+
+Do not introduce hidden rounding or automatic changes to 59 minutes.
+
+Allow minute selection in one-minute increments so the user can select values such as 17, 25, 40, or 57 minutes.
+
+6.3 Direct Numeric Entry
+
+Allow the user to tap the large duration display.
+
+Open a clean numeric-entry interface.
+
+Allow direct entry of:
+
+- Hours.
+- Minutes.
+
+Example:
+
+"3h 40m"
+
+Validate the values.
+
+After confirmation, update the drag selector and the session configuration.
+
+Both interfaces must remain synchronized.
+
+6.4 Quick Presets
+
+Provide compact presets such as:
+
+- 10m.
+- 15m.
+- 30m.
+- 45m.
+- 1h.
+- 2h.
+- 3h.
+- 4h.
+
+Presets are optional shortcuts, not the primary interface.
+
+Custom durations must remain available.
+
+6.5 Reuse Across All Modes
+
+Instant Lock:
+
+- Configure Lock Duration.
+
+Delayed Lock:
+
+- Configure Free Use Window.
+- Configure Lock Duration.
+
+Schedule Lock:
+
+- Configure Lock Duration.
+- Configure scheduled start date/time.
+
+Use the same reusable duration component.
+
+Do not create separate timer-selection logic for each mode.
+
+---
+
+7. ALLOWED APPLICATION MANAGEMENT
+
+This is a fundamental part of RESOLVE.
+
+The user must be able to choose which applications remain accessible during Lock Mode.
+
+Application discovery
+
+Use Android PackageManager and the appropriate package-visibility mechanisms.
+
+Display installed applications with:
+
+- App icon.
+- App name.
+- Selection state.
+
+Include:
+
+- Search.
+- Select.
+- Deselect.
+- Selected application count.
+- Clear selection.
+- Save selection.
+
+Allowlist rules
+
+Only explicitly selected third-party applications should be available during restricted sessions.
+
+Do not automatically allow all installed applications.
+
+RESOLVE itself must be available where required.
+
+Necessary Phone/Dialer components must be identified separately.
+
+Do not include unrelated system applications by default.
+
+Data management
+
+Persist selected package identifiers locally.
+
+Use package names as reliable identifiers.
+
+Handle:
+
+- Uninstalled applications.
+- Updated applications.
+- Renamed applications.
+- Invalid packages.
+- Missing application icons.
+- Application-list changes.
+
+The user interface must show the actual saved allowlist.
+
+A saved selection must not be presented as proof that enforcement is active.
+
+Actual enforcement must be verified through DevicePolicyManager.
+
+---
+
+8. REAL ANDROID RESTRICTION ARCHITECTURE
+
+The intended behavior requires genuine Android-supported application restriction.
+
+Do not rely on appearance alone.
+
+Required architecture
+
+Investigate and implement:
+
+- DevicePolicyManager.
+- Device Owner provisioning.
+- DeviceAdminReceiver where appropriate.
+- Lock Task Mode.
+- DevicePolicyManager.setLockTaskPackages().
+- DevicePolicyManager.getLockTaskPackages().
+- ActivityManager.getLockTaskModeState().
+- Supported Activity launch mechanisms.
+- Android lifecycle handling.
+
+Use official Android APIs.
+
+Device Owner requirement
+
+A normal installed application does not automatically have Device Owner authority.
+
+Determine whether RESOLVE is correctly provisioned as a Device Policy Controller.
+
+Display the actual provisioning state.
+
+Do not pretend that:
+
+- A normal runtime permission grants Device Owner.
+- Accessibility access grants Device Owner.
+- Overlay access grants Device Owner.
+- Screen pinning is equivalent to Lock Task Mode.
+
+Lock Task policy
+
+Apply the user's explicitly selected applications to the real Lock Task package allowlist.
+
+Allow only:
+
+- RESOLVE.
+- User-selected applications.
+- Necessary verified Phone/Dialer packages.
+- Essential system components only when technically required.
+
+Do not allow the standard Home Launcher unless the product's verified security design explicitly requires it.
+
+Configure Lock Task features carefully.
+
+Test:
+
+- Home navigation.
+- Overview/Recent Apps.
+- Back navigation.
+- Notification shade.
+- System UI.
+- Allowed app transitions.
+- Phone interfaces.
+
+Full-screen Lock Experience
+
+Use a genuine foreground Lock Activity running within the supported Lock Task environment.
+
+Do not use a normal screen overlay as a substitute for Lock Task Mode.
+
+Do not build a deceptive fullscreen popup.
+
+Do not claim that a screen is locked simply because it visually covers another application.
+
+Bypass-resistance objective
+
+Ordinary navigation must not allow the user to leave the restricted experience.
+
+Do not provide normal Start, Stop, Exit, or Unlock buttons on the Lock Screen.
+
+Use the supported operating-system kiosk restrictions.
+
+However, do not claim that a third-party Android application can make a consumer device absolutely impossible to shut down, reboot, recover, or access in an emergency.
+
+Never intentionally disable emergency access or essential device-safety controls.
+
+Document actual platform and manufacturer limitations.
+
+---
+
+9. AUTOMATIC FOREGROUND-TO-LOCK TRANSITION
+
+This requirement is mandatory for the intended Delayed Lock and Schedule Lock experiences.
+
+When the appropriate timer or schedule reaches its deadline:
+
+- The previous ordinary application must become inaccessible.
+- RESOLVE must take over through a supported Android mechanism.
+- The real Lock Screen must become visible.
+- Lock Task Mode must be active.
+
+The user must not have to manually open RESOLVE.
+
+Engineering requirements
+
+Investigate:
+
+- AlarmManager.
+- Exact alarms.
+- PendingIntent behavior.
+- Background Activity Launch restrictions.
+- Android 9 behavior.
+- Android 10+ behavior.
+- Android 12+ restrictions.
+- Android 14+ restrictions.
+- Android 15+ PendingIntent behavior where applicable.
+- Device Owner-specific capabilities.
+- Huawei OEM behavior.
+
+Use the exact Android APIs supported by the configured compile and target SDK.
+
+If precise timing is required, evaluate exact alarms and the appropriate user-granted special access.
+
+Do not assume that WorkManager provides a precise second-level lock transition.
+
+Do not assume that Device Owner automatically bypasses every background Activity Launch restriction.
+
+Do not misuse full-screen notification intents.
+
+Do not request overlay permission as a shortcut.
+
+Critical test
+
+Configure:
+
+- Free Use Window: 2 minutes.
+- Lock Duration: 5 minutes.
+
+Start Delayed Lock.
+
+Open a non-allowlisted application.
+
+Keep using that application.
+
+Do not interact with the phone when the timer reaches zero.
+
+At the deadline:
+
+1. RESOLVE must initiate the transition.
+2. The existing app must become inaccessible.
+3. The genuine Lock Activity must appear.
+4. Actual Lock Task Mode must be confirmed.
+5. The restricted-session countdown must begin.
+6. Unapproved applications must remain inaccessible.
+
+A timer reaching zero without a real restriction transition is not a successful implementation.
+
+If the device cannot perform the transition under supported Android rules, report that limitation honestly.
+
+Do not replace real enforcement with a simulation.
+
+---
+
+10. PHONE CALL ACCESS
+
+Phone access is a required feature of RESOLVE.
+
+During restricted sessions, the user must retain appropriate incoming and outgoing phone-call capability.
+
+Incoming Calls
+
+The device's existing phone system must remain capable of presenting incoming call UI.
+
+The user should be able to:
+
+- See an incoming call.
+- Answer.
+- Reject.
+- End the call.
+
+After the call finishes, the user should return to the Resolve Lock experience where the platform allows it.
+
+Outgoing Calls
+
+Display a small, elegant Phone action on the Lock Screen.
+
+When tapped:
+
+- Launch the existing system Dialer.
+- Allow the user to enter or select a number.
+- Allow the user to initiate the call.
+- Keep the restricted-session countdown running.
+- Return to RESOLVE when the call ends where supported.
+
+Technical implementation
+
+Prefer the existing Android system Dialer.
+
+Do not unnecessarily replace the device's Default Dialer.
+
+Do not implement a complete phone application or call-history system.
+
+Use appropriate Telecom APIs to identify the default phone application.
+
+Use only the packages genuinely necessary for system phone functionality in the Lock Task allowlist.
+
+Do not hardcode assumed Huawei package names.
+
+Do not grant broad Contacts, Call Log, or direct-call permissions without a demonstrated technical requirement.
+
+Use the appropriate user-confirmed Dialer flow.
+
+Timer behavior
+
+Phone calls do not:
+
+- Pause the Lock Duration.
+- Reset the Lock Duration.
+- Extend the session.
+- Trigger recovery.
+- Disable enforcement.
+
+After a call ends, the same session continues with the correct remaining time.
+
+Test incoming and outgoing calls on the target physical device.
+
+Emergency calling must remain available.
+
+---
+
+11. RESOLVE LOCK SCREEN — SIGNATURE USER EXPERIENCE
+
+This is the most visually important screen in the application.
+
+The design inspiration is the minimal, full-screen, motion-graphic phone-lock experience described in the Social Sentry reference.
+
+Create an original RESOLVE design rather than copying proprietary artwork or exact UI assets.
+
+Visual structure
+
+The Lock Screen must contain very little information.
+
+Main hierarchy:
+
+1. Baby Cloud motion graphic around the center or upper-middle area.
+2. Large remaining-time display underneath.
+3. Dedicated Phone action toward the lower area.
+4. Minimal allowed-app access.
+5. Discreet recovery-code access.
+
+Do not add:
+
+- Normal Start buttons.
+- Normal Stop buttons.
+- An End Session button.
+- Large settings controls.
+- Inspirational text.
+- Unnecessary statistics.
+- Long session descriptions.
+- Excessive navigation controls.
+- Promotional content.
+- Unnecessary logos and labels.
+
+The screen should feel calm, premium, and visually immersive.
+
+Baby Cloud mascot
+
+Preserve the established Baby Cloud mascot.
+
+It must remain the only mascot.
+
+Appearance:
+
+- Soft.
+- Rounded.
+- Fluffy cloud.
+- Minimal facial details.
+- Gentle shading.
+- Premium 2D visual style.
+
+Animation:
+
+- Gentle breathing.
+- Floating.
+- Occasional blinking.
+- Subtle idle movement.
+
+The animation must be smooth and seamless.
+
+Bundle all animation assets locally.
+
+Do not require Internet access.
+
+Countdown
+
+Display the active Lock Duration clearly.
+
+Examples:
+
+"01:24:35"
+
+"00:30:00"
+
+"00:05:42"
+
+Use a large, readable format.
+
+The countdown must be connected to the real session engine.
+
+It must never be hardcoded or controlled by the animation.
+
+Allowed app access
+
+Provide an unobtrusive, simple way to access selected applications.
+
+A compact bottom app rail, subtle expandable panel, or another minimal interaction may be used.
+
+Do not clutter the permanent Lock Screen.
+
+The user must not need to navigate to the normal Android Home Screen to open an allowed application.
+
+Phone action
+
+Provide a clearly identifiable but visually restrained phone/call action.
+
+Recovery
+
+Provide a discreet, understandable recovery-code entry route.
+
+Do not create an undocumented hidden bypass.
+
+Navigation restrictions
+
+Ordinary Back/Home/Recent navigation must not exit the restricted state when genuine Lock Task Mode is active and correctly configured.
+
+Do not use visual tricks to imitate restriction.
+
+---
+
+12. VISUAL DESIGN SYSTEM
+
+RESOLVE must look minimal, premium, interactive, and polished.
+
+It should not look like a generic settings application.
+
+Color palette
+
+Primary background:
+
+- Deep Forest Green: "#07110E"
+- Secondary Dark Green: "#101C17"
+- Surface: "#17251E"
+
+Accents:
+
+- Muted Mint: "#9BE3B4"
+- Soft Sage: "#6FAE88"
+
+Text:
+
+- Primary: "#F2F5F1"
+- Secondary: "#A0ADA5"
+- Disabled: "#59665F"
+
+Adjust colors when necessary to maintain accessibility.
+
+Visual principles
+
+- Generous negative space.
+- Clear hierarchy.
+- Minimal surfaces.
+- Restrained rounded corners.
+- Subtle gradients only when useful.
+- Smooth motion.
+- Elegant typography.
+- Avoid excessive cards.
+- Avoid repeated identical buttons.
+- Avoid crowded screens.
+
+Interaction style
+
+Prefer direct manipulation where suitable.
+
+Examples:
+
+- Drag-based duration selector.
+- Direct numeric time entry.
+- Smooth application selection.
+- Subtle bottom-sheet interactions.
+- Clean transitions.
+- Compact app selection panels.
+
+The user should not feel that every operation requires opening another settings page or pressing multiple buttons.
+
+---
+
+13. COMPLETE APPLICATION STRUCTURE
+
+Keep the navigation simple and predictable.
+
+Recommended primary sections:
+
+1. Home.
+2. Schedule.
+3. History.
+4. Settings.
+
+Do not introduce unnecessary navigation items.
+
+HOME
+
+The Home Screen should clearly show three primary modes:
+
+- Instant Lock.
+- Delayed Lock.
+- Schedule Lock.
+
+These should be visually distinct.
+
+Avoid large, cluttered dashboard cards.
+
+The user must immediately understand what each mode does.
+
+Include a concise current-session status where relevant.
+
+Make the main actions easy to reach.
+
+INSTANT LOCK SETUP
+
+Sections:
+
+- Lock Duration.
+- Allowed Applications.
+- Phone Access.
+- Recovery Configuration.
+- Review & Start.
+
+DELAYED LOCK SETUP
+
+Sections:
+
+- Free Use Window.
+- Lock Duration.
+- Allowed Applications During Lock.
+- Phone Access.
+- Recovery Configuration.
+- Review & Start Delayed Lock.
+
+Clearly distinguish Free Use Window from Lock Duration.
+
+SCHEDULE LOCK SETUP
+
+Sections:
+
+- Schedule Type.
+- Start Date / Weekdays.
+- Start Time.
+- Lock Duration.
+- Allowed Applications.
+- Phone Access.
+- Enable Schedule.
+
+ALLOWED APPLICATIONS
+
+Display installed apps.
+
+Provide search and selection.
+
+Keep the list clean and compact.
+
+SCHEDULE
+
+Display existing schedules.
+
+Allow enable, disable, edit, and delete.
+
+HISTORY
+
+Show:
+
+- Date.
+- Lock mode.
+- Free-use duration where applicable.
+- Restricted duration.
+- Completed or recovered status.
+
+Keep it minimal.
+
+Use actual locally stored session records.
+
+Do not generate fake history.
+
+---
+
+14. SETTINGS — STRICTLY MINIMAL
+
+The previous Settings screen contained unnecessary content, fake technical claims, irrelevant Huawei Y6 statements, and excessive informational text.
+
+Remove all such material.
+
+Create a completely clean and practical Settings screen.
+
+The Settings screen must contain only relevant items.
+
+A. ACCESS & PERMISSIONS
+
+Display only permissions and access mechanisms that the implemented application genuinely requires.
+
+Every listed item must contain:
+
+1. Access name.
+2. One short explanation of why it is needed.
+3. Current status.
+4. A clear action to enable it when possible.
+
+Example structure:
+
+Device Management
+
+Required to use Android-supported app restriction and Lock Task Mode.
+
+Status: Not Set Up / Active / Unsupported
+
+Action: View Setup Guide.
+
+Alarms & Reminders
+
+Required for precise scheduled lock transitions on Android versions that require special exact-alarm access.
+
+Status: Enabled / Not Enabled / Not Required
+
+Action: Enable Access.
+
+Notifications
+
+Include only if a real application function requires notification access or permission.
+
+Status: Enabled / Not Enabled
+
+Action: Enable Notifications.
+
+Optional Background Optimization
+
+Include only when actual testing identifies a manufacturer-specific restriction that affects an essential function.
+
+Do not present optional access as universally mandatory.
+
+Access navigation
+
+When a user taps Enable:
+
+- Open the correct Android permission or special-access screen.
+- Use the appropriate official Settings intent.
+- Return to RESOLVE.
+- Recheck the actual permission state.
+- Update the UI.
+
+Do not merely change the displayed status when the user taps a button.
+
+The actual Android permission or access state must be verified.
+
+If Android does not expose a direct settings destination, provide a short, accurate instruction instead of a fake action.
+
+Important distinction
+
+Device Owner provisioning is not an ordinary permission toggle.
+
+Do not represent it as one.
+
+Provide an honest setup status and provisioning guide.
+
+Permissions that should not be requested without need
+
+Do not request:
+
+- Accessibility access as a replacement for app restriction.
+- Display over other apps as a replacement for Lock Task Mode.
+- Contacts access unnecessarily.
+- Call Log access unnecessarily.
+- Direct calling permission when the system Dialer flow is sufficient.
+- Notification access without an implemented requirement.
+- Battery optimization exemption without a demonstrated technical need.
+
+Do not display permissions that are not actually implemented or needed.
+
+Package visibility declarations are not user-granted runtime permissions. Do not present them as permission switches.
+
+B. APPLICATION INFORMATION
+
+Display:
+
+- Application version.
+- Application name.
+- Developed by "Tahan Official".
+
+Keep this section minimal.
+
+STRICT SETTINGS PROHIBITIONS
+
+Do not include:
+
+- Fake Huawei Y6 descriptions.
+- Fake compatibility claims.
+- Unnecessary technical explanations.
+- Marketing paragraphs.
+- Random tips.
+- Fake access statuses.
+- Unused theme controls.
+- Social features.
+- Cloud settings.
+- Account settings.
+- AI settings.
+- Unimplemented features.
+- Decorative menu items.
+- Excessive About information.
+
+Settings must contain only useful, functional options.
+
+---
+
+15. SESSION ENGINE AND STATE MANAGEMENT
+
+Use one centralized session engine.
+
+Do not build separate independent countdown systems for Instant, Delayed, and Schedule modes.
+
+The session engine must understand the mode and the associated timing configuration.
+
+Suggested domain model
+
+A session configuration should include:
+
+- Session ID.
+- Lock Mode.
+- Allowed Package List.
+- Lock Duration.
+- Free Use Duration when mode is Delayed Lock.
+- Scheduled Start Information when mode is Schedule Lock.
+- Phone Access Setting.
+- Recovery Configuration Reference.
+- Created Timestamp.
+- Current Session State.
+
+Suggested states
+
+- IDLE.
+- PREPARING.
+- DELAYED_FREE_USE_ACTIVE.
+- SCHEDULE_WAITING.
+- LOCK_TRANSITION_PENDING.
+- LOCK_ENFORCEMENT_ACTIVE.
+- PHONE_CALL_ACTIVE.
+- COMPLETED.
+- RECOVERY_IN_PROGRESS.
+- RECOVERED.
+- ENFORCEMENT_UNAVAILABLE.
+- ENFORCEMENT_FAILED.
+- INTERRUPTED.
+
+Use the existing domain architecture where suitable.
+
+Timing rules
+
+The countdown display must not be the source of truth.
+
+Persist:
+
+- Session ID.
+- Mode.
+- Configured durations.
+- Start timestamps.
+- Transition deadline.
+- Actual lock activation timestamp.
+- Expected lock expiration timestamp.
+- Current state.
+- Boot/session information.
+
+Use monotonic time for elapsed-time calculations during a boot cycle.
+
+Use appropriate persisted wall-clock information for reboot restoration and schedules.
+
+Handle clock changes and time-zone changes intentionally.
+
+Do not decrement a variable once every second and treat that as authoritative time.
+
+The UI may refresh periodically, but remaining time must be calculated from the stored deadlines.
+
+Phone call state
+
+Phone calls must not reset the session.
+
+The session engine must continue evaluating the actual expiration deadline.
+
+Idempotency
+
+Ensure that:
+
+- A transition happens only once.
+- Duplicate alarms cannot create multiple lock sessions.
+- Repeated lifecycle callbacks do not restart timers.
+- Recovery cannot happen twice.
+- Session completion cannot be recorded twice.
+
+---
+
+16. RESTART, PROCESS DEATH AND SESSION RECOVERY
+
+Support:
+
+- Activity recreation.
+- App process death.
+- App reopening.
+- Screen off/on.
+- Background/foreground transitions.
+- Device reboot.
+- Missed alarms.
+- Session expiration.
+
+Existing product decision
+
+For a device restart during an already active restricted session:
+
+After successful restoration, restart the originally configured full Lock Duration.
+
+Do not restore only the partial remaining duration for this specific lock-session restart policy.
+
+For a device restart during Delayed Lock's Free Use Window:
+
+- Restore the original deadline.
+- Do not grant another full Free Use Window.
+- If the deadline passed while the device was unavailable, initiate locking through the supported mechanism as soon as possible.
+
+For Schedule Lock:
+
+- Restore the appropriate schedule state.
+- Do not execute schedules that have already expired.
+- Apply the previously configured active-session restart policy if a session was already in Lock Mode when the device restarted.
+
+Never assume that a BroadcastReceiver alone guarantees immediate visible enforcement after reboot.
+
+Test the actual behavior on the intended device.
+
+---
+
+17. RECOVERY CODE AND SESSION TERMINATION
+
+The primary recovery method is a user-configured 16-digit numeric code.
+
+Preserve the existing optional 32-digit support if it is already correctly implemented.
+
+Requirements
+
+- User-created code.
+- Secure random code generation.
+- Confirmation during setup.
+- Safe display during initial configuration.
+- Clear confirmation that the code has been recorded.
+- Secure local verification.
+- No plaintext storage.
+- No plaintext logging.
+- Reasonable verification throttling.
+- Appropriate error handling.
+
+Use a well-reviewed cryptographic approach.
+
+Use secure random generation.
+
+Store a salted verifier using an appropriate password-based key derivation function.
+
+Use Android Keystore when appropriate for protecting secret material.
+
+Do not invent cryptographic algorithms.
+
+Successful recovery
+
+When the correct code is entered:
+
+1. Verify the code.
+2. Enter RECOVERY_IN_PROGRESS.
+3. Exit Lock Task Mode through documented supported APIs.
+4. Confirm enforcement has ended.
+5. Mark the session as RECOVERED.
+6. Record the recovery event.
+7. Restore normal device usage.
+
+Do not claim recovery succeeded before actual enforcement has ended.
+
+A phone call is not recovery.
+
+Opening an allowed application is not recovery.
+
+Lost recovery code
+
+Follow the established product policy.
+
+There must be no hidden, undocumented recovery bypass.
+
+Emergency and essential device-safety access must remain available.
+
+---
+
+18. LOCAL DATA AND PRIVACY
+
+RESOLVE must operate offline.
+
+No cloud backend.
+
+No accounts.
+
+No remote AI.
+
+No advertising.
+
+No analytics.
+
+No online synchronization.
+
+No external API dependency.
+
+No tracking SDK.
+
+Storage
+
+Use appropriate local persistence technologies.
+
+Recommended:
+
+- Room for structured session, schedule, history, and allowlist records.
+- DataStore for lightweight preferences.
+- Android Keystore for appropriate secret-key protection.
+
+Store:
+
+- User-selected applications.
+- Session configurations.
+- Session state.
+- Delayed-lock deadlines.
+- Schedule configurations.
+- Presets where retained.
+- Recovery verifier.
+- Session history.
+- Minimal application preferences.
+
+Use proper database migrations.
+
+Do not silently erase user data.
+
+Do not introduce the INTERNET permission unless a demonstrable product requirement exists and the user explicitly approves it.
+
+Development-time dependency downloads are not the same as runtime Internet use.
+
+---
+
+19. TECHNICAL ARCHITECTURE
+
+Use:
+
+- Kotlin.
+- Android SDK.
+- Jetpack Compose.
+- Material 3, customized.
+- MVVM.
+- Clean Architecture.
+- Kotlin Coroutines.
+- StateFlow.
+- Room.
+- DataStore.
+- Android Keystore.
+- Repository Pattern.
+- Appropriate Android Services and BroadcastReceivers.
+- AlarmManager where required.
+
+Minimum Android API: 28.
+
+Use the latest stable compile and target SDK supported by the installed development environment.
+
+Do not assume that a newer SDK can be installed automatically.
+
+Suggested project structure
+
+- "app"
+- "core"
+- "data"
+- "domain"
+- "presentation"
+- "navigation"
+- "platform"
+- "security"
+- "session"
+- "scheduling"
+- "devicepolicy"
+- "telephony"
+- "service"
+- "receiver"
+- "designsystem"
+
+Keep the actual module structure as simple as practical.
+
+Do not create separate modules merely for appearance.
+
+Architecture rules
+
+- UI must not own business logic.
+- ViewModels must not contain the entire session engine.
+- Compose recomposition must not control enforcement.
+- Repositories must own persistence access.
+- Domain logic must remain testable.
+- Android-specific functionality must be isolated behind appropriate interfaces.
+- Avoid unnecessary libraries.
+- Avoid global mutable state.
+- Avoid duplicated timers.
+
+---
+
+20. PERFORMANCE AND RELIABILITY
+
+The application must remain smooth and reliable.
+
+Target device class includes Huawei Y6 running Android 9.
+
+Do not assume flagship hardware.
+
+Optimize:
+
+- App launch.
+- Installed-app discovery.
+- Search.
+- Navigation.
+- Time wheel gestures.
+- Session state updates.
+- Countdown.
+- Lock transitions.
+- Baby Cloud animation.
+- Database operations.
+- Battery usage.
+- Memory usage.
+
+Crash prevention
+
+Pay particular attention to:
+
+- Hour/minute state synchronization.
+- Activity recreation.
+- Repeated timer callbacks.
+- Null or missing packages.
+- Unexpected permission revocation.
+- Invalid persisted state.
+- Duplicate alarms.
+- Reboot restoration.
+- DevicePolicyManager failures.
+- Background execution restrictions.
+- Phone call lifecycle.
+
+Use structured error handling.
+
+Do not block the UI thread.
+
+Do not create unlimited retries.
+
+Do not use multiple redundant background services.
+
+Do not claim that animations are responsible for session timing.
+
+---
+
+21. DESIGN AND MOTION QUALITY
+
+All screens must feel like one consistent premium application.
+
+Maintain:
+
+- Deep forest-green backgrounds.
+- Muted mint accents.
+- Soft off-white typography.
+- Minimal components.
+- Consistent corner radii.
+- Balanced spacing.
+- Responsive layouts.
+- Smooth motion.
+
+The application should not feel static or generic.
+
+Use purposeful animation for:
+
+- Screen transitions.
+- Duration wheel selection.
+- Button feedback.
+- Allowed-app selection.
+- Lock Screen transitions.
+- Baby Cloud idle movement.
+- Countdown changes.
+
+Avoid excessive effects.
+
+The Lock Screen must remain visually minimal.
+
+The mascot animation must not affect lock enforcement.
+
+No remote assets.
+
+---
+
+22. DEVICE COMPATIBILITY AND SECURITY FEASIBILITY
+
+The primary reference device is:
+
+Huawei Y6 — Android 9.
+
+Also maintain reasonable compatibility with Android versions above API 28.
+
+Before implementation, evaluate:
+
+- Device Owner provisioning.
+- Lock Task Mode.
+- Package visibility.
+- Activity launch behavior.
+- Exact alarm requirements.
+- Phone UI behavior.
+- Background execution.
+- Battery-management behavior.
+- Boot restoration.
+
+Huawei-specific requirements
+
+Do not add irrelevant Huawei information to the user-facing Settings screen.
+
+However, the development documentation must record actual hardware test results.
+
+Never assume that all Huawei models behave identically.
+
+Device Owner provisioning
+
+Do not factory reset the device.
+
+Do not automatically attempt Device Owner provisioning.
+
+Do not remove an existing Device Owner application.
+
+If the new package identity means reprovisioning is required, explain the effect and stop before any destructive step.
+
+---
+
+23. REQUIRED ACCESS AND PERMISSION ONBOARDING
+
+Before a protected session can start, show only the necessary access requirements.
+
+The onboarding must communicate:
+
+- Which capability is required.
+- Why it is needed.
+- Whether it is available.
+- What the user must do.
+
+The access status must reflect the real Android system state.
+
+Examples:
+
+- Device Owner: not provisioned / provisioned.
+- Lock Task capability: unavailable / ready / active.
+- Exact alarm access: granted / missing / not required.
+- Notifications: enabled / denied / not required.
+- Optional manufacturer-specific background restriction: only when verified.
+
+Do not label all these as ordinary runtime permissions.
+
+Do not ask for unnecessary access.
+
+Do not start a protected session when critical enforcement capabilities are missing.
+
+If enforcement cannot be established, show a truthful unavailable state.
+
+---
+
+24. REQUIRED TESTING PLAN
+
+Testing must cover the entire product.
+
+A. Instant Lock
+
+- Configure duration.
+- Start immediately.
+- Confirm genuine Lock Task Mode.
+- Confirm normal Home navigation is restricted.
+- Confirm non-allowlisted apps are inaccessible.
+- Confirm allowed apps work.
+- Confirm phone call access.
+- Confirm recovery code.
+- Confirm expiration.
+
+B. Delayed Lock
+
+Test with:
+
+- Free Use: 2 minutes.
+- Lock Duration: 5 minutes.
+
+Open an ordinary non-allowlisted application.
+
+Keep it in the foreground.
+
+Do not touch the device at the deadline.
+
+Verify genuine automatic transition.
+
+Verify actual Lock Task Mode.
+
+Verify allowed applications.
+
+Verify phone calls.
+
+Verify recovery.
+
+Verify automatic expiration.
+
+This is the most important acceptance test.
+
+C. Schedule Lock
+
+Test:
+
+- One-time.
+- Daily.
+- Custom Weekly.
+- Editing.
+- Disabling.
+- Deleting.
+- Missed schedule.
+- Device reboot.
+- Time changes.
+- Duplicate triggers.
+
+D. Timer Picker
+
+Test the exact previous bug:
+
+- Select 3 hours.
+- Select 40 minutes.
+- Confirm the result is 3:40.
+- Change the hour without changing minutes.
+- Change minutes without changing hours.
+- Try reverse selection order.
+- Scroll through multiple values.
+- Use direct numeric entry.
+- Select presets.
+- Recreate the Activity.
+- Confirm the selected duration remains intact.
+
+E. Phone Calls
+
+Test:
+
+- Incoming call.
+- Answer.
+- Reject.
+- End call.
+- Outgoing call.
+- Return from Dialer.
+- Countdown during calls.
+- Call UI in Lock Task Mode.
+
+F. Recovery
+
+Test:
+
+- 16-digit code.
+- Optional 32-digit code.
+- Incorrect code.
+- Correct code.
+- Repeated attempts.
+- Recovery state persistence.
+- Session termination.
+
+G. Lifecycle
+
+Test:
+
+- Screen off/on.
+- Background/foreground.
+- App process death.
+- Activity recreation.
+- Device restart.
+- Timer restoration.
+
+H. UI
+
+Test:
+
+- All screens.
+- Navigation.
+- Small-screen layout.
+- Touch interactions.
+- Contrast.
+- Scrolling.
+- Keyboard handling.
+- Baby Cloud animation.
+- Settings access navigation.
+
+Clearly separate:
+
+- Unit tests.
+- Integration tests.
+- Instrumentation tests.
+- Emulator tests.
+- Physical-device tests.
+
+Do not claim physical testing when only an emulator was used.
+
+---
+
+25. FINAL BUILD AND APK REQUIREMENTS
+
+Prepare the final project for installation.
+
+Application:
+
+- Display Name: Resolve.
+- Package ID: "com.resolve.focus".
+- Minimum SDK: 28.
+- Language: English.
+- Runtime: Offline.
+- UI: Jetpack Compose.
+
+Review:
+
+- Gradle files.
+- Manifest.
+- Dependencies.
+- Resources.
+- App icon.
+- App label.
+- Build configuration.
+- Signing configuration.
+
+If the environment supports Android compilation:
+
+1. Clean build.
+2. Compile.
+3. Resolve errors.
+4. Run tests.
+5. Generate debug APK.
+6. Generate release APK where signing is configured.
+7. Verify the actual output files.
+8. Report the actual paths.
+
+Do not invent an APK file or path.
+
+Do not commit signing passwords or private keys.
+
+If Google AI Studio cannot compile APKs, produce the complete Android Studio-compatible project and exact instructions for generating the APK.
+
+---
+
+26. FINAL SETTINGS AND PRODUCT CONTENT AUDIT
+
+Before finishing, inspect every visible Settings item and user-facing label.
+
+Remove:
+
+- Old EXIST branding.
+- Fake Huawei compatibility claims.
+- Fake permissions.
+- Placeholder settings.
+- Unimplemented features.
+- Unnecessary technical messages.
+- Excessive explanatory paragraphs.
+- Unnecessary buttons.
+- Duplicate navigation.
+- Misleading security indicators.
+- Decorative filler.
+
+The only developer credit must read:
+
+Developed by "Tahan Official"
+
+The overall product must remain simple and purposeful.
+
+---
+
+27. FINAL REQUIRED DOCUMENTATION
+
+Create or update:
+
+1. "README.md"
+2. "PRODUCT_BLUEPRINT.md"
+3. "ARCHITECTURE.md"
+4. "DESIGN_SYSTEM.md"
+5. "TIMER_SYSTEM.md"
+6. "INSTANT_LOCK.md"
+7. "DELAYED_LOCK.md"
+8. "SCHEDULE_LOCK.md"
+9. "DEVICE_OWNER_AND_SECURITY.md"
+10. "PHONE_ACCESS.md"
+11. "RECOVERY_SYSTEM.md"
+12. "PERMISSION_MATRIX.md"
+13. "DATA_STORAGE.md"
+14. "TEST_REPORT.md"
+15. "DEVICE_COMPATIBILITY.md"
+16. "FINAL_RELEASE_REPORT.md"
+17. "USER_GUIDE.md"
+
+Documentation must describe what has actually been implemented, not what is merely planned.
+
+---
+
+28. FINAL COMPLETION REPORT
+
+At the end, provide a comprehensive report with the following statuses:
+
+- COMPLETED AND VERIFIED.
+- IMPLEMENTED BUT NOT PHYSICALLY VERIFIED.
+- PARTIALLY IMPLEMENTED.
+- BLOCKED BY ANDROID OR DEVICE LIMITATION.
+- NOT IMPLEMENTED.
+
+Report separately:
+
+1. New Resolve branding.
+2. Final application architecture.
+3. Instant Lock.
+4. Delayed Lock.
+5. Schedule Lock.
+6. Automatic foreground-to-Lock-Screen transition.
+7. Device Owner provisioning.
+8. Lock Task enforcement.
+9. Allowed-app behavior.
+10. Phone call functionality.
+11. Recovery-code functionality.
+12. Time-picker bug correction.
+13. Local storage.
+14. Settings cleanup.
+15. Baby Cloud animation.
+16. Performance and crash testing.
+17. Huawei Y6 compatibility.
+18. Android version compatibility.
+19. Build status.
+20. APK availability.
+
+Clearly explain any remaining limitation.
+
+Never report a feature as working simply because source code exists.
+
+Never claim that the phone is genuinely restricted unless actual enforcement has been verified.
+
+---
+
+29. NON-NEGOTIABLE PRODUCT REQUIREMENTS
+
+The following decisions must be preserved throughout development:
+
+1. The application is named RESOLVE, not EXIST.
+2. There are exactly three main locking modes: Instant Lock, Delayed Lock, Schedule Lock.
+3. Delayed Lock contains two independent durations: Free Use Window and Lock Duration.
+4. The Delayed Lock Free Use Window allows normal phone usage.
+5. When that window expires, RESOLVE must automatically initiate the actual restriction transition.
+6. Lock Duration begins after enforcement is confirmed.
+7. Instant Lock starts restriction immediately.
+8. Schedule Lock starts restriction at the configured scheduled time.
+9. Only explicitly selected third-party apps remain accessible during Lock Mode.
+10. Necessary Phone functionality remains available.
+11. The recovery code can terminate a restricted session.
+12. Phone calls never pause or extend the lock timer.
+13. The Lock Screen remains minimal and full-screen.
+14. Baby Cloud remains the single fixed mascot.
+15. Time selection must support independent hour/minute dragging and direct input.
+16. The hour/minute reset bug must be fixed.
+17. Settings must contain only real, useful options.
+18. The developer credit must read Developed by "Tahan Official".
+19. User data remains local.
+20. The application does not depend on runtime Internet access.
+21. The actual security state must always be reported honestly.
+22. No unnecessary feature may be added merely for appearance.
+23. No factory reset or Device Owner reprovisioning may be initiated without explicit user authorization.
+24. Emergency access and essential device-safety functions must not be intentionally obstructed.
+
+---
+
+30. FINAL PRODUCT VISION
+
+RESOLVE must deliver a simple but powerful experience.
+
+The user opens the application and immediately understands three options:
+
+INSTANT LOCK
+Lock the phone now.
+
+DELAYED LOCK
+Use the phone freely for a chosen period, then automatically enter restricted Lock Mode.
+
+SCHEDULE LOCK
+Automatically enter restricted Lock Mode at a chosen date and time.
+
+The restricted experience must be visually immersive, with the Baby Cloud motion graphic, a clear countdown, Phone access, selected applications, and the discreet recovery-code pathway.
+
+There should be no unnecessary clutter.
+
+There should be no fake settings.
+
+There should be no confusing timer behavior.
+
+There should be no duplicated functionality.
+
+There should be no misleading security claims.
+
+The product should feel simple from the user's perspective while remaining technically structured underneath.
+
+The final objective is to build RESOLVE as a polished, reliable, secure, minimalist Android focus-control application—not merely a visual prototype.
+
+Complete the rebuild, verify the implementation, generate the project deliverables, and provide the final technical report.

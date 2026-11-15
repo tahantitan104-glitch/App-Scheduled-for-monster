@@ -1,0 +1,10 @@
+<resources>
+    <string name="app_name">Resolve</string>
+    <string name="device_admin_label">Resolve Device Management</string>
+    <string name="device_admin_description">Allows Resolve to enforce Lock Task app restrictions during scheduled and instant focus sessions.</string>
+    <string name="accessibility_service_label">Resolve Focus Guard</string>
+    <string name="accessibility_service_description">Detects which app is currently in the foreground during an active Resolve lock session so blocked apps stay restricted while your allowed apps and phone calls remain usable.</string>
+    <string name="notification_channel_session_name">Active Focus Session</string>
+    <string name="notification_channel_session_desc">Keeps Resolve\'s free-use countdown and lock enforcement timing accurate.</string>
+    <string name="developer_credit">Developed by Tahan Official</string>
+</resources>
