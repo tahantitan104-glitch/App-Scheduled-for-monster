@@ -30,12 +30,19 @@
   - Upgraded `BabyCloudMascot` and `SignatureLockScreen` rendering cleanly without crashes.
   - `SafeAndroidTextToolbar` + `RecoveryCodeSetupDialog` input, idempotent hide, and clean dismissal without `TYPE_FLOATING` `ActionMode` lifecycle errors.
 
-### 3. Static Analysis & Build Verification
-- **`gradle :app:lintDebug`:** Passed (`BUILD SUCCESSFUL`, 0 errors).
-- **`gradle :app:assembleDebug`:** Passed (`app/build/outputs/apk/debug/app-debug.apk`).
+### 3. Legacy SDK Compatibility Tests (`com.example.Api21CompatRobolectricTest`, Robolectric SDK 23)
+- **`com.example.Api21CompatRobolectricTest`** — **4 passed, 0 failed, 0 skipped**
+  - Pre-Oreo / pre-Pie system capability, alarm, device policy (`getLockTaskModeState`, `getAppliedLockTaskPackages`), phone access, and installed apps discovery checks.
+  - Recovery code saving/verifying + direct `PBKDF2WithHmacSHA1` derivation fallback verification.
+  - `SafeAndroidTextToolbar` show/hide/release on legacy SDK.
+  - `ScheduleCalculator` (`java.time.*`) execution under core library desugaring.
 
-**Total Automated JVM + Robolectric Tests:** **21 / 21 Passed**.
+### 4. Static Analysis & Build Verification
+- **`gradle :app:lintDebug`:** Passed (`BUILD SUCCESSFUL`, 0 errors against `minSdk = 21`).
+- **`gradle :app:assembleDebug`:** Passed (`app/build/outputs/apk/debug/app-debug.apk`, copied to `.build-outputs/app-debug.apk` and `APK_DOWNLOAD/app-debug.apk`, 13,180,522 bytes, signed with v1 JAR + v2 schemes).
+
+**Total Automated JVM + Robolectric Tests:** **25 / 25 Passed**.
 
 ## Not Executed in This Environment
 - **Instrumentation / Emulator Tests (`androidTest`):** No Android emulator or ADB-connected device is available in the cloud container.
-- **Physical Device Tests (Huawei Y6 — Android 9 / Android 10–15 devices):** Not executed here. Real Device Owner provisioning (`dpm set-device-owner`), physical Accessibility / Lock Task navigation blocking, OEM background activity launch behavior during Delayed Lock, incoming/outgoing phone calls, live battery/animation frame pacing, and physical device reboot restoration require verification on target hardware.
+- **Physical Device Tests (Android 5.0+ / Android 9 Huawei Y6 / Android 10–15 devices):** Not executed here. Real Device Owner provisioning (`dpm set-device-owner`), physical Accessibility / Lock Task navigation blocking, OEM background activity launch behavior during Delayed Lock, incoming/outgoing phone calls, live battery/animation frame pacing, and physical device reboot restoration require verification on target hardware.

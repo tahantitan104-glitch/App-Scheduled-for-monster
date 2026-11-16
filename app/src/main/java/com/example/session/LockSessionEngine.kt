@@ -415,7 +415,7 @@ class LockSessionEngine(
             if (current.state == SessionState.LOCK_ENFORCEMENT_ACTIVE) {
                 val alreadyActive = when (mode) {
                     EnforcementMode.DEVICE_OWNER_LOCK_TASK ->
-                        devicePolicyController.getLockTaskModeState() == ActivityManager.LOCK_TASK_MODE_LOCKED
+                        devicePolicyController.getLockTaskModeState() == 1
                     EnforcementMode.ACCESSIBILITY_GUARD -> status.isAccessibilityServiceEnabled
                     EnforcementMode.NONE -> false
                 }

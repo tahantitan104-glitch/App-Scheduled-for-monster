@@ -2,7 +2,7 @@ Resolve — Installable Debug APK
 ================================
 File: app-debug.apk
 Package ID: com.resolve.focus
-Min SDK: Android 9 (API 28)
+Min SDK: Android 5.0 (API 21)
 
 Install Instructions:
 1. Download / export the project ZIP (or download app-debug.apk from this folder).

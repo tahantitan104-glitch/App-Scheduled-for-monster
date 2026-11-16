@@ -6,6 +6,7 @@ import android.content.Context
 import android.content.Intent
 import android.graphics.Color
 import android.graphics.PixelFormat
+import android.os.Build
 import android.os.Handler
 import android.os.Looper
 import android.provider.Settings
@@ -57,7 +58,7 @@ class ForegroundEnforcementGuard(
     }
 
     fun showBriefBarrierAndLaunchLockScreen() {
-        val hasOverlay = runCatching { Settings.canDrawOverlays(context) }.getOrDefault(false)
+        val hasOverlay = canDrawOverlaysCompat()
         if (hasOverlay) {
             mainHandler.post {
                 mainHandler.removeCallbacks(detachRunnable)
@@ -88,8 +89,15 @@ class ForegroundEnforcementGuard(
         runCatching { context.startActivity(intent) }
     }
 
+    private fun canDrawOverlaysCompat(): Boolean =
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.M) {
+            runCatching { Settings.canDrawOverlays(context) }.getOrDefault(false)
+        } else {
+            true
+        }
+
     private fun attachShieldSafe() {
-        val hasOverlay = runCatching { Settings.canDrawOverlays(context) }.getOrDefault(false)
+        val hasOverlay = canDrawOverlaysCompat()
         if (shieldView != null || !hasOverlay) return
         runCatching {
             val wm = context.getSystemService(Context.WINDOW_SERVICE) as? WindowManager ?: return
@@ -98,10 +106,16 @@ class ForegroundEnforcementGuard(
                 isClickable = true
                 isFocusable = true
             }
+            val overlayType = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
+                WindowManager.LayoutParams.TYPE_APPLICATION_OVERLAY
+            } else {
+                @Suppress("DEPRECATION")
+                WindowManager.LayoutParams.TYPE_SYSTEM_ALERT
+            }
             val params = WindowManager.LayoutParams(
                 WindowManager.LayoutParams.MATCH_PARENT,
                 WindowManager.LayoutParams.MATCH_PARENT,
-                WindowManager.LayoutParams.TYPE_APPLICATION_OVERLAY,
+                overlayType,
                 WindowManager.LayoutParams.FLAG_LAYOUT_IN_SCREEN or
                     WindowManager.LayoutParams.FLAG_NOT_TOUCH_MODAL,
                 PixelFormat.TRANSLUCENT

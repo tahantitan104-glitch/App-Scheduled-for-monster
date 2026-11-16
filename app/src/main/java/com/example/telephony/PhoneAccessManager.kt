@@ -15,10 +15,12 @@ class PhoneAccessManager(private val context: Context) {
         }.getOrNull()
         val pm = context.packageManager
 
-        runCatching { telecomManager?.defaultDialerPackage }
-            .getOrNull()
-            ?.takeIf { it.isNotBlank() }
-            ?.let { packages.add(it) }
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.M) {
+            runCatching { telecomManager?.defaultDialerPackage }
+                .getOrNull()
+                ?.takeIf { it.isNotBlank() }
+                ?.let { packages.add(it) }
+        }
 
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
             runCatching { telecomManager?.systemDialerPackage }
@@ -39,7 +41,12 @@ class PhoneAccessManager(private val context: Context) {
         // Dynamically resolve installed InCallService UI packages across OEMs
         runCatching {
             val inCallIntent = Intent("android.telecom.InCallService")
-            pm.queryIntentServices(inCallIntent, PackageManager.MATCH_ALL)
+            val queryFlags = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.M) {
+                PackageManager.MATCH_ALL
+            } else {
+                0
+            }
+            pm.queryIntentServices(inCallIntent, queryFlags)
                 .mapNotNull { it.serviceInfo?.packageName }
                 .filter { it.isNotBlank() }
         }.getOrDefault(emptyList()).forEach { packages.add(it) }

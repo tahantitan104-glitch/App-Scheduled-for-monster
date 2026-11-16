@@ -1,8 +1,10 @@
 package com.example.security
 
+import android.os.Build
 import android.security.keystore.KeyGenParameterSpec
 import android.security.keystore.KeyProperties
 import android.util.Base64
+import androidx.annotation.RequiresApi
 import com.example.data.preferences.ResolvePreferencesRepository
 import com.example.data.preferences.StoredRecoveryRecord
 import com.example.domain.model.RecoveryVerificationResult
@@ -12,6 +14,7 @@ import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.withContext
 import java.security.KeyStore
 import java.security.MessageDigest
+import java.security.NoSuchAlgorithmException
 import java.security.SecureRandom
 import javax.crypto.Cipher
 import javax.crypto.KeyGenerator
@@ -133,7 +136,12 @@ class RecoveryCodeManager(
         val chars = code.toCharArray()
         return try {
             val spec = PBEKeySpec(chars, salt, PBKDF2_ITERATIONS, KEY_LENGTH_BITS)
-            val factory = SecretKeyFactory.getInstance("PBKDF2WithHmacSHA256")
+            val factory = try {
+                SecretKeyFactory.getInstance("PBKDF2WithHmacSHA256")
+            } catch (_: NoSuchAlgorithmException) {
+                // Android 5-7 (API 21-25) only ships PBKDF2WithHmacSHA1 in default provider
+                SecretKeyFactory.getInstance("PBKDF2WithHmacSHA1")
+            }
             factory.generateSecret(spec).encoded
         } finally {
             chars.fill('\u0000')
@@ -141,8 +149,9 @@ class RecoveryCodeManager(
     }
 
     private fun wrapWithKeystore(plaintext: ByteArray): Pair<ByteArray, ByteArray>? {
+        if (Build.VERSION.SDK_INT < Build.VERSION_CODES.M) return null
         return runCatching {
-            val key = getOrCreateKeystoreKey()
+            val key = Api23KeystoreHelper.getOrCreateKeystoreKey()
             val cipher = Cipher.getInstance(AES_GCM_TRANSFORMATION)
             cipher.init(Cipher.ENCRYPT_MODE, key)
             val ciphertext = cipher.doFinal(plaintext)
@@ -151,30 +160,34 @@ class RecoveryCodeManager(
     }
 
     private fun unwrapWithKeystore(ciphertext: ByteArray, iv: ByteArray): ByteArray? {
+        if (Build.VERSION.SDK_INT < Build.VERSION_CODES.M) return null
         return runCatching {
-            val key = getOrCreateKeystoreKey()
+            val key = Api23KeystoreHelper.getOrCreateKeystoreKey()
             val cipher = Cipher.getInstance(AES_GCM_TRANSFORMATION)
             cipher.init(Cipher.DECRYPT_MODE, key, GCMParameterSpec(GCM_TAG_BITS, iv))
             cipher.doFinal(ciphertext)
         }.getOrNull()
     }
 
-    private fun getOrCreateKeystoreKey(): SecretKey {
-        val keyStore = KeyStore.getInstance(ANDROID_KEYSTORE).apply { load(null) }
-        val existing = keyStore.getKey(KEYSTORE_ALIAS, null) as? SecretKey
-        if (existing != null) return existing
+    @RequiresApi(Build.VERSION_CODES.M)
+    private object Api23KeystoreHelper {
+        fun getOrCreateKeystoreKey(): SecretKey {
+            val keyStore = KeyStore.getInstance(ANDROID_KEYSTORE).apply { load(null) }
+            val existing = keyStore.getKey(KEYSTORE_ALIAS, null) as? SecretKey
+            if (existing != null) return existing
 
-        val generator = KeyGenerator.getInstance(KeyProperties.KEY_ALGORITHM_AES, ANDROID_KEYSTORE)
-        val spec = KeyGenParameterSpec.Builder(
-            KEYSTORE_ALIAS,
-            KeyProperties.PURPOSE_ENCRYPT or KeyProperties.PURPOSE_DECRYPT
-        )
-            .setBlockModes(KeyProperties.BLOCK_MODE_GCM)
-            .setEncryptionPaddings(KeyProperties.ENCRYPTION_PADDING_NONE)
-            .setKeySize(256)
-            .build()
-        generator.init(spec)
-        return generator.generateKey()
+            val generator = KeyGenerator.getInstance(KeyProperties.KEY_ALGORITHM_AES, ANDROID_KEYSTORE)
+            val spec = KeyGenParameterSpec.Builder(
+                KEYSTORE_ALIAS,
+                KeyProperties.PURPOSE_ENCRYPT or KeyProperties.PURPOSE_DECRYPT
+            )
+                .setBlockModes(KeyProperties.BLOCK_MODE_GCM)
+                .setEncryptionPaddings(KeyProperties.ENCRYPTION_PADDING_NONE)
+                .setKeySize(256)
+                .build()
+            generator.init(spec)
+            return generator.generateKey()
+        }
     }
 
     companion object {

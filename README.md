@@ -4,7 +4,7 @@ Offline-first Android focus control and scheduled device restriction application
 
 - **Application Name:** Resolve
 - **Application Package ID:** `com.resolve.focus`
-- **Minimum Android Version:** Android 9 (API 28)
+- **Minimum Android Version:** Android 5.0 Lollipop (API 21)
 - **Target / Compile SDK:** API 36
 - **Developer:** Tahan Official
 - **Runtime:** 100% Offline, Local-First (Room + DataStore + Android Keystore)
@@ -16,11 +16,12 @@ Offline-first Android focus control and scheduled device restriction application
 
 ## Key Capabilities
 - **Dual-Tier Enforcement:**
-  - **Tier 1 — Device Owner Lock Task:** Uses `DevicePolicyManager` (`setLockTaskPackages`, `setLockTaskFeatures`) when provisioned via ADB.
-  - **Tier 2 — Accessibility Guard:** Uses `ResolveAccessibilityService` + `ForegroundEnforcementGuard` (`SYSTEM_ALERT_WINDOW` + `UsageStatsManager` fallback) + `ResolveSessionService` so consumer/personal APKs enforce lock mode cleanly without Device Owner provisioning.
+  - **Tier 1 — Device Owner Lock Task:** Uses `DevicePolicyManager` (`setLockTaskPackages`, with `setLockTaskFeatures` on Android 9+) when provisioned via ADB.
+  - **Tier 2 — Accessibility Guard:** Uses `ResolveAccessibilityService` + `ForegroundEnforcementGuard` (`TYPE_APPLICATION_OVERLAY` / `TYPE_SYSTEM_ALERT` + `UsageStatsManager` fallback) + `ResolveSessionService` so consumer/personal APKs enforce lock mode cleanly on Android 5.0+ without Device Owner provisioning.
 - Independent Hours (`0–23`) and Minutes (`0–59`) drag-wheel + direct numeric entry duration selector.
 - System Dialer, InCallUI, IME keyboard, and emergency call safelisting (`TelecomManager` + `Intent.ACTION_DIAL`) without pausing or extending lock timers.
-- Salted PBKDF2-HMAC-SHA256 + Android Keystore AES-256-GCM 16-digit (and optional 32-digit) recovery code verification with attempt throttling.
+- Salted PBKDF2-HMAC-SHA256 (with PBKDF2-HMAC-SHA1 fallback on Android 5–7) + Android Keystore AES-256-GCM (Android 6+) 16-digit (and optional 32-digit) recovery code verification with attempt throttling.
+- Core library desugaring (`java.time.*`) and API-level system guards supporting Android 5.0 through Android 16.
 - Animated 2D Baby Cloud mascot bundled locally in Jetpack Compose `Canvas`.
 
 ## Building

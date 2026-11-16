@@ -4,6 +4,7 @@ import android.app.AlarmManager
 import android.content.BroadcastReceiver
 import android.content.Context
 import android.content.Intent
+import android.os.Build
 import com.example.ResolveApplication
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
@@ -19,14 +20,17 @@ class ResolveSystemReceiver : BroadcastReceiver() {
             try {
                 runCatching {
                     engine.initialize()
-                    when (intent.action) {
-                        Intent.ACTION_BOOT_COMPLETED,
-                        Intent.ACTION_LOCKED_BOOT_COMPLETED -> {
+                    val action = intent.action
+                    when {
+                        action == Intent.ACTION_BOOT_COMPLETED ||
+                            (Build.VERSION.SDK_INT >= Build.VERSION_CODES.N &&
+                                action == Intent.ACTION_LOCKED_BOOT_COMPLETED) -> {
                             engine.onSystemBootOrTimeChange(isBoot = true)
                         }
-                        Intent.ACTION_TIME_CHANGED,
-                        Intent.ACTION_TIMEZONE_CHANGED,
-                        AlarmManager.ACTION_SCHEDULE_EXACT_ALARM_PERMISSION_STATE_CHANGED -> {
+                        action == Intent.ACTION_TIME_CHANGED ||
+                            action == Intent.ACTION_TIMEZONE_CHANGED ||
+                            (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S &&
+                                action == AlarmManager.ACTION_SCHEDULE_EXACT_ALARM_PERMISSION_STATE_CHANGED) -> {
                             engine.onSystemBootOrTimeChange(isBoot = false)
                         }
                     }

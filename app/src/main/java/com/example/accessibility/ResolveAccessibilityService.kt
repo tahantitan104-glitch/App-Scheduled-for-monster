@@ -55,8 +55,7 @@ class ResolveAccessibilityService : AccessibilityService() {
 
             // If true Device Owner Lock Task is already enforcing at OS level, no redirect needed
             if (session.enforcementMode == EnforcementMode.DEVICE_OWNER_LOCK_TASK &&
-                container.devicePolicyController.getLockTaskModeState() ==
-                android.app.ActivityManager.LOCK_TASK_MODE_LOCKED
+                container.devicePolicyController.getLockTaskModeState() == 1
             ) {
                 return
             }

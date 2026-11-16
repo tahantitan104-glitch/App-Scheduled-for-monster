@@ -70,7 +70,14 @@ class ResolveSessionService : Service() {
                 }.collect { (session, remaining) ->
                     if (session == null || session.isTerminal) {
                         container.foregroundGuard.clearBarrier()
-                        runCatching { stopForeground(STOP_FOREGROUND_REMOVE) }
+                        runCatching {
+                            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.N) {
+                                stopForeground(STOP_FOREGROUND_REMOVE)
+                            } else {
+                                @Suppress("DEPRECATION")
+                                stopForeground(true)
+                            }
+                        }
                         stopSelf()
                     } else {
                         runCatching {
@@ -129,6 +136,7 @@ class ResolveSessionService : Service() {
     }
 
     private fun ensureNotificationChannel() {
+        if (Build.VERSION.SDK_INT < Build.VERSION_CODES.O) return
         runCatching {
             val nm = getSystemService(Context.NOTIFICATION_SERVICE) as? NotificationManager ?: return
             if (nm.getNotificationChannel(CHANNEL_ID) == null) {
@@ -153,11 +161,16 @@ class ResolveSessionService : Service() {
         } else {
             MainActivity::class.java
         }
+        val immutableFlag = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.M) {
+            PendingIntent.FLAG_IMMUTABLE
+        } else {
+            0
+        }
         val contentIntent = PendingIntent.getActivity(
             this,
             0,
             Intent(this, targetActivity),
-            PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE
+            PendingIntent.FLAG_UPDATE_CURRENT or immutableFlag
         )
 
         val formatted = formatHms(remainingMs)
@@ -198,7 +211,13 @@ class ResolveSessionService : Service() {
 
         fun start(context: Context) {
             val intent = Intent(context, ResolveSessionService::class.java)
-            runCatching { context.startForegroundService(intent) }
+            runCatching {
+                if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
+                    context.startForegroundService(intent)
+                } else {
+                    context.startService(intent)
+                }
+            }
         }
 
         fun stop(context: Context) {

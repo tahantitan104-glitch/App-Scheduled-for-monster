@@ -60,8 +60,13 @@ class SystemCapabilityChecker(private val context: Context) {
         }.getOrDefault(false)
 
         val lockTaskModeState = runCatching {
-            activityManager?.lockTaskModeState ?: ActivityManager.LOCK_TASK_MODE_NONE
-        }.getOrDefault(ActivityManager.LOCK_TASK_MODE_NONE)
+            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.M) {
+                activityManager?.lockTaskModeState ?: 0
+            } else {
+                @Suppress("DEPRECATION")
+                if (activityManager?.isInLockTaskMode == true) 1 else 0
+            }
+        }.getOrDefault(0)
 
         val exactAlarmRequired = Build.VERSION.SDK_INT >= Build.VERSION_CODES.S
         val canScheduleExactAlarms = if (exactAlarmRequired) {
@@ -125,7 +130,11 @@ class SystemCapabilityChecker(private val context: Context) {
     }
 
     fun canDrawOverlays(): Boolean =
-        runCatching { Settings.canDrawOverlays(context) }.getOrDefault(false)
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.M) {
+            runCatching { Settings.canDrawOverlays(context) }.getOrDefault(false)
+        } else {
+            true
+        }
 
     fun hasUsageStatsAccess(): Boolean = runCatching {
         val appOps = context.getSystemService(Context.APP_OPS_SERVICE) as? AppOpsManager ?: return@runCatching false
@@ -146,9 +155,14 @@ class SystemCapabilityChecker(private val context: Context) {
         mode == AppOpsManager.MODE_ALLOWED
     }.getOrDefault(false)
 
-    fun isIgnoringBatteryOptimizations(): Boolean = runCatching {
-        powerManager?.isIgnoringBatteryOptimizations(context.packageName) == true
-    }.getOrDefault(false)
+    fun isIgnoringBatteryOptimizations(): Boolean =
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.M) {
+            runCatching {
+                powerManager?.isIgnoringBatteryOptimizations(context.packageName) == true
+            }.getOrDefault(false)
+        } else {
+            true
+        }
 
     fun openAccessibilitySettings(): Boolean {
         val intent = Intent(Settings.ACTION_ACCESSIBILITY_SETTINGS).apply {
@@ -158,6 +172,9 @@ class SystemCapabilityChecker(private val context: Context) {
     }
 
     fun openOverlaySettings(): Boolean {
+        if (Build.VERSION.SDK_INT < Build.VERSION_CODES.M) {
+            return openAppDetailsSettings()
+        }
         val specific = Intent(Settings.ACTION_MANAGE_OVERLAY_PERMISSION).apply {
             data = Uri.fromParts("package", context.packageName, null)
             addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
@@ -180,6 +197,9 @@ class SystemCapabilityChecker(private val context: Context) {
     }
 
     fun openBatteryOptimizationSettings(): Boolean {
+        if (Build.VERSION.SDK_INT < Build.VERSION_CODES.M) {
+            return openAppDetailsSettings()
+        }
         val requestIntent = Intent(Settings.ACTION_REQUEST_IGNORE_BATTERY_OPTIMIZATIONS).apply {
             data = Uri.fromParts("package", context.packageName, null)
             addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
@@ -200,9 +220,17 @@ class SystemCapabilityChecker(private val context: Context) {
     }
 
     fun openNotificationSettings(): Boolean {
-        val intent = Intent(Settings.ACTION_APP_NOTIFICATION_SETTINGS).apply {
-            putExtra(Settings.EXTRA_APP_PACKAGE, context.packageName)
-            addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+        val intent = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
+            Intent(Settings.ACTION_APP_NOTIFICATION_SETTINGS).apply {
+                putExtra(Settings.EXTRA_APP_PACKAGE, context.packageName)
+                addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+            }
+        } else {
+            Intent("android.settings.APP_NOTIFICATION_SETTINGS").apply {
+                putExtra("app_package", context.packageName)
+                putExtra("app_uid", context.applicationInfo.uid)
+                addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+            }
         }
         return startSafe(intent) || openAppDetailsSettings()
     }

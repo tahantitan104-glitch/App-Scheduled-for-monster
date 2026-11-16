@@ -5,6 +5,7 @@ import android.app.ActivityManager
 import android.app.admin.DevicePolicyManager
 import android.content.ComponentName
 import android.content.Context
+import android.os.Build
 import com.example.domain.model.EnforcementPreparationResult
 import com.example.platform.InstalledAppsRepository
 import com.example.telephony.PhoneAccessManager
@@ -42,12 +43,21 @@ class AndroidDevicePolicyController(
 
     override fun getLockTaskModeState(): Int =
         runCatching {
-            activityManager?.lockTaskModeState ?: ActivityManager.LOCK_TASK_MODE_NONE
-        }.getOrDefault(ActivityManager.LOCK_TASK_MODE_NONE)
+            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.M) {
+                activityManager?.lockTaskModeState ?: LOCK_TASK_STATE_NONE
+            } else {
+                @Suppress("DEPRECATION")
+                if (activityManager?.isInLockTaskMode == true) {
+                    LOCK_TASK_STATE_LOCKED
+                } else {
+                    LOCK_TASK_STATE_NONE
+                }
+            }
+        }.getOrDefault(LOCK_TASK_STATE_NONE)
 
     override fun getAppliedLockTaskPackages(): List<String> =
         runCatching {
-            if (!isDeviceOwner()) emptyList()
+            if (!isDeviceOwner() || Build.VERSION.SDK_INT < Build.VERSION_CODES.O) emptyList()
             else dpm?.getLockTaskPackages(adminComponent)?.toList().orEmpty()
         }.getOrDefault(emptyList())
 
@@ -76,10 +86,12 @@ class AndroidDevicePolicyController(
             policyManager.setLockTaskPackages(adminComponent, finalAllowlist.toTypedArray())
             // Keep Global Actions enabled so emergency/power safety controls are never obstructed,
             // while disabling Home, Overview/Recents, Notifications, System Info, and Keyguard.
-            policyManager.setLockTaskFeatures(
-                adminComponent,
-                DevicePolicyManager.LOCK_TASK_FEATURE_GLOBAL_ACTIONS
-            )
+            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.P) {
+                policyManager.setLockTaskFeatures(
+                    adminComponent,
+                    DevicePolicyManager.LOCK_TASK_FEATURE_GLOBAL_ACTIONS
+                )
+            }
             if (policyManager.isLockTaskPermitted(context.packageName)) {
                 EnforcementPreparationResult.Ready(finalAllowlist)
             } else {
@@ -94,7 +106,7 @@ class AndroidDevicePolicyController(
         if (!isDeviceOwner()) return false
         return runCatching {
             activity.startLockTask()
-            getLockTaskModeState() == ActivityManager.LOCK_TASK_MODE_LOCKED
+            getLockTaskModeState() == LOCK_TASK_STATE_LOCKED
         }.getOrDefault(false)
     }
 
@@ -102,7 +114,7 @@ class AndroidDevicePolicyController(
         return runCatching {
             activity.stopLockTask()
             clearLockTaskPolicy()
-            getLockTaskModeState() == ActivityManager.LOCK_TASK_MODE_NONE
+            getLockTaskModeState() == LOCK_TASK_STATE_NONE
         }.getOrDefault(false)
     }
 
@@ -110,7 +122,14 @@ class AndroidDevicePolicyController(
         if (!isDeviceOwner()) return
         runCatching {
             dpm?.setLockTaskPackages(adminComponent, emptyArray())
-            dpm?.setLockTaskFeatures(adminComponent, DevicePolicyManager.LOCK_TASK_FEATURE_NONE)
+            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.P) {
+                dpm?.setLockTaskFeatures(adminComponent, DevicePolicyManager.LOCK_TASK_FEATURE_NONE)
+            }
         }
+    }
+
+    private companion object {
+        const val LOCK_TASK_STATE_NONE = 0
+        const val LOCK_TASK_STATE_LOCKED = 1
     }
 }

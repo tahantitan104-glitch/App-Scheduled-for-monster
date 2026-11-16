@@ -205,7 +205,7 @@ data class SystemCapabilityStatus(
         get() = activeEnforcementMode != EnforcementMode.NONE
 
     val isLockTaskCurrentlyActive: Boolean
-        get() = lockTaskModeState == android.app.ActivityManager.LOCK_TASK_MODE_LOCKED
+        get() = lockTaskModeState == 1 // ActivityManager.LOCK_TASK_MODE_LOCKED
 }
 
 sealed interface EnforcementPreparationResult {

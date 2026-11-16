@@ -1,10 +1,12 @@
 package com.example.presentation.components
 
 import android.graphics.Rect as AndroidRect
+import android.os.Build
 import android.view.ActionMode
 import android.view.Menu
 import android.view.MenuItem
 import android.view.View
+import androidx.annotation.RequiresApi
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.runtime.DisposableEffect
@@ -88,7 +90,18 @@ class SafeAndroidTextToolbar(
                 return
             }
             val started = runCatching {
-                view.startActionMode(callback, ActionMode.TYPE_FLOATING)
+                if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.M) {
+                    Api23ActionModeHelper.startFloatingActionMode(view, createLegacyCallback()) { mode, outRect ->
+                        outRect.set(
+                            this.rect.left.roundToInt(),
+                            this.rect.top.roundToInt(),
+                            this.rect.right.roundToInt(),
+                            this.rect.bottom.roundToInt()
+                        )
+                    }
+                } else {
+                    view.startActionMode(createLegacyCallback())
+                }
             }.getOrNull()
             if (started != null) {
                 activeActionMode = started
@@ -99,7 +112,9 @@ class SafeAndroidTextToolbar(
         } else {
             status = TextToolbarStatus.Shown
             runCatching { current.invalidate() }
-            runCatching { current.invalidateContentRect() }
+            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.M) {
+                runCatching { Api23ActionModeHelper.invalidateContentRect(current) }
+            }
         }
     }
 
@@ -112,7 +127,7 @@ class SafeAndroidTextToolbar(
         }
     }
 
-    private val callback = object : ActionMode.Callback2() {
+    private fun createLegacyCallback(): ActionMode.Callback = object : ActionMode.Callback {
         override fun onCreateActionMode(mode: ActionMode, menu: Menu): Boolean {
             populateMenu(menu)
             return true
@@ -142,14 +157,36 @@ class SafeAndroidTextToolbar(
                 status = TextToolbarStatus.Hidden
             }
         }
+    }
 
-        override fun onGetContentRect(mode: ActionMode, view: View, outRect: AndroidRect) {
-            outRect.set(
-                rect.left.roundToInt(),
-                rect.top.roundToInt(),
-                rect.right.roundToInt(),
-                rect.bottom.roundToInt()
-            )
+    @RequiresApi(Build.VERSION_CODES.M)
+    private object Api23ActionModeHelper {
+        fun startFloatingActionMode(
+            view: View,
+            delegate: ActionMode.Callback,
+            onGetRect: (ActionMode, AndroidRect) -> Unit
+        ): ActionMode? {
+            val callback2 = object : ActionMode.Callback2() {
+                override fun onCreateActionMode(mode: ActionMode, menu: Menu): Boolean =
+                    delegate.onCreateActionMode(mode, menu)
+
+                override fun onPrepareActionMode(mode: ActionMode, menu: Menu): Boolean =
+                    delegate.onPrepareActionMode(mode, menu)
+
+                override fun onActionItemClicked(mode: ActionMode, item: MenuItem): Boolean =
+                    delegate.onActionItemClicked(mode, item)
+
+                override fun onDestroyActionMode(mode: ActionMode) =
+                    delegate.onDestroyActionMode(mode)
+
+                override fun onGetContentRect(mode: ActionMode, view: View, outRect: AndroidRect) =
+                    onGetRect(mode, outRect)
+            }
+            return view.startActionMode(callback2, ActionMode.TYPE_FLOATING)
+        }
+
+        fun invalidateContentRect(mode: ActionMode) {
+            mode.invalidateContentRect()
         }
     }
 

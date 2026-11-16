@@ -23,6 +23,9 @@ class AndroidLockAlarmScheduler(private val context: Context) : LockAlarmSchedul
     private val alarmManager: AlarmManager?
         get() = context.getSystemService(Context.ALARM_SERVICE) as? AlarmManager
 
+    private fun immutableFlag(): Int =
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.M) PendingIntent.FLAG_IMMUTABLE else 0
+
     override fun scheduleDelayedLockTransition(sessionId: String, triggerAtWallMs: Long) {
         val intent = Intent(context, LockTransitionAlarmReceiver::class.java).apply {
             action = ACTION_DELAYED_LOCK_DEADLINE
@@ -32,7 +35,7 @@ class AndroidLockAlarmScheduler(private val context: Context) : LockAlarmSchedul
             context,
             REQ_DELAYED_LOCK,
             intent,
-            PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE
+            PendingIntent.FLAG_UPDATE_CURRENT or immutableFlag()
         )
         scheduleExactOrBestEffort(triggerAtWallMs, pi)
     }
@@ -46,7 +49,7 @@ class AndroidLockAlarmScheduler(private val context: Context) : LockAlarmSchedul
             context,
             REQ_LOCK_EXPIRED,
             intent,
-            PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE
+            PendingIntent.FLAG_UPDATE_CURRENT or immutableFlag()
         )
         scheduleExactOrBestEffort(expireAtWallMs, pi)
     }
@@ -62,7 +65,7 @@ class AndroidLockAlarmScheduler(private val context: Context) : LockAlarmSchedul
             context,
             requestCode,
             intent,
-            PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE
+            PendingIntent.FLAG_UPDATE_CURRENT or immutableFlag()
         )
         scheduleExactOrBestEffort(triggerAtWallMs, pi)
     }
@@ -75,7 +78,7 @@ class AndroidLockAlarmScheduler(private val context: Context) : LockAlarmSchedul
             context,
             REQ_DELAYED_LOCK,
             intent,
-            PendingIntent.FLAG_NO_CREATE or PendingIntent.FLAG_IMMUTABLE
+            PendingIntent.FLAG_NO_CREATE or immutableFlag()
         )
         if (pi != null) {
             alarmManager?.cancel(pi)
@@ -91,7 +94,7 @@ class AndroidLockAlarmScheduler(private val context: Context) : LockAlarmSchedul
             context,
             REQ_LOCK_EXPIRED,
             intent,
-            PendingIntent.FLAG_NO_CREATE or PendingIntent.FLAG_IMMUTABLE
+            PendingIntent.FLAG_NO_CREATE or immutableFlag()
         )
         if (pi != null) {
             alarmManager?.cancel(pi)
@@ -108,7 +111,7 @@ class AndroidLockAlarmScheduler(private val context: Context) : LockAlarmSchedul
             context,
             requestCode,
             intent,
-            PendingIntent.FLAG_NO_CREATE or PendingIntent.FLAG_IMMUTABLE
+            PendingIntent.FLAG_NO_CREATE or immutableFlag()
         )
         if (pi != null) {
             alarmManager?.cancel(pi)
@@ -135,7 +138,7 @@ class AndroidLockAlarmScheduler(private val context: Context) : LockAlarmSchedul
                     context,
                     REQ_SHOW_INTENT,
                     Intent(context, MainActivity::class.java),
-                    PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE
+                    PendingIntent.FLAG_UPDATE_CURRENT or immutableFlag()
                 )
                 val info = AlarmManager.AlarmClockInfo(triggerAtWallMs, showIntent)
                 manager.setAlarmClock(info, operation)
@@ -145,7 +148,11 @@ class AndroidLockAlarmScheduler(private val context: Context) : LockAlarmSchedul
         }
 
         runCatching {
-            manager.setAndAllowWhileIdle(AlarmManager.RTC_WAKEUP, triggerAtWallMs, operation)
+            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.M) {
+                manager.setAndAllowWhileIdle(AlarmManager.RTC_WAKEUP, triggerAtWallMs, operation)
+            } else {
+                manager.setExact(AlarmManager.RTC_WAKEUP, triggerAtWallMs, operation)
+            }
         }
     }
 

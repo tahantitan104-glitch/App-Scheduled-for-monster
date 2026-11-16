@@ -75,7 +75,7 @@ jobs:
           tag_name: latest-apk
           name: Resolve App (Installable Debug APK)
           body: |
-            Installable Android APK for **Resolve** (`com.resolve.focus`, Android 9+ / API 28+).
+            Installable Android APK for **Resolve** (`com.resolve.focus`, Android 5.0+ / API 21+).
 
             1. Tap `Resolve-debug.apk` below to download directly on your Android phone.
             2. Open the downloaded `.apk` file and allow **Install unknown apps** if prompted.
