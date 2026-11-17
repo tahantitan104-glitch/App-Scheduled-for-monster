@@ -16,8 +16,23 @@ class ResolveApplication : Application() {
     override fun onCreate() {
         super.onCreate()
         container = AppContainer(this)
+        runCatching { container.multiDeviceSyncCoordinator.start() }
         appScope.launch {
             container.sessionEngine.initialize()
+        }
+        appScope.launch {
+            container.sessionEngine.scheduledBroadcasts.collect { payload ->
+                if (container.preferencesRepository.isSyncLockEnabledSnapshot()) {
+                    container.multiDeviceSyncCoordinator.publishLockTriggerIfEnabled(
+                        mode = payload.mode,
+                        freeUseMinutes = payload.freeUseMinutes,
+                        lockDurationMinutes = payload.lockDurationMinutes,
+                        freeUseDeadlineWallMs = payload.freeUseDeadlineWallMs,
+                        lockExpirationWallMs = payload.lockExpirationWallMs,
+                        syncAcrossDevices = true
+                    )
+                }
+            }
         }
     }
 }

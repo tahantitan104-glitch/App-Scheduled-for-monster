@@ -1,6 +1,7 @@
 package com.example.presentation.settings
 
 import android.Manifest
+import android.net.Uri
 import android.os.Build
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
@@ -98,7 +99,9 @@ import com.example.presentation.components.FeatureTipNote
 import com.example.presentation.components.PulsingStatusDot
 import com.example.presentation.components.RecoveryCodeSetupDialog
 import com.example.presentation.components.ResolveIcons
+import com.example.presentation.components.SettingsAccountSyncCard
 import com.example.presentation.components.resolveGlassCard
+import com.example.sync.AccountSyncUiState
 
 @Composable
 fun SettingsScreen(
@@ -127,7 +130,13 @@ fun SettingsScreen(
     onRestoreDefaultFocusMessages: () -> Unit = {},
     onToggleLockReminderEnabled: (Boolean) -> Unit = {},
     onSaveLockReminderText: (String) -> Unit = {},
-    onSelectLockReminderStyle: (LockReminderStyle) -> Unit = {}
+    onSelectLockReminderStyle: (LockReminderStyle) -> Unit = {},
+    accountSyncState: AccountSyncUiState = AccountSyncUiState(),
+    onSignInGoogle: () -> Unit = {},
+    onSignOutGoogle: () -> Unit = {},
+    onToggleDeviceSync: (Boolean) -> Unit = {},
+    onUpdateProfilePhoto: (Uri) -> Unit = {},
+    onClearProfilePhoto: () -> Unit = {}
 ) {
     val lifecycleOwner = LocalLifecycleOwner.current
     DisposableEffect(lifecycleOwner) {
@@ -267,7 +276,26 @@ fun SettingsScreen(
             item {
                 Spacer(Modifier.height(2.dp))
                 SettingsSectionHeader(
-                    title = "1 · PROTECTION & PERMISSIONS",
+                    title = "1 · ACCOUNT & MULTI-DEVICE SYNC",
+                    icon = ResolveIcons.Sync
+                )
+            }
+
+            item {
+                SettingsAccountSyncCard(
+                    state = accountSyncState,
+                    onSignInClick = onSignInGoogle,
+                    onSignOutClick = onSignOutGoogle,
+                    onToggleSyncEnabled = onToggleDeviceSync,
+                    onPickAvatarUri = onUpdateProfilePhoto,
+                    onClearAvatar = onClearProfilePhoto
+                )
+            }
+
+            item {
+                Spacer(Modifier.height(2.dp))
+                SettingsSectionHeader(
+                    title = "2 · PROTECTION & PERMISSIONS",
                     icon = ResolveIcons.Shield
                 )
             }
@@ -526,7 +554,7 @@ fun SettingsScreen(
             item {
                 Spacer(Modifier.height(6.dp))
                 SettingsSectionHeader(
-                    title = "2 · APPEARANCE & COMPANION",
+                    title = "3 · APPEARANCE & COMPANION",
                     icon = ResolveIcons.Tune
                 )
             }
@@ -545,7 +573,7 @@ fun SettingsScreen(
             item {
                 Spacer(Modifier.height(6.dp))
                 SettingsSectionHeader(
-                    title = "3 · EMERGENCY EXIT",
+                    title = "4 · EMERGENCY EXIT",
                     icon = ResolveIcons.Key
                 )
             }
@@ -571,7 +599,7 @@ fun SettingsScreen(
             item {
                 Spacer(Modifier.height(6.dp))
                 SettingsSectionHeader(
-                    title = "4 · ABOUT",
+                    title = "5 · ABOUT",
                     icon = Icons.Outlined.Info
                 )
             }

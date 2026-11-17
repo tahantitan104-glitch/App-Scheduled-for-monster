@@ -1,6 +1,8 @@
 package com.example.presentation
 
 import android.app.Application
+import android.content.Context
+import android.net.Uri
 import androidx.compose.ui.graphics.ImageBitmap
 import androidx.lifecycle.AndroidViewModel
 import androidx.lifecycle.SavedStateHandle
@@ -14,6 +16,7 @@ import com.example.domain.model.ActiveSession
 import com.example.domain.model.DurationSelection
 import com.example.domain.model.FocusMessageFrequency
 import com.example.domain.model.InstalledAppInfo
+import com.example.domain.model.LockMode
 import com.example.domain.model.LockReminderStyle
 import com.example.domain.model.LockSchedule
 import com.example.domain.model.MascotPreferences
@@ -26,6 +29,7 @@ import com.example.domain.startup.StartupDecisionResolver
 import com.example.domain.startup.StartupPreferences
 import com.example.domain.startup.StartupStage
 import com.example.session.EngineStartResult
+import com.example.sync.AccountSyncUiState
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.flow.MutableSharedFlow
 import kotlinx.coroutines.flow.MutableStateFlow
@@ -77,6 +81,11 @@ class ResolveViewModel(
     val startupPreferences: StateFlow<StartupPreferences> = container.preferencesRepository.startupPreferencesFlow
         .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), StartupPreferences())
 
+    val accountSyncState: StateFlow<AccountSyncUiState> = container.multiDeviceSyncCoordinator.uiState
+
+    val syncPromoDismissed: StateFlow<Boolean> = container.preferencesRepository.syncPromoDismissedFlow
+        .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), false)
+
     private val _startupStage = MutableStateFlow(StartupStage.RESOLVING)
     val startupStage: StateFlow<StartupStage> = _startupStage.asStateFlow()
 
@@ -107,10 +116,27 @@ class ResolveViewModel(
     private val _phoneAccessEnabled = MutableStateFlow(savedStateHandle[KEY_PHONE_ACCESS] ?: true)
     val phoneAccessEnabled: StateFlow<Boolean> = _phoneAccessEnabled.asStateFlow()
 
+    private val _syncInstantLockToDevices = MutableStateFlow(true)
+    val syncInstantLockToDevices: StateFlow<Boolean> = _syncInstantLockToDevices.asStateFlow()
+
+    private val _syncDelayedLockToDevices = MutableStateFlow(true)
+    val syncDelayedLockToDevices: StateFlow<Boolean> = _syncDelayedLockToDevices.asStateFlow()
+
     private val _events = MutableSharedFlow<UiEvent>(extraBufferCapacity = 8)
     val events: SharedFlow<UiEvent> = _events.asSharedFlow()
 
     init {
+        viewModelScope.launch {
+            runCatching { container.multiDeviceSyncCoordinator.start() }
+            val defaultSync = container.preferencesRepository.isSyncLockEnabledSnapshot()
+            _syncInstantLockToDevices.value = defaultSync
+            _syncDelayedLockToDevices.value = defaultSync
+        }
+        viewModelScope.launch {
+            container.multiDeviceSyncCoordinator.syncEvents.collect { msg ->
+                _events.emit(UiEvent.ShowMessage(msg))
+            }
+        }
         viewModelScope.launch {
             engine.initialize()
             refreshCapabilities()
@@ -231,6 +257,55 @@ class ResolveViewModel(
     fun setPhoneAccessEnabled(enabled: Boolean) {
         _phoneAccessEnabled.value = enabled
         savedStateHandle[KEY_PHONE_ACCESS] = enabled
+        viewModelScope.launch {
+            container.preferencesRepository.setDefaultPhoneAccess(enabled)
+        }
+    }
+
+    fun setSyncInstantLockToDevices(sync: Boolean) {
+        _syncInstantLockToDevices.value = sync
+    }
+
+    fun setSyncDelayedLockToDevices(sync: Boolean) {
+        _syncDelayedLockToDevices.value = sync
+    }
+
+    fun signInWithGoogle(activityContext: Context) {
+        viewModelScope.launch {
+            container.multiDeviceSyncCoordinator.signInWithGoogle(activityContext)
+        }
+    }
+
+    fun signOutGoogleAccount() {
+        viewModelScope.launch {
+            container.multiDeviceSyncCoordinator.signOutSafely()
+        }
+    }
+
+    fun setDeviceSyncEnabled(enabled: Boolean) {
+        viewModelScope.launch {
+            container.multiDeviceSyncCoordinator.setDeviceSyncEnabled(enabled)
+            _syncInstantLockToDevices.value = enabled
+            _syncDelayedLockToDevices.value = enabled
+        }
+    }
+
+    fun updateProfilePhoto(uri: Uri) {
+        viewModelScope.launch {
+            container.multiDeviceSyncCoordinator.updateProfilePhoto(uri)
+        }
+    }
+
+    fun clearProfilePhoto() {
+        viewModelScope.launch {
+            container.multiDeviceSyncCoordinator.clearCustomProfilePhoto()
+        }
+    }
+
+    fun dismissSyncPromoBanner() {
+        viewModelScope.launch {
+            container.preferencesRepository.setSyncPromoDismissed(true)
+        }
     }
 
     fun saveAllowedAppsSelection(selectedPackages: Set<String>) {
@@ -263,13 +338,27 @@ class ResolveViewModel(
 
     fun startInstantLock() {
         viewModelScope.launch {
+            val lockMins = _instantDuration.value.totalMinutes
+            val shouldSync = _syncInstantLockToDevices.value && accountSyncState.value.isSignedIn
             val result = engine.startInstantLock(
-                lockDurationMinutes = _instantDuration.value.totalMinutes,
+                lockDurationMinutes = lockMins,
                 allowedPackages = savedAllowedPackages.value,
                 phoneAccessEnabled = _phoneAccessEnabled.value
             )
             when (result) {
-                EngineStartResult.Started -> Unit
+                EngineStartResult.Started -> {
+                    if (shouldSync) {
+                        val nowWall = container.clockProvider.wallClockMs()
+                        container.multiDeviceSyncCoordinator.publishLockTriggerIfEnabled(
+                            mode = LockMode.INSTANT,
+                            freeUseMinutes = 0L,
+                            lockDurationMinutes = lockMins,
+                            freeUseDeadlineWallMs = 0L,
+                            lockExpirationWallMs = nowWall + lockMins * 60_000L,
+                            syncAcrossDevices = true
+                        )
+                    }
+                }
                 is EngineStartResult.Blocked -> _events.emit(UiEvent.ShowMessage(result.reason))
             }
         }
@@ -277,14 +366,30 @@ class ResolveViewModel(
 
     fun startDelayedLock() {
         viewModelScope.launch {
+            val freeMins = _delayedFreeUseDuration.value.totalMinutes
+            val lockMins = _delayedLockDuration.value.totalMinutes
+            val shouldSync = _syncDelayedLockToDevices.value && accountSyncState.value.isSignedIn
             val result = engine.startDelayedLock(
-                freeUseMinutes = _delayedFreeUseDuration.value.totalMinutes,
-                lockDurationMinutes = _delayedLockDuration.value.totalMinutes,
+                freeUseMinutes = freeMins,
+                lockDurationMinutes = lockMins,
                 allowedPackages = savedAllowedPackages.value,
                 phoneAccessEnabled = _phoneAccessEnabled.value
             )
             when (result) {
                 EngineStartResult.Started -> {
+                    if (shouldSync) {
+                        val nowWall = container.clockProvider.wallClockMs()
+                        val freeDeadline = nowWall + freeMins * 60_000L
+                        val lockExpire = freeDeadline + lockMins * 60_000L
+                        container.multiDeviceSyncCoordinator.publishLockTriggerIfEnabled(
+                            mode = LockMode.DELAYED,
+                            freeUseMinutes = freeMins,
+                            lockDurationMinutes = lockMins,
+                            freeUseDeadlineWallMs = freeDeadline,
+                            lockExpirationWallMs = lockExpire,
+                            syncAcrossDevices = true
+                        )
+                    }
                     _events.emit(
                         UiEvent.ShowMessage(
                             "Delayed Lock started. Phone remains unrestricted for ${_delayedFreeUseDuration.value.formattedCompact()}."

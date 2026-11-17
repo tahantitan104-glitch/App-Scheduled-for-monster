@@ -99,7 +99,10 @@ fun InstantLockSetupScreen(
     onPhoneAccessChanged: (Boolean) -> Unit,
     onSaveRecoveryCode: (String) -> Unit,
     onStartInstantLock: () -> Unit,
-    onBack: () -> Unit
+    onBack: () -> Unit,
+    isAccountSignedIn: Boolean = false,
+    syncAcrossDevices: Boolean = false,
+    onSyncAcrossDevicesChanged: (Boolean) -> Unit = {}
 ) {
     BackHandler(onBack = onBack)
     var showAppsSheet by remember { mutableStateOf(false) }
@@ -177,14 +180,35 @@ fun InstantLockSetupScreen(
                     )
                 }
 
+                if (isAccountSignedIn) {
+                    item {
+                        SetupSwitchRow(
+                            title = "Sync Across Connected Devices",
+                            subtitle = "Trigger this Instant Lock on all linked phones, or switch off for this phone only",
+                            icon = ResolveIcons.Sync,
+                            checked = syncAcrossDevices,
+                            onCheckedChange = onSyncAcrossDevicesChanged,
+                            testTag = "instant_sync_switch"
+                        )
+                        Spacer(Modifier.height(4.dp))
+                        FeatureTipNote(
+                            text = "Tip: Allowed apps & mascots still remain independent on each phone.",
+                            icon = Icons.Outlined.Info
+                        )
+                    }
+                }
+
                 item {
                     ReviewSummaryCard(
-                        lines = listOf(
-                            "Mode: Instant Lock (restricts immediately)",
-                            "Lock Duration: ${duration.formattedCompact()}",
-                            "Allowed Apps: ${allowedPackages.size} selected",
-                            "Phone Calls: ${if (phoneAccessEnabled) "Enabled" else "Disabled"}"
-                        )
+                        lines = buildList {
+                            add("Mode: Instant Lock (restricts immediately)")
+                            add("Lock Duration: ${duration.formattedCompact()}")
+                            add("Allowed Apps: ${allowedPackages.size} selected")
+                            add("Phone Calls: ${if (phoneAccessEnabled) "Enabled" else "Disabled"}")
+                            if (isAccountSignedIn) {
+                                add("Device Sync: ${if (syncAcrossDevices) "All Linked Devices" else "This Phone Only"}")
+                            }
+                        }
                     )
                 }
 
@@ -257,7 +281,10 @@ fun DelayedLockSetupScreen(
     onPhoneAccessChanged: (Boolean) -> Unit,
     onSaveRecoveryCode: (String) -> Unit,
     onStartDelayedLock: () -> Unit,
-    onBack: () -> Unit
+    onBack: () -> Unit,
+    isAccountSignedIn: Boolean = false,
+    syncAcrossDevices: Boolean = false,
+    onSyncAcrossDevicesChanged: (Boolean) -> Unit = {}
 ) {
     BackHandler(onBack = onBack)
     var showAppsSheet by remember { mutableStateOf(false) }
@@ -342,14 +369,35 @@ fun DelayedLockSetupScreen(
                     )
                 }
 
+                if (isAccountSignedIn) {
+                    item {
+                        SetupSwitchRow(
+                            title = "Sync Across Connected Devices",
+                            subtitle = "Sync this Delayed Lock timer & lock trigger to all linked phones",
+                            icon = ResolveIcons.Sync,
+                            checked = syncAcrossDevices,
+                            onCheckedChange = onSyncAcrossDevicesChanged,
+                            testTag = "delayed_sync_switch"
+                        )
+                        Spacer(Modifier.height(4.dp))
+                        FeatureTipNote(
+                            text = "Tip: Turn off anytime if you only want to lock this phone.",
+                            icon = Icons.Outlined.Info
+                        )
+                    }
+                }
+
                 item {
                     ReviewSummaryCard(
-                        lines = listOf(
-                            "Free Use Window: ${freeUseDuration.formattedCompact()} (all apps open)",
-                            "Automatic Lock After: ${freeUseDuration.formattedCompact()}",
-                            "Lock Duration: ${lockDuration.formattedCompact()} (starts when locked)",
-                            "Allowed Apps During Lock: ${allowedPackages.size} selected"
-                        )
+                        lines = buildList {
+                            add("Free Use Window: ${freeUseDuration.formattedCompact()} (all apps open)")
+                            add("Automatic Lock After: ${freeUseDuration.formattedCompact()}")
+                            add("Lock Duration: ${lockDuration.formattedCompact()} (starts when locked)")
+                            add("Allowed Apps During Lock: ${allowedPackages.size} selected")
+                            if (isAccountSignedIn) {
+                                add("Device Sync: ${if (syncAcrossDevices) "All Linked Devices" else "This Phone Only"}")
+                            }
+                        }
                     )
                 }
 

@@ -1,0 +1,201 @@
+rules_version = '2';
+
+service cloud.firestore {
+  match /databases/{database}/documents {
+
+    // Global safety net: deny all unspecified paths by default
+    match /{document=**} {
+      allow read, write: if false;
+    }
+
+    function isSignedIn() {
+      return request.auth != null;
+    }
+
+    function incoming() {
+      return request.resource.data;
+    }
+
+    function existing() {
+      return resource.data;
+    }
+
+    function isValidId(id) {
+      return id is string && id.size() >= 1 && id.size() <= 128 && id.matches('^[a-zA-Z0-9_\\-]+$');
+    }
+
+    function isValidUserProfile(data) {
+      return data.userId is string &&
+             data.userId == request.auth.uid &&
+             data.displayName is string &&
+             data.displayName.size() >= 1 &&
+             data.displayName.size() <= 80 &&
+             (!('email' in data) || (data.email is string && data.email.size() <= 160)) &&
+             (!('photoUrl' in data) || (data.photoUrl is string && data.photoUrl.size() <= 600)) &&
+             (!('avatarBase64' in data) || (data.avatarBase64 is string && data.avatarBase64.size() <= 160000));
+    }
+
+    function isValidSyncedDevice(data) {
+      return data.userId is string &&
+             data.userId == request.auth.uid &&
+             data.deviceName is string &&
+             data.deviceName.size() >= 1 &&
+             data.deviceName.size() <= 80 &&
+             data.platform is string &&
+             data.platform == 'android' &&
+             data.syncEnabled is bool &&
+             data.lastSeenAt is timestamp &&
+             data.lastSeenAt <= request.time;
+    }
+
+    function isValidLockCommand(data) {
+      return data.userId is string &&
+             data.userId == request.auth.uid &&
+             isValidId(data.commandId) &&
+             isValidId(data.originDeviceId) &&
+             data.originDeviceName is string &&
+             data.originDeviceName.size() >= 1 &&
+             data.originDeviceName.size() <= 80 &&
+             data.mode is string &&
+             data.mode in ['INSTANT', 'DELAYED', 'SCHEDULED'] &&
+             data.freeUseDurationMinutes is int &&
+             data.freeUseDurationMinutes >= 0 &&
+             data.freeUseDurationMinutes <= 1440 &&
+             data.lockDurationMinutes is int &&
+             data.lockDurationMinutes >= 1 &&
+             data.lockDurationMinutes <= 1440 &&
+             data.issuedAtWallMs is int &&
+             data.issuedAtWallMs >= 0 &&
+             data.freeUseDeadlineWallMs is int &&
+             data.freeUseDeadlineWallMs >= 0 &&
+             data.lockExpirationWallMs is int &&
+             data.lockExpirationWallMs >= 0;
+    }
+
+    // Owner profile & synced avatar
+    match /users/{userId} {
+      allow get: if isSignedIn() && isValidId(userId) && request.auth.uid == userId;
+      allow list: if isSignedIn() && request.auth.uid == userId;
+
+      allow create: if isSignedIn() &&
+                       isValidId(userId) &&
+                       request.auth.uid == userId &&
+                       incoming().keys().hasAll(['userId', 'displayName', 'createdAt', 'updatedAt']) &&
+                       incoming().keys().hasOnly(['userId', 'displayName', 'email', 'photoUrl', 'avatarBase64', 'createdAt', 'updatedAt']) &&
+                       incoming().createdAt is timestamp &&
+                       incoming().createdAt <= request.time &&
+                       incoming().updatedAt is timestamp &&
+                       incoming().updatedAt <= request.time &&
+                       isValidUserProfile(incoming());
+
+      allow update: if isSignedIn() &&
+                       isValidId(userId) &&
+                       request.auth.uid == userId &&
+                       isValidUserProfile(incoming()) &&
+                       incoming().userId == existing().userId &&
+                       incoming().createdAt == existing().createdAt &&
+                       incoming().updatedAt is timestamp &&
+                       incoming().updatedAt <= request.time &&
+                       incoming().diff(existing()).affectedKeys().hasOnly(['displayName', 'email', 'photoUrl', 'avatarBase64', 'updatedAt']);
+
+      allow delete: if isSignedIn() && isValidId(userId) && request.auth.uid == userId;
+
+      // Connected devices owned by the user
+      match /devices/{deviceId} {
+        allow get: if isSignedIn() && isValidId(deviceId) && request.auth.uid == userId;
+        allow list: if isSignedIn() && request.auth.uid == userId;
+
+        allow create: if isSignedIn() &&
+                         isValidId(deviceId) &&
+                         request.auth.uid == userId &&
+                         incoming().keys().hasAll(['userId', 'deviceName', 'platform', 'syncEnabled', 'lastSeenAt', 'createdAt', 'updatedAt']) &&
+                         incoming().keys().hasOnly(['userId', 'deviceName', 'platform', 'syncEnabled', 'lastSeenAt', 'createdAt', 'updatedAt']) &&
+                         incoming().createdAt is timestamp &&
+                         incoming().createdAt <= request.time &&
+                         incoming().updatedAt is timestamp &&
+                         incoming().updatedAt <= request.time &&
+                         isValidSyncedDevice(incoming());
+
+        allow update: if isSignedIn() &&
+                         isValidId(deviceId) &&
+                         request.auth.uid == userId &&
+                         isValidSyncedDevice(incoming()) &&
+                         incoming().userId == existing().userId &&
+                         incoming().createdAt == existing().createdAt &&
+                         incoming().updatedAt is timestamp &&
+                         incoming().updatedAt <= request.time &&
+                         incoming().diff(existing()).affectedKeys().hasOnly(['deviceName', 'platform', 'syncEnabled', 'lastSeenAt', 'updatedAt']);
+
+        allow delete: if isSignedIn() && isValidId(deviceId) && request.auth.uid == userId;
+      }
+
+      // Deterministic multi-device lock sync channel (/users/{userId}/sync/lock_command)
+      match /sync/{syncDocId} {
+        allow get: if isSignedIn() && isValidId(syncDocId) && request.auth.uid == userId;
+        allow list: if isSignedIn() && request.auth.uid == userId;
+
+        allow create: if isSignedIn() &&
+                         isValidId(syncDocId) &&
+                         syncDocId == 'lock_command' &&
+                         request.auth.uid == userId &&
+                         incoming().keys().hasAll([
+                           'userId',
+                           'commandId',
+                           'originDeviceId',
+                           'originDeviceName',
+                           'mode',
+                           'freeUseDurationMinutes',
+                           'lockDurationMinutes',
+                           'issuedAtWallMs',
+                           'freeUseDeadlineWallMs',
+                           'lockExpirationWallMs',
+                           'createdAt',
+                           'updatedAt'
+                         ]) &&
+                         incoming().keys().hasOnly([
+                           'userId',
+                           'commandId',
+                           'originDeviceId',
+                           'originDeviceName',
+                           'mode',
+                           'freeUseDurationMinutes',
+                           'lockDurationMinutes',
+                           'issuedAtWallMs',
+                           'freeUseDeadlineWallMs',
+                           'lockExpirationWallMs',
+                           'createdAt',
+                           'updatedAt'
+                         ]) &&
+                         incoming().createdAt is timestamp &&
+                         incoming().createdAt <= request.time &&
+                         incoming().updatedAt is timestamp &&
+                         incoming().updatedAt <= request.time &&
+                         isValidLockCommand(incoming());
+
+        allow update: if isSignedIn() &&
+                         isValidId(syncDocId) &&
+                         syncDocId == 'lock_command' &&
+                         request.auth.uid == userId &&
+                         isValidLockCommand(incoming()) &&
+                         incoming().userId == existing().userId &&
+                         incoming().createdAt == existing().createdAt &&
+                         incoming().updatedAt is timestamp &&
+                         incoming().updatedAt <= request.time &&
+                         incoming().diff(existing()).affectedKeys().hasOnly([
+                           'commandId',
+                           'originDeviceId',
+                           'originDeviceName',
+                           'mode',
+                           'freeUseDurationMinutes',
+                           'lockDurationMinutes',
+                           'issuedAtWallMs',
+                           'freeUseDeadlineWallMs',
+                           'lockExpirationWallMs',
+                           'updatedAt'
+                         ]);
+
+        allow delete: if isSignedIn() && isValidId(syncDocId) && syncDocId == 'lock_command' && request.auth.uid == userId;
+      }
+    }
+  }
+}

@@ -61,6 +61,7 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.hapticfeedback.HapticFeedbackType
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalHapticFeedback
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.semantics.Role
@@ -145,9 +146,14 @@ fun ResolveAppShell(viewModel: ResolveViewModel) {
     val phoneAccessEnabled by viewModel.phoneAccessEnabled.collectAsStateWithLifecycle()
     val mascotPreferences by viewModel.mascotPreferences.collectAsStateWithLifecycle()
     val startupStage by viewModel.startupStage.collectAsStateWithLifecycle()
+    val accountSyncState by viewModel.accountSyncState.collectAsStateWithLifecycle()
+    val syncPromoDismissed by viewModel.syncPromoDismissed.collectAsStateWithLifecycle()
+    val syncInstantLockToDevices by viewModel.syncInstantLockToDevices.collectAsStateWithLifecycle()
+    val syncDelayedLockToDevices by viewModel.syncDelayedLockToDevices.collectAsStateWithLifecycle()
 
     var showDeviceOwnerGuide by remember { mutableStateOf(false) }
     val haptic = LocalHapticFeedback.current
+    val context = LocalContext.current
     val reducedMotion = mascotPreferences.reducedMotionEnabled
 
     val navigateToTab: (String) -> Unit = { route ->
@@ -358,6 +364,11 @@ fun ResolveAppShell(viewModel: ResolveViewModel) {
                             bunnyPeekEntranceSeen = mascotPreferences.bunnyPeekEntranceSeen,
                             onBunnyPeekEntranceSeen = { viewModel.markBunnyPeekEntranceSeen() },
                             reducedMotion = mascotPreferences.reducedMotionEnabled,
+                            accountSyncState = accountSyncState,
+                            syncPromoDismissed = syncPromoDismissed,
+                            onConnectGoogleAccount = { viewModel.signInWithGoogle(context) },
+                            onDismissSyncPromo = { viewModel.dismissSyncPromoBanner() },
+                            onOpenAccountSettings = { navigateToTab(ResolveRoutes.SETTINGS) },
                             onOpenInstantSetup = { navigateSafely(ResolveRoutes.INSTANT_SETUP) },
                             onOpenDelayedSetup = { navigateSafely(ResolveRoutes.DELAYED_SETUP) },
                             onOpenScheduleSetup = { navigateSafely(ResolveRoutes.scheduleSetup()) },
@@ -420,7 +431,13 @@ fun ResolveAppShell(viewModel: ResolveViewModel) {
                             onRestoreDefaultFocusMessages = { viewModel.restoreDefaultFocusMessages() },
                             onToggleLockReminderEnabled = { viewModel.setLockReminderEnabled(it) },
                             onSaveLockReminderText = { viewModel.setLockReminderText(it) },
-                            onSelectLockReminderStyle = { viewModel.setLockReminderStyle(it) }
+                            onSelectLockReminderStyle = { viewModel.setLockReminderStyle(it) },
+                            accountSyncState = accountSyncState,
+                            onSignInGoogle = { viewModel.signInWithGoogle(context) },
+                            onSignOutGoogle = { viewModel.signOutGoogleAccount() },
+                            onToggleDeviceSync = { viewModel.setDeviceSyncEnabled(it) },
+                            onUpdateProfilePhoto = { viewModel.updateProfilePhoto(it) },
+                            onClearProfilePhoto = { viewModel.clearProfilePhoto() }
                         )
                     }
 
@@ -441,7 +458,10 @@ fun ResolveAppShell(viewModel: ResolveViewModel) {
                             onPhoneAccessChanged = { viewModel.setPhoneAccessEnabled(it) },
                             onSaveRecoveryCode = { viewModel.saveRecoveryCode(it) },
                             onStartInstantLock = { viewModel.startInstantLock() },
-                            onBack = popBackSafely
+                            onBack = popBackSafely,
+                            isAccountSignedIn = accountSyncState.isSignedIn,
+                            syncAcrossDevices = syncInstantLockToDevices,
+                            onSyncAcrossDevicesChanged = { viewModel.setSyncInstantLockToDevices(it) }
                         )
                     }
 
@@ -466,7 +486,10 @@ fun ResolveAppShell(viewModel: ResolveViewModel) {
                             onPhoneAccessChanged = { viewModel.setPhoneAccessEnabled(it) },
                             onSaveRecoveryCode = { viewModel.saveRecoveryCode(it) },
                             onStartDelayedLock = { viewModel.startDelayedLock() },
-                            onBack = popBackSafely
+                            onBack = popBackSafely,
+                            isAccountSignedIn = accountSyncState.isSignedIn,
+                            syncAcrossDevices = syncDelayedLockToDevices,
+                            onSyncAcrossDevicesChanged = { viewModel.setSyncDelayedLockToDevices(it) }
                         )
                     }
 

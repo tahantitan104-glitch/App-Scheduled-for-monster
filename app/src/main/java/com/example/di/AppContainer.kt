@@ -23,6 +23,8 @@ import com.example.security.RecoveryCodeManager
 import com.example.service.ResolveSessionService
 import com.example.session.LockSessionEngine
 import com.example.session.SessionPlatformBridge
+import com.example.sync.CloudAccountRepository
+import com.example.sync.MultiDeviceSyncCoordinator
 import com.example.telephony.PhoneAccessManager
 
 class AppContainer(private val appContext: Context) {
@@ -102,6 +104,21 @@ class AppContainer(private val appContext: Context) {
             capabilityChecker = capabilityChecker,
             clockProvider = clockProvider,
             platformBridge = platformBridge
+        )
+    }
+
+    val cloudAccountRepository: CloudAccountRepository by lazy {
+        CloudAccountRepository(appContext)
+    }
+
+    val multiDeviceSyncCoordinator: MultiDeviceSyncCoordinator by lazy {
+        MultiDeviceSyncCoordinator(
+            appContext = appContext,
+            gateway = cloudAccountRepository,
+            preferencesRepository = preferencesRepository,
+            allowlistRepository = allowlistRepository,
+            sessionEngine = sessionEngine,
+            clockProvider = clockProvider
         )
     }
 }

@@ -1,0 +1,174 @@
+{
+  "entities": {
+    "UserAccountProfile": {
+      "title": "User Account Profile",
+      "description": "Authenticated user account metadata and synced profile avatar shared across linked devices.",
+      "type": "object",
+      "properties": {
+        "userId": {
+          "type": "string",
+          "description": "Firebase Auth UID of the account owner."
+        },
+        "displayName": {
+          "type": "string",
+          "description": "User display name from Google Sign-In."
+        },
+        "email": {
+          "type": "string",
+          "description": "User email address from Google Sign-In."
+        },
+        "photoUrl": {
+          "type": "string",
+          "description": "Optional remote profile photo URL from Google Sign-In."
+        },
+        "avatarBase64": {
+          "type": "string",
+          "description": "Optional compressed JPEG thumbnail in Base64 synced across connected devices, or empty string when cleared."
+        },
+        "createdAt": {
+          "type": "string",
+          "format": "date-time",
+          "description": "Server timestamp when user profile was first created (FieldValue.serverTimestamp())."
+        },
+        "updatedAt": {
+          "type": "string",
+          "format": "date-time",
+          "description": "Server timestamp of latest update (FieldValue.serverTimestamp())."
+        }
+      },
+      "required": ["userId", "displayName", "createdAt", "updatedAt"]
+    },
+    "SyncedDevice": {
+      "title": "Synced Device",
+      "description": "Individual Android device linked under the user's account for optional cross-device lock sync.",
+      "type": "object",
+      "properties": {
+        "userId": {
+          "type": "string",
+          "description": "Firebase Auth UID of the account owner."
+        },
+        "deviceName": {
+          "type": "string",
+          "description": "Human-readable device label (e.g. Pixel 8)."
+        },
+        "platform": {
+          "type": "string",
+          "enum": ["android"],
+          "description": "Device platform identifier."
+        },
+        "syncEnabled": {
+          "type": "boolean",
+          "description": "Whether this device receives and participates in synced lock commands."
+        },
+        "lastSeenAt": {
+          "type": "string",
+          "format": "date-time",
+          "description": "Server timestamp when this device last synced (FieldValue.serverTimestamp())."
+        },
+        "createdAt": {
+          "type": "string",
+          "format": "date-time",
+          "description": "Server timestamp when device was registered (FieldValue.serverTimestamp())."
+        },
+        "updatedAt": {
+          "type": "string",
+          "format": "date-time",
+          "description": "Server timestamp when device record was updated (FieldValue.serverTimestamp())."
+        }
+      },
+      "required": ["userId", "deviceName", "platform", "syncEnabled", "lastSeenAt", "createdAt", "updatedAt"]
+    },
+    "SyncedLockCommand": {
+      "title": "Synced Lock Command",
+      "description": "Latest cross-device focus lock trigger broadcast to linked devices with sync enabled.",
+      "type": "object",
+      "properties": {
+        "userId": {
+          "type": "string",
+          "description": "Firebase Auth UID of the account owner."
+        },
+        "commandId": {
+          "type": "string",
+          "description": "Unique UUID string for deduplicating lock triggers."
+        },
+        "originDeviceId": {
+          "type": "string",
+          "description": "Device installation ID that issued the lock trigger."
+        },
+        "originDeviceName": {
+          "type": "string",
+          "description": "Display name of the device that issued the lock trigger."
+        },
+        "mode": {
+          "type": "string",
+          "enum": ["INSTANT", "DELAYED", "SCHEDULED"],
+          "description": "Focus lock mode triggered."
+        },
+        "freeUseDurationMinutes": {
+          "type": "integer",
+          "description": "Delay window in minutes before lock enforcement activates (0 for instant/scheduled)."
+        },
+        "lockDurationMinutes": {
+          "type": "integer",
+          "description": "Total focus lock duration in minutes."
+        },
+        "issuedAtWallMs": {
+          "type": "integer",
+          "description": "Origin wall-clock epoch milliseconds when lock trigger was created."
+        },
+        "freeUseDeadlineWallMs": {
+          "type": "integer",
+          "description": "Target epoch milliseconds when delayed free-use ends (0 when not delayed)."
+        },
+        "lockExpirationWallMs": {
+          "type": "integer",
+          "description": "Target epoch milliseconds when lock enforcement ends."
+        },
+        "createdAt": {
+          "type": "string",
+          "format": "date-time",
+          "description": "Server timestamp when command doc was first created (FieldValue.serverTimestamp())."
+        },
+        "updatedAt": {
+          "type": "string",
+          "format": "date-time",
+          "description": "Server timestamp of latest command broadcast (FieldValue.serverTimestamp())."
+        }
+      },
+      "required": [
+        "userId",
+        "commandId",
+        "originDeviceId",
+        "originDeviceName",
+        "mode",
+        "freeUseDurationMinutes",
+        "lockDurationMinutes",
+        "issuedAtWallMs",
+        "freeUseDeadlineWallMs",
+        "lockExpirationWallMs",
+        "createdAt",
+        "updatedAt"
+      ]
+    }
+  },
+  "firestore": {
+    "/users/{userId}": {
+      "schema": {
+        "$ref": "#/entities/UserAccountProfile"
+      },
+      "description": "Account owner profile document containing display info and synced thumbnail avatar."
+    },
+    "/users/{userId}/devices/{deviceId}": {
+      "schema": {
+        "$ref": "#/entities/SyncedDevice"
+      },
+      "description": "Connected Android devices registered under the owner's Google account."
+    },
+    "/users/{userId}/sync/{syncDocId}": {
+      "schema": {
+        "$ref": "#/entities/SyncedLockCommand"
+      },
+      "description": "Single deterministic sync document (lock_command) broadcasting cross-device focus locks."
+    }
+  }
+}

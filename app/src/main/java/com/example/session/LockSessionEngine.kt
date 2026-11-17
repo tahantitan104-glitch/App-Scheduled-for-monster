@@ -23,6 +23,7 @@ import com.example.domain.time.ClockProvider
 import com.example.platform.SystemCapabilityChecker
 import com.example.scheduling.LockAlarmScheduler
 import com.example.security.RecoveryCodeManager
+import com.example.sync.CloudLockCommand
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
@@ -50,6 +51,14 @@ sealed interface LockExitSignal {
     data object ExitLockTaskAndFinish : LockExitSignal
 }
 
+data class RemoteLockBroadcast(
+    val mode: LockMode,
+    val freeUseMinutes: Long,
+    val lockDurationMinutes: Long,
+    val freeUseDeadlineWallMs: Long,
+    val lockExpirationWallMs: Long
+)
+
 class LockSessionEngine(
     private val sessionRepository: SessionRepository,
     private val scheduleRepository: ScheduleRepository,
@@ -76,6 +85,9 @@ class LockSessionEngine(
 
     private val _lockExitSignals = MutableSharedFlow<LockExitSignal>(extraBufferCapacity = 4)
     val lockExitSignals: SharedFlow<LockExitSignal> = _lockExitSignals.asSharedFlow()
+
+    private val _scheduledBroadcasts = MutableSharedFlow<RemoteLockBroadcast>(extraBufferCapacity = 4)
+    val scheduledBroadcasts: SharedFlow<RemoteLockBroadcast> = _scheduledBroadcasts.asSharedFlow()
 
     private var tickerJob: Job? = null
     private var initialized = false
@@ -301,7 +313,138 @@ class LockSessionEngine(
         }
     }
 
+    suspend fun applyRemoteLockCommand(
+        command: CloudLockCommand,
+        allowedPackages: List<String>,
+        phoneAccessEnabled: Boolean
+    ): EngineStartResult {
+        var delayedShouldStartTicker = false
+        var immediateShouldLaunchLock = false
+
+        val result = mutex.withLock {
+            val current = _activeSession.value
+            if (current != null && !current.isTerminal) {
+                return@withLock EngineStartResult.Blocked("Another session is already active on this device.")
+            }
+
+            val nowWall = clockProvider.wallClockMs()
+            val nowElapsed = clockProvider.elapsedRealtimeMs()
+            val mode = command.resolveLockMode()
+            val status = refreshCapabilitiesInternal()
+            val enforcementMode = resolveAvailableEnforcementMode(status)
+            if (enforcementMode == EnforcementMode.NONE) {
+                return@withLock EngineStartResult.Blocked(
+                    "Synced lock skipped: enable Accessibility Guard on this device."
+                )
+            }
+            if (!recoveryCodeManager.hasRecoveryCodeFlow.first()) {
+                return@withLock EngineStartResult.Blocked(
+                    "Synced lock skipped: configure a Recovery Code on this device first."
+                )
+            }
+
+            if (mode == LockMode.DELAYED) {
+                val freeDeadline = command.freeUseDeadlineWallMs
+                val lockExpire = command.lockExpirationWallMs
+                val lockMins = command.lockDurationMinutes.coerceIn(1L, 1440L)
+                if (freeDeadline > nowWall) {
+                    val remainingFreeMs = (freeDeadline - nowWall).coerceAtLeast(1_000L)
+                    val remainingFreeMins = ((remainingFreeMs + 59_999L) / 60_000L).coerceAtLeast(1L)
+                    val sessionId = UUID.randomUUID().toString()
+                    val delayedSession = ActiveSession(
+                        sessionId = sessionId,
+                        mode = LockMode.DELAYED,
+                        state = SessionState.DELAYED_FREE_USE_ACTIVE,
+                        enforcementMode = enforcementMode,
+                        allowedPackages = allowedPackages,
+                        phoneAccessEnabled = phoneAccessEnabled,
+                        freeUseDurationMinutes = remainingFreeMins,
+                        lockDurationMinutes = lockMins,
+                        createdAtWallMs = nowWall,
+                        freeUseStartedElapsedMs = nowElapsed,
+                        freeUseDeadlineWallMs = freeDeadline,
+                        freeUseDeadlineElapsedMs = nowElapsed + remainingFreeMs,
+                        bootCountAtStart = preferencesRepository.getBootGeneration()
+                    )
+                    _activeSession.value = delayedSession
+                    _remainingMillis.value = remainingFreeMs
+                    sessionRepository.saveActiveSession(delayedSession)
+                    alarmScheduler.scheduleDelayedLockTransition(sessionId, freeDeadline)
+                    platformBridge.startMonitorService()
+                    delayedShouldStartTicker = true
+                    return@withLock EngineStartResult.Started
+                } else if (lockExpire > nowWall) {
+                    val remainingLockMs = (lockExpire - nowWall).coerceAtLeast(1_000L)
+                    val remainingLockMins = ((remainingLockMs + 59_999L) / 60_000L).coerceAtLeast(1L)
+                    val session = ActiveSession(
+                        sessionId = UUID.randomUUID().toString(),
+                        mode = LockMode.DELAYED,
+                        state = SessionState.LOCK_TRANSITION_PENDING,
+                        enforcementMode = enforcementMode,
+                        allowedPackages = allowedPackages,
+                        phoneAccessEnabled = phoneAccessEnabled,
+                        freeUseDurationMinutes = 0L,
+                        lockDurationMinutes = remainingLockMins,
+                        createdAtWallMs = nowWall,
+                        lockExpirationWallMs = lockExpire,
+                        lockExpirationElapsedMs = nowElapsed + remainingLockMs,
+                        bootCountAtStart = preferencesRepository.getBootGeneration()
+                    )
+                    immediateShouldLaunchLock = transitionToPendingLockInternal(session)
+                    return@withLock if (immediateShouldLaunchLock) {
+                        EngineStartResult.Started
+                    } else {
+                        EngineStartResult.Blocked("Lock enforcement unavailable on this device.")
+                    }
+                } else {
+                    return@withLock EngineStartResult.Blocked("")
+                }
+            } else {
+                val targetExpireWall = if (command.lockExpirationWallMs > nowWall) {
+                    command.lockExpirationWallMs
+                } else {
+                    nowWall + command.lockDurationMinutes.coerceIn(1L, 1440L) * 60_000L
+                }
+                // Reject stale commands that already expired
+                if (command.lockExpirationWallMs > 0L && command.lockExpirationWallMs <= nowWall) {
+                    return@withLock EngineStartResult.Blocked("")
+                }
+                val remainingMs = (targetExpireWall - nowWall).coerceAtLeast(1_000L)
+                val effectiveMins = ((remainingMs + 59_999L) / 60_000L).coerceAtLeast(1L)
+                val session = ActiveSession(
+                    sessionId = UUID.randomUUID().toString(),
+                    mode = mode,
+                    state = SessionState.LOCK_TRANSITION_PENDING,
+                    enforcementMode = enforcementMode,
+                    allowedPackages = allowedPackages,
+                    phoneAccessEnabled = phoneAccessEnabled,
+                    freeUseDurationMinutes = 0L,
+                    lockDurationMinutes = effectiveMins,
+                    createdAtWallMs = nowWall,
+                    lockExpirationWallMs = targetExpireWall,
+                    lockExpirationElapsedMs = nowElapsed + remainingMs,
+                    bootCountAtStart = preferencesRepository.getBootGeneration()
+                )
+                immediateShouldLaunchLock = transitionToPendingLockInternal(session)
+                return@withLock if (immediateShouldLaunchLock) {
+                    EngineStartResult.Started
+                } else {
+                    EngineStartResult.Blocked("Lock enforcement unavailable on this device.")
+                }
+            }
+        }
+
+        if (delayedShouldStartTicker) {
+            startTickerIfNeeded()
+        }
+        if (immediateShouldLaunchLock) {
+            platformBridge.launchLockScreen()
+        }
+        return result
+    }
+
     suspend fun onScheduleTriggered(scheduleId: Long) {
+        var broadcastPayload: RemoteLockBroadcast? = null
         val shouldLaunch = mutex.withLock {
             val schedule = scheduleRepository.getScheduleById(scheduleId) ?: return@withLock false
             if (!schedule.isEnabled) return@withLock false
@@ -338,8 +481,19 @@ class LockSessionEngine(
                 bootCountAtStart = preferencesRepository.getBootGeneration(),
                 scheduleId = schedule.id
             )
-            transitionToPendingLockInternal(session)
+            val transitioned = transitionToPendingLockInternal(session)
+            if (transitioned) {
+                broadcastPayload = RemoteLockBroadcast(
+                    mode = LockMode.SCHEDULED,
+                    freeUseMinutes = 0L,
+                    lockDurationMinutes = schedule.lockDurationMinutes,
+                    freeUseDeadlineWallMs = 0L,
+                    lockExpirationWallMs = nowWall + schedule.lockDurationMinutes * 60_000L
+                )
+            }
+            transitioned
         }
+        broadcastPayload?.let { _scheduledBroadcasts.tryEmit(it) }
         if (shouldLaunch) {
             platformBridge.launchLockScreen()
         }
@@ -451,21 +605,20 @@ class LockSessionEngine(
                 return@withLock false
             }
 
-            // Lock Duration begins ONLY after enforcement is confirmed (preserving remaining window on scheduled/active restore)
+            // Lock Duration begins ONLY after enforcement is confirmed (preserving remaining window on scheduled/synced/active restore)
             val nowWall = clockProvider.wallClockMs()
             val nowElapsed = clockProvider.elapsedRealtimeMs()
             val durationMs = current.lockDurationMinutes * 60_000L
-            val hasPreservedScheduleWindow = current.mode == LockMode.SCHEDULED &&
-                current.lockStartedWallMs != null &&
-                current.lockExpirationWallMs != null &&
-                current.lockExpirationElapsedMs != null
+            val hasPreservedTargetWindow = current.lockExpirationWallMs != null &&
+                current.lockExpirationElapsedMs != null &&
+                current.lockExpirationWallMs > nowWall
             val expireWall = current.lockExpirationWallMs?.takeIf {
                 (current.state == SessionState.LOCK_ENFORCEMENT_ACTIVE && current.lockStartedElapsedMs != null) ||
-                    (hasPreservedScheduleWindow && it > nowWall)
+                    (hasPreservedTargetWindow && it > nowWall)
             } ?: (nowWall + durationMs)
             val expireElapsed = current.lockExpirationElapsedMs?.takeIf {
                 (current.state == SessionState.LOCK_ENFORCEMENT_ACTIVE && current.lockStartedElapsedMs != null) ||
-                    (hasPreservedScheduleWindow && it > nowElapsed)
+                    (hasPreservedTargetWindow && it > nowElapsed)
             } ?: (nowElapsed + durationMs)
 
             val active = current.copy(

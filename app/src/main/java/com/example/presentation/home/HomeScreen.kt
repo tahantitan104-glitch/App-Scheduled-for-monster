@@ -68,13 +68,16 @@ import com.example.domain.model.MascotType
 import com.example.domain.model.SessionState
 import com.example.domain.model.SystemCapabilityStatus
 import com.example.presentation.components.FeatureTipNote
+import com.example.presentation.components.HomeOptionalSyncBanner
 import com.example.presentation.components.MascotRenderer
 import com.example.presentation.components.PulsingStatusDot
 import com.example.presentation.components.ResolveIcons
+import com.example.presentation.components.SyncedAvatarBadge
 import com.example.presentation.components.TactilePrimaryButton
 import com.example.presentation.components.pressScale
 import com.example.presentation.components.resolveGlassCard
 import com.example.presentation.lockscreen.formatCountdownHms
+import com.example.sync.AccountSyncUiState
 import kotlinx.coroutines.delay
 
 @Composable
@@ -92,7 +95,12 @@ fun HomeScreen(
     mascotType: MascotType = MascotType.BABY_CLOUD,
     bunnyPeekEntranceSeen: Boolean = true,
     onBunnyPeekEntranceSeen: () -> Unit = {},
-    reducedMotion: Boolean = false
+    reducedMotion: Boolean = false,
+    accountSyncState: AccountSyncUiState = AccountSyncUiState(),
+    syncPromoDismissed: Boolean = true,
+    onConnectGoogleAccount: () -> Unit = {},
+    onDismissSyncPromo: () -> Unit = {},
+    onOpenAccountSettings: () -> Unit = {}
 ) {
     Box(
         modifier = modifier
@@ -215,10 +223,24 @@ fun HomeScreen(
                         }
                     }
 
-                    EnforcementStatusPill(
-                        capabilities = capabilities,
-                        onClick = onOpenDeviceOwnerGuide
-                    )
+                    Row(
+                        verticalAlignment = Alignment.CenterVertically,
+                        horizontalArrangement = Arrangement.spacedBy(8.dp)
+                    ) {
+                        if (accountSyncState.isSignedIn) {
+                            SyncedAvatarBadge(
+                                displayName = accountSyncState.displayName,
+                                avatarBase64 = accountSyncState.avatarBase64,
+                                size = 34.dp,
+                                onClick = onOpenAccountSettings,
+                                modifier = Modifier.testTag("home_profile_avatar_pill")
+                            )
+                        }
+                        EnforcementStatusPill(
+                            capabilities = capabilities,
+                            onClick = onOpenDeviceOwnerGuide
+                        )
+                    }
                 }
             }
 
@@ -248,6 +270,21 @@ fun HomeScreen(
                     exit = fadeOut() + shrinkVertically()
                 ) {
                     SetupReadinessCallout(onClick = onOpenDeviceOwnerGuide)
+                }
+            }
+
+            // Optional multi-device sync prompt (hidden automatically once signed in or dismissed)
+            item {
+                AnimatedVisibility(
+                    visible = !accountSyncState.isSignedIn && !syncPromoDismissed,
+                    enter = fadeIn() + expandVertically(),
+                    exit = fadeOut() + shrinkVertically()
+                ) {
+                    HomeOptionalSyncBanner(
+                        isAuthBusy = accountSyncState.isAuthBusy,
+                        onConnectGoogle = onConnectGoogleAccount,
+                        onDismiss = onDismissSyncPromo
+                    )
                 }
             }
 

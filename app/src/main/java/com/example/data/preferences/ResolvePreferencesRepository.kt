@@ -43,6 +43,10 @@ class ResolvePreferencesRepository(private val context: Context) {
         val BOOT_GENERATION = intPreferencesKey("boot_generation")
         val FIRST_LAUNCH_WELCOME_SEEN = booleanPreferencesKey("first_launch_welcome_seen")
         val ONBOARDING_COMPLETED = booleanPreferencesKey("onboarding_completed")
+        val DEVICE_INSTALL_ID = stringPreferencesKey("device_install_id")
+        val SYNC_LOCK_ENABLED = booleanPreferencesKey("sync_lock_enabled")
+        val SYNC_PROMO_DISMISSED = booleanPreferencesKey("sync_promo_dismissed")
+        val LAST_PROCESSED_SYNC_COMMAND_ID = stringPreferencesKey("last_processed_sync_command_id")
     }
 
     val hasRecoveryCodeFlow: Flow<Boolean> = context.resolveDataStore.data.map { prefs ->
@@ -62,6 +66,50 @@ class ResolvePreferencesRepository(private val context: Context) {
             firstLaunchWelcomeSeen = prefs[Keys.FIRST_LAUNCH_WELCOME_SEEN] ?: false,
             onboardingCompleted = prefs[Keys.ONBOARDING_COMPLETED] ?: false
         )
+    }
+
+    val syncLockEnabledFlow: Flow<Boolean> = context.resolveDataStore.data.map { prefs ->
+        prefs[Keys.SYNC_LOCK_ENABLED] ?: true
+    }
+
+    val syncPromoDismissedFlow: Flow<Boolean> = context.resolveDataStore.data.map { prefs ->
+        prefs[Keys.SYNC_PROMO_DISMISSED] ?: false
+    }
+
+    suspend fun getOrCreateDeviceInstallId(): String {
+        val current = context.resolveDataStore.data.first()[Keys.DEVICE_INSTALL_ID]
+        if (!current.isNullOrBlank()) return current
+        val generated = "dev_" + java.util.UUID.randomUUID().toString().replace("-", "").take(20)
+        context.resolveDataStore.edit { prefs ->
+            if (prefs[Keys.DEVICE_INSTALL_ID].isNullOrBlank()) {
+                prefs[Keys.DEVICE_INSTALL_ID] = generated
+            }
+        }
+        return context.resolveDataStore.data.first()[Keys.DEVICE_INSTALL_ID] ?: generated
+    }
+
+    suspend fun isSyncLockEnabledSnapshot(): Boolean = syncLockEnabledFlow.first()
+
+    suspend fun setSyncLockEnabled(enabled: Boolean) {
+        context.resolveDataStore.edit { prefs ->
+            prefs[Keys.SYNC_LOCK_ENABLED] = enabled
+        }
+    }
+
+    suspend fun setSyncPromoDismissed(dismissed: Boolean) {
+        context.resolveDataStore.edit { prefs ->
+            prefs[Keys.SYNC_PROMO_DISMISSED] = dismissed
+        }
+    }
+
+    suspend fun getLastProcessedSyncCommandId(): String? {
+        return context.resolveDataStore.data.first()[Keys.LAST_PROCESSED_SYNC_COMMAND_ID]
+    }
+
+    suspend fun setLastProcessedSyncCommandId(commandId: String) {
+        context.resolveDataStore.edit { prefs ->
+            prefs[Keys.LAST_PROCESSED_SYNC_COMMAND_ID] = commandId
+        }
     }
 
     suspend fun getStartupPreferencesSnapshot(): StartupPreferences {
