@@ -4,8 +4,22 @@ import android.Manifest
 import android.os.Build
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
+import androidx.compose.animation.AnimatedVisibility
+import androidx.compose.animation.animateColorAsState
+import androidx.compose.animation.animateContentSize
+import androidx.compose.animation.core.Animatable
+import androidx.compose.animation.core.FastOutSlowInEasing
+import androidx.compose.animation.core.LinearEasing
+import androidx.compose.animation.core.animateFloatAsState
+import androidx.compose.animation.core.tween
+import androidx.compose.animation.expandVertically
+import androidx.compose.animation.fadeIn
+import androidx.compose.animation.fadeOut
+import androidx.compose.animation.shrinkVertically
+import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -30,8 +44,10 @@ import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.Text
+import androidx.compose.material3.minimumInteractiveComponentSize
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.DisposableEffect
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
@@ -39,11 +55,32 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.draw.drawWithContent
+import androidx.compose.ui.geometry.Offset
+import androidx.compose.ui.geometry.Size
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.Path
+import androidx.compose.ui.graphics.StrokeCap
+import androidx.compose.ui.graphics.StrokeJoin
+import androidx.compose.ui.graphics.drawscope.Stroke
+import androidx.compose.ui.graphics.graphicsLayer
+import androidx.compose.ui.graphics.vector.ImageVector
+import androidx.compose.ui.layout.onGloballyPositioned
 import androidx.compose.ui.platform.testTag
+import androidx.compose.ui.semantics.Role
+import androidx.compose.ui.text.SpanStyle
+import androidx.compose.ui.text.TextLayoutResult
+import androidx.compose.ui.text.TextStyle
+import androidx.compose.ui.text.buildAnnotatedString
+import androidx.compose.ui.text.font.FontStyle
+import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.withStyle
+import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import kotlin.math.roundToInt
+import kotlinx.coroutines.delay
 import androidx.lifecycle.Lifecycle
 import androidx.lifecycle.LifecycleEventObserver
 import androidx.lifecycle.compose.LocalLifecycleOwner
@@ -52,7 +89,12 @@ import com.example.designsystem.JetBrainsMonoFamily
 import com.example.designsystem.ResolveColors
 import com.example.domain.model.DeviceOwnerState
 import com.example.domain.model.EnforcementMode
+import com.example.domain.model.FocusMessageFrequency
+import com.example.domain.model.LockReminderStyle
+import com.example.domain.model.MascotPreferences
+import com.example.domain.model.MascotType
 import com.example.domain.model.SystemCapabilityStatus
+import com.example.presentation.components.FeatureTipNote
 import com.example.presentation.components.PulsingStatusDot
 import com.example.presentation.components.RecoveryCodeSetupDialog
 import com.example.presentation.components.ResolveIcons
@@ -73,7 +115,19 @@ fun SettingsScreen(
     onOpenDeviceOwnerGuide: () -> Unit,
     onOpenExactAlarmSettings: () -> Unit,
     onOpenNotificationSettings: () -> Unit,
-    modifier: Modifier = Modifier
+    modifier: Modifier = Modifier,
+    mascotPreferences: MascotPreferences = MascotPreferences(),
+    onSelectMascot: (MascotType) -> Unit = {},
+    onToggleReducedMotion: (Boolean) -> Unit = {},
+    onToggleFocusMessagesEnabled: (Boolean) -> Unit = {},
+    onSelectFocusMessageFrequency: (FocusMessageFrequency) -> Unit = {},
+    onAddFocusMessage: (String) -> Unit = {},
+    onEditFocusMessage: (String, String) -> Unit = { _, _ -> },
+    onDeleteFocusMessage: (String) -> Unit = {},
+    onRestoreDefaultFocusMessages: () -> Unit = {},
+    onToggleLockReminderEnabled: (Boolean) -> Unit = {},
+    onSaveLockReminderText: (String) -> Unit = {},
+    onSelectLockReminderStyle: (LockReminderStyle) -> Unit = {}
 ) {
     val lifecycleOwner = LocalLifecycleOwner.current
     DisposableEffect(lifecycleOwner) {
@@ -97,6 +151,8 @@ fun SettingsScreen(
     )
 
     var showRecoverySetup by remember { mutableStateOf(false) }
+    var showFocusMessagesSheet by remember { mutableStateOf(false) }
+    var showLockReminderSheet by remember { mutableStateOf(false) }
 
     val readyCount = listOf(
         capabilities.isAccessibilityServiceEnabled,
@@ -106,6 +162,11 @@ fun SettingsScreen(
         capabilities.notificationsEnabled,
         capabilities.isIgnoringBatteryOptimizations
     ).count { it }
+    val allCorePermissionsReady = readyCount == 6
+    var permissionsExpanded by remember { mutableStateOf(!allCorePermissionsReady) }
+    LaunchedEffect(allCorePermissionsReady) {
+        permissionsExpanded = !allCorePermissionsReady
+    }
 
     Box(
         modifier = modifier
@@ -196,147 +257,296 @@ fun SettingsScreen(
                         )
                     }
                 }
+                Spacer(Modifier.height(6.dp))
+                FeatureTipNote(
+                    text = "Tip: Accessibility & Overlay keep Lock Mode active across other apps.",
+                    icon = Icons.Outlined.Info
+                )
             }
 
             item {
                 Spacer(Modifier.height(2.dp))
-                Text(
-                    text = "ACCESS & PERMISSIONS",
-                    style = MaterialTheme.typography.labelSmall.copy(letterSpacing = 1.2.sp),
-                    color = ResolveColors.MintAccent
+                SettingsSectionHeader(
+                    title = "1 · PROTECTION & PERMISSIONS",
+                    icon = ResolveIcons.Shield
                 )
             }
 
-            // 1. Accessibility Service (Primary Lock Enforcement for Personal APK)
             item {
-                val enabled = capabilities.isAccessibilityServiceEnabled
-                PermissionItemCard(
-                    name = "Accessibility Service",
-                    reason = "Detects foreground apps during Lock Mode and blocks restricted apps without Device Owner.",
-                    status = if (enabled) "Enabled" else "Not Enabled",
-                    isReady = enabled,
-                    statusColor = if (enabled) ResolveColors.MintAccent else ResolveColors.AmberWarn,
-                    actionLabel = if (enabled) "Manage Accessibility" else "Enable Accessibility",
-                    onAction = onOpenAccessibilitySettings,
-                    testTag = "settings_accessibility_action"
+                val chevronRotation by animateFloatAsState(
+                    targetValue = if (permissionsExpanded) 180f else 0f,
+                    animationSpec = tween(240, easing = FastOutSlowInEasing),
+                    label = "permissions_chevron_rotation"
                 )
-            }
-
-            // 2. Display Over Other Apps
-            item {
-                val enabled = capabilities.canDrawOverlays
-                PermissionItemCard(
-                    name = "Display Over Other Apps",
-                    reason = "Required on Android 10+ to open the Lock Screen automatically over active apps.",
-                    status = if (enabled) "Enabled" else "Not Enabled",
-                    isReady = enabled,
-                    statusColor = if (enabled) ResolveColors.MintAccent else ResolveColors.AmberWarn,
-                    actionLabel = if (enabled) null else "Enable Overlay",
-                    onAction = onOpenOverlaySettings,
-                    testTag = "settings_overlay_action"
-                )
-            }
-
-            // 3. Usage Access
-            item {
-                val enabled = capabilities.hasUsageStatsAccess
-                PermissionItemCard(
-                    name = "Usage Access",
-                    reason = "Provides fallback foreground app detection if Accessibility events are delayed.",
-                    status = if (enabled) "Enabled" else "Not Enabled",
-                    isReady = enabled,
-                    statusColor = if (enabled) ResolveColors.MintAccent else ResolveColors.AmberWarn,
-                    actionLabel = if (enabled) null else "Enable Usage Access",
-                    onAction = onOpenUsageAccessSettings,
-                    testTag = "settings_usage_access_action"
-                )
-            }
-
-            // 4. Alarms & Reminders
-            item {
-                val exactReady = !capabilities.exactAlarmRequiredByOs || capabilities.canScheduleExactAlarms
-                val (statusText, statusColor, showAction) = when {
-                    !capabilities.exactAlarmRequiredByOs ->
-                        Triple("Not Required", ResolveColors.MintAccent, false)
-                    capabilities.canScheduleExactAlarms ->
-                        Triple("Enabled", ResolveColors.MintAccent, false)
-                    else ->
-                        Triple("Not Enabled", ResolveColors.AmberWarn, true)
-                }
-                PermissionItemCard(
-                    name = "Alarms & Reminders",
-                    reason = "Required for precise Delayed Lock and Schedule Lock transitions.",
-                    status = statusText,
-                    isReady = exactReady,
-                    statusColor = statusColor,
-                    actionLabel = if (showAction) "Enable Access" else null,
-                    onAction = onOpenExactAlarmSettings,
-                    testTag = "settings_exact_alarm_action"
-                )
-            }
-
-            // 5. Notifications
-            item {
-                val statusText = if (capabilities.notificationsEnabled) "Enabled" else "Not Enabled"
-                val statusColor = if (capabilities.notificationsEnabled) ResolveColors.MintAccent else ResolveColors.AmberWarn
-                PermissionItemCard(
-                    name = "Notifications",
-                    reason = "Required to keep the active session timer service running reliably.",
-                    status = statusText,
-                    isReady = capabilities.notificationsEnabled,
-                    statusColor = statusColor,
-                    actionLabel = if (capabilities.notificationsEnabled) null else "Enable Notifications",
-                    onAction = {
-                        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
-                            notificationPermissionLauncher.launch(Manifest.permission.POST_NOTIFICATIONS)
-                        } else {
-                            onOpenNotificationSettings()
-                        }
+                val headerBorderColor by animateColorAsState(
+                    targetValue = if (allCorePermissionsReady) {
+                        ResolveColors.MintAccent.copy(alpha = 0.40f)
+                    } else {
+                        ResolveColors.AmberWarn.copy(alpha = 0.42f)
                     },
-                    testTag = "settings_notifications_action"
+                    animationSpec = tween(240),
+                    label = "permissions_header_border"
                 )
-            }
 
-            // 6. Unrestricted Battery
-            item {
-                val unrestricted = capabilities.isIgnoringBatteryOptimizations
-                PermissionItemCard(
-                    name = "Unrestricted Battery",
-                    reason = "Prevents the system from stopping timers or Accessibility guard in the background.",
-                    status = if (unrestricted) "Unrestricted" else "Optimized",
-                    isReady = unrestricted,
-                    statusColor = if (unrestricted) ResolveColors.MintAccent else ResolveColors.AmberWarn,
-                    actionLabel = if (unrestricted) null else "Allow Unrestricted",
-                    onAction = onOpenBatteryOptimizationSettings,
-                    testTag = "settings_battery_action"
-                )
-            }
+                Column(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .clip(RoundedCornerShape(22.dp))
+                        .background(ResolveColors.ForestSurface.copy(alpha = 0.72f))
+                        .border(1.dp, headerBorderColor, RoundedCornerShape(22.dp))
+                        .animateContentSize(animationSpec = tween(260, easing = FastOutSlowInEasing))
+                ) {
+                    Row(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .minimumInteractiveComponentSize()
+                            .clickable(role = Role.Button) {
+                                permissionsExpanded = !permissionsExpanded
+                            }
+                            .padding(horizontal = 16.dp, vertical = 14.dp)
+                            .testTag("settings_permissions_dropdown_header"),
+                        verticalAlignment = Alignment.CenterVertically,
+                        horizontalArrangement = Arrangement.spacedBy(12.dp)
+                    ) {
+                        Box(
+                            modifier = Modifier
+                                .size(38.dp)
+                                .clip(RoundedCornerShape(12.dp))
+                                .background(
+                                    if (allCorePermissionsReady) {
+                                        ResolveColors.MintSoftContainer.copy(alpha = 0.85f)
+                                    } else {
+                                        ResolveColors.AmberContainer.copy(alpha = 0.65f)
+                                    }
+                                ),
+                            contentAlignment = Alignment.Center
+                        ) {
+                            Icon(
+                                imageVector = if (allCorePermissionsReady) {
+                                    Icons.Outlined.CheckCircle
+                                } else {
+                                    ResolveIcons.Shield
+                                },
+                                contentDescription = null,
+                                tint = if (allCorePermissionsReady) {
+                                    ResolveColors.MintAccent
+                                } else {
+                                    ResolveColors.AmberWarn
+                                },
+                                modifier = Modifier.size(20.dp)
+                            )
+                        }
 
-            // 7. Device Management (Optional Device Owner Lock Task)
-            item {
-                val (statusText, statusColor) = when (capabilities.deviceOwnerState) {
-                    DeviceOwnerState.DEVICE_OWNER_ACTIVE -> "Active" to ResolveColors.MintAccent
-                    DeviceOwnerState.DEVICE_ADMIN_ONLY -> "Admin Only" to ResolveColors.AmberWarn
-                    DeviceOwnerState.NOT_PROVISIONED -> "Optional (Not Set Up)" to ResolveColors.TextSecondary
+                        Column(modifier = Modifier.weight(1f)) {
+                            Text(
+                                text = if (allCorePermissionsReady) {
+                                    "System Permissions Active"
+                                } else {
+                                    "Permissions Setup"
+                                },
+                                style = MaterialTheme.typography.titleMedium,
+                                color = ResolveColors.TextPrimary
+                            )
+                            Text(
+                                text = when {
+                                    allCorePermissionsReady && !permissionsExpanded ->
+                                        "6 / 6 ready • Hidden (tap to view)"
+                                    allCorePermissionsReady ->
+                                        "6 / 6 ready • Tap to hide"
+                                    permissionsExpanded ->
+                                        "$readyCount / 6 ready • Tap to collapse"
+                                    else ->
+                                        "$readyCount / 6 ready • Tap to expand"
+                                },
+                                style = MaterialTheme.typography.bodySmall,
+                                color = if (allCorePermissionsReady) {
+                                    ResolveColors.MintAccent
+                                } else {
+                                    ResolveColors.AmberWarn
+                                }
+                            )
+                        }
+
+                        Box(
+                            modifier = Modifier
+                                .size(34.dp)
+                                .clip(CircleShape)
+                                .background(ResolveColors.ForestSurfaceElevated.copy(alpha = 0.85f)),
+                            contentAlignment = Alignment.Center
+                        ) {
+                            Icon(
+                                imageVector = ResolveIcons.ExpandMore,
+                                contentDescription = if (permissionsExpanded) {
+                                    "Collapse permissions list"
+                                } else {
+                                    "Expand permissions list"
+                                },
+                                tint = ResolveColors.TextPrimary,
+                                modifier = Modifier
+                                    .size(20.dp)
+                                    .graphicsLayer { rotationZ = chevronRotation }
+                            )
+                        }
+                    }
+
+                    AnimatedVisibility(
+                        visible = permissionsExpanded,
+                        enter = expandVertically(
+                            animationSpec = tween(260, easing = FastOutSlowInEasing)
+                        ) + fadeIn(animationSpec = tween(220)),
+                        exit = shrinkVertically(
+                            animationSpec = tween(220, easing = FastOutSlowInEasing)
+                        ) + fadeOut(animationSpec = tween(160))
+                    ) {
+                        Column(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .padding(start = 12.dp, end = 12.dp, bottom = 12.dp)
+                                .testTag("settings_permissions_dropdown_content"),
+                            verticalArrangement = Arrangement.spacedBy(10.dp)
+                        ) {
+                            // 1. Accessibility Service (Primary Lock Enforcement for Personal APK)
+                            val accEnabled = capabilities.isAccessibilityServiceEnabled
+                            PermissionItemCard(
+                                name = "Accessibility Service",
+                                reason = "Detects foreground apps during Lock Mode and blocks restricted apps without Device Owner.",
+                                status = if (accEnabled) "Enabled" else "Not Enabled",
+                                isReady = accEnabled,
+                                statusColor = if (accEnabled) ResolveColors.MintAccent else ResolveColors.AmberWarn,
+                                actionLabel = if (accEnabled) "Manage Accessibility" else "Enable Accessibility",
+                                onAction = onOpenAccessibilitySettings,
+                                testTag = "settings_accessibility_action"
+                            )
+
+                            // 2. Display Over Other Apps
+                            val overlayEnabled = capabilities.canDrawOverlays
+                            PermissionItemCard(
+                                name = "Display Over Other Apps",
+                                reason = "Required on Android 10+ to open the Lock Screen automatically over active apps.",
+                                status = if (overlayEnabled) "Enabled" else "Not Enabled",
+                                isReady = overlayEnabled,
+                                statusColor = if (overlayEnabled) ResolveColors.MintAccent else ResolveColors.AmberWarn,
+                                actionLabel = if (overlayEnabled) null else "Enable Overlay",
+                                onAction = onOpenOverlaySettings,
+                                testTag = "settings_overlay_action"
+                            )
+
+                            // 3. Usage Access
+                            val usageEnabled = capabilities.hasUsageStatsAccess
+                            PermissionItemCard(
+                                name = "Usage Access",
+                                reason = "Provides fallback foreground app detection if Accessibility events are delayed.",
+                                status = if (usageEnabled) "Enabled" else "Not Enabled",
+                                isReady = usageEnabled,
+                                statusColor = if (usageEnabled) ResolveColors.MintAccent else ResolveColors.AmberWarn,
+                                actionLabel = if (usageEnabled) null else "Enable Usage Access",
+                                onAction = onOpenUsageAccessSettings,
+                                testTag = "settings_usage_access_action"
+                            )
+
+                            // 4. Alarms & Reminders
+                            val exactReady = !capabilities.exactAlarmRequiredByOs || capabilities.canScheduleExactAlarms
+                            val (exactText, exactColor, showExactAction) = when {
+                                !capabilities.exactAlarmRequiredByOs ->
+                                    Triple("Not Required", ResolveColors.MintAccent, false)
+                                capabilities.canScheduleExactAlarms ->
+                                    Triple("Enabled", ResolveColors.MintAccent, false)
+                                else ->
+                                    Triple("Not Enabled", ResolveColors.AmberWarn, true)
+                            }
+                            PermissionItemCard(
+                                name = "Alarms & Reminders",
+                                reason = "Required for precise Delayed Lock and Schedule Lock transitions.",
+                                status = exactText,
+                                isReady = exactReady,
+                                statusColor = exactColor,
+                                actionLabel = if (showExactAction) "Enable Access" else null,
+                                onAction = onOpenExactAlarmSettings,
+                                testTag = "settings_exact_alarm_action"
+                            )
+
+                            // 5. Notifications
+                            val notifStatus = if (capabilities.notificationsEnabled) "Enabled" else "Not Enabled"
+                            val notifColor = if (capabilities.notificationsEnabled) ResolveColors.MintAccent else ResolveColors.AmberWarn
+                            PermissionItemCard(
+                                name = "Notifications",
+                                reason = "Required to keep the active session timer service running reliably.",
+                                status = notifStatus,
+                                isReady = capabilities.notificationsEnabled,
+                                statusColor = notifColor,
+                                actionLabel = if (capabilities.notificationsEnabled) null else "Enable Notifications",
+                                onAction = {
+                                    if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
+                                        runCatching {
+                                            notificationPermissionLauncher.launch(Manifest.permission.POST_NOTIFICATIONS)
+                                        }.onFailure {
+                                            onOpenNotificationSettings()
+                                        }
+                                    } else {
+                                        onOpenNotificationSettings()
+                                    }
+                                },
+                                testTag = "settings_notifications_action"
+                            )
+
+                            // 6. Unrestricted Battery
+                            val unrestricted = capabilities.isIgnoringBatteryOptimizations
+                            PermissionItemCard(
+                                name = "Unrestricted Battery",
+                                reason = "Prevents the system from stopping timers or Accessibility guard in the background.",
+                                status = if (unrestricted) "Unrestricted" else "Optimized",
+                                isReady = unrestricted,
+                                statusColor = if (unrestricted) ResolveColors.MintAccent else ResolveColors.AmberWarn,
+                                actionLabel = if (unrestricted) null else "Allow Unrestricted",
+                                onAction = onOpenBatteryOptimizationSettings,
+                                testTag = "settings_battery_action"
+                            )
+
+                            // 7. Device Management (Optional Device Owner Lock Task)
+                            val (ownerStatus, ownerColor) = when (capabilities.deviceOwnerState) {
+                                DeviceOwnerState.DEVICE_OWNER_ACTIVE -> "Active" to ResolveColors.MintAccent
+                                DeviceOwnerState.DEVICE_ADMIN_ONLY -> "Admin Only" to ResolveColors.AmberWarn
+                                DeviceOwnerState.NOT_PROVISIONED -> "Optional (Not Set Up)" to ResolveColors.TextSecondary
+                            }
+                            PermissionItemCard(
+                                name = "Device Management",
+                                reason = "Optional OS-level Lock Task Mode via ADB Device Owner provisioning.",
+                                status = ownerStatus,
+                                isReady = capabilities.deviceOwnerState == DeviceOwnerState.DEVICE_OWNER_ACTIVE,
+                                statusColor = ownerColor,
+                                actionLabel = "View Setup Guide",
+                                onAction = onOpenDeviceOwnerGuide,
+                                testTag = "settings_device_management_action"
+                            )
+                        }
+                    }
                 }
-                PermissionItemCard(
-                    name = "Device Management",
-                    reason = "Optional OS-level Lock Task Mode via ADB Device Owner provisioning.",
-                    status = statusText,
-                    isReady = capabilities.deviceOwnerState == DeviceOwnerState.DEVICE_OWNER_ACTIVE,
-                    statusColor = statusColor,
-                    actionLabel = "View Setup Guide",
-                    onAction = onOpenDeviceOwnerGuide,
-                    testTag = "settings_device_management_action"
+            }
+
+            item {
+                Spacer(Modifier.height(6.dp))
+                SettingsSectionHeader(
+                    title = "2 · APPEARANCE & COMPANION",
+                    icon = ResolveIcons.Tune
+                )
+            }
+
+            item {
+                MascotAppearanceCard(
+                    preferences = mascotPreferences,
+                    onSelectMascot = onSelectMascot,
+                    onToggleReducedMotion = onToggleReducedMotion,
+                    onOpenFocusMessagesManager = { showFocusMessagesSheet = true },
+                    onToggleLockReminderEnabled = onToggleLockReminderEnabled,
+                    onOpenLockReminderEditor = { showLockReminderSheet = true }
                 )
             }
 
             item {
                 Spacer(Modifier.height(6.dp))
-                Text(
-                    text = "RECOVERY",
-                    style = MaterialTheme.typography.labelSmall.copy(letterSpacing = 1.2.sp),
-                    color = ResolveColors.MintAccent
+                SettingsSectionHeader(
+                    title = "3 · EMERGENCY EXIT",
+                    icon = ResolveIcons.Key
                 )
             }
 
@@ -351,35 +561,26 @@ fun SettingsScreen(
                     onAction = { showRecoverySetup = true },
                     testTag = "settings_recovery_action"
                 )
-            }
-
-            item {
-                Spacer(Modifier.height(6.dp))
-                Text(
-                    text = "APPLICATION INFORMATION",
-                    style = MaterialTheme.typography.labelSmall.copy(letterSpacing = 1.2.sp),
-                    color = ResolveColors.MintAccent
+                Spacer(Modifier.height(4.dp))
+                FeatureTipNote(
+                    text = "Note: Save your code safely in case you need an early unlock.",
+                    icon = ResolveIcons.Key
                 )
             }
 
             item {
-                Column(
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .resolveGlassCard(cornerRadius = 20.dp)
-                        .padding(18.dp),
-                    verticalArrangement = Arrangement.spacedBy(8.dp)
-                ) {
-                    InfoRow(label = "Application", value = "Resolve")
-                    InfoRow(label = "Version", value = BuildConfig.VERSION_NAME)
-                    Spacer(Modifier.height(4.dp))
-                    Text(
-                        text = "Developed by \"Tahan Official\"",
-                        style = MaterialTheme.typography.titleMedium,
-                        color = ResolveColors.MintAccent,
-                        modifier = Modifier.testTag("settings_developer_credit")
-                    )
-                }
+                Spacer(Modifier.height(6.dp))
+                SettingsSectionHeader(
+                    title = "4 · ABOUT",
+                    icon = Icons.Outlined.Info
+                )
+            }
+
+            item {
+                CraftedSignatureCard(
+                    versionName = BuildConfig.VERSION_NAME,
+                    reducedMotion = mascotPreferences.reducedMotionEnabled
+                )
             }
         }
     }
@@ -392,6 +593,28 @@ fun SettingsScreen(
                 onSaveRecoveryCode(code)
                 showRecoverySetup = false
             }
+        )
+    }
+
+    if (showFocusMessagesSheet) {
+        FocusMessagesManagerSheet(
+            preferences = mascotPreferences,
+            onDismiss = { showFocusMessagesSheet = false },
+            onToggleMessagesEnabled = onToggleFocusMessagesEnabled,
+            onSelectFrequency = onSelectFocusMessageFrequency,
+            onAddMessage = onAddFocusMessage,
+            onEditMessage = onEditFocusMessage,
+            onDeleteMessage = onDeleteFocusMessage,
+            onRestoreDefaults = onRestoreDefaultFocusMessages
+        )
+    }
+
+    if (showLockReminderSheet) {
+        LockReminderEditorSheet(
+            preferences = mascotPreferences,
+            onDismiss = { showLockReminderSheet = false },
+            onSelectStyle = onSelectLockReminderStyle,
+            onSaveText = onSaveLockReminderText
         )
     }
 }
@@ -468,12 +691,348 @@ private fun PermissionItemCard(
 }
 
 @Composable
-private fun InfoRow(label: String, value: String) {
+private fun SettingsSectionHeader(
+    title: String,
+    icon: ImageVector
+) {
     Row(
-        modifier = Modifier.fillMaxWidth(),
-        horizontalArrangement = Arrangement.SpaceBetween
+        verticalAlignment = Alignment.CenterVertically,
+        horizontalArrangement = Arrangement.spacedBy(7.dp),
+        modifier = Modifier.padding(horizontal = 2.dp, vertical = 2.dp)
     ) {
-        Text(text = label, style = MaterialTheme.typography.bodyMedium, color = ResolveColors.TextSecondary)
-        Text(text = value, style = MaterialTheme.typography.bodyMedium, color = ResolveColors.TextPrimary)
+        Icon(
+            imageVector = icon,
+            contentDescription = null,
+            tint = ResolveColors.MintAccent,
+            modifier = Modifier.size(15.dp)
+        )
+        Text(
+            text = title,
+            style = MaterialTheme.typography.labelSmall.copy(
+                letterSpacing = 1.25.sp,
+                fontWeight = FontWeight.SemiBold
+            ),
+            color = ResolveColors.MintAccent
+        )
     }
 }
+
+@Composable
+private fun CraftedSignatureCard(
+    versionName: String,
+    reducedMotion: Boolean
+) {
+    var hasEnteredView by remember { mutableStateOf(false) }
+
+    Column(
+        modifier = Modifier
+            .fillMaxWidth()
+            .onGloballyPositioned { coords ->
+                if (!hasEnteredView && coords.isAttached && coords.size.height > 0) {
+                    hasEnteredView = true
+                }
+            }
+            .clip(RoundedCornerShape(22.dp))
+            .background(
+                Brush.linearGradient(
+                    colors = listOf(
+                        ResolveColors.ForestSurfaceElevated,
+                        ResolveColors.MintSoftContainer.copy(alpha = 0.28f),
+                        ResolveColors.ForestDeep
+                    )
+                )
+            )
+            .border(
+                1.dp,
+                Brush.horizontalGradient(
+                    colors = listOf(
+                        ResolveColors.MintAccent.copy(alpha = 0.45f),
+                        ResolveColors.ForestOutline,
+                        ResolveColors.MintBright.copy(alpha = 0.28f)
+                    )
+                ),
+                RoundedCornerShape(22.dp)
+            )
+            .padding(20.dp),
+        verticalArrangement = Arrangement.spacedBy(14.dp)
+    ) {
+        Row(
+            modifier = Modifier.fillMaxWidth(),
+            horizontalArrangement = Arrangement.SpaceBetween,
+            verticalAlignment = Alignment.CenterVertically
+        ) {
+            Row(
+                verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.spacedBy(14.dp),
+                modifier = Modifier.weight(1f)
+            ) {
+                Box(
+                    modifier = Modifier
+                        .size(50.dp)
+                        .clip(RoundedCornerShape(15.dp))
+                        .background(ResolveColors.ForestBrandDeep)
+                        .border(
+                            1.dp,
+                            ResolveColors.MintAccent.copy(alpha = 0.36f),
+                            RoundedCornerShape(15.dp)
+                        ),
+                    contentAlignment = Alignment.Center
+                ) {
+                    FocusShieldEmblem(
+                        size = 34.dp,
+                        testTagName = "settings_about_distraction_emblem"
+                    )
+                }
+
+                Column(verticalArrangement = Arrangement.spacedBy(2.dp)) {
+                    Text(
+                        text = "RESOLVE",
+                        style = MaterialTheme.typography.titleMedium.copy(
+                            fontWeight = FontWeight.Bold,
+                            letterSpacing = 1.6.sp
+                        ),
+                        color = ResolveColors.TextPrimary
+                    )
+                    KeyboardTypingText(
+                        fullText = "Your distraction killing is resolve duty.",
+                        style = MaterialTheme.typography.bodySmall.copy(
+                            fontStyle = FontStyle.Italic,
+                            fontWeight = FontWeight.Medium
+                        ),
+                        color = ResolveColors.MintAccent,
+                        startTyping = hasEnteredView,
+                        startDelayMillis = 80,
+                        typingDurationMillis = 820,
+                        reducedMotion = reducedMotion
+                    )
+                }
+            }
+
+            Spacer(Modifier.width(8.dp))
+
+            Text(
+                text = "v$versionName",
+                style = MaterialTheme.typography.labelMedium.copy(
+                    fontFamily = JetBrainsMonoFamily,
+                    fontWeight = FontWeight.Medium
+                ),
+                color = ResolveColors.MintBright,
+                modifier = Modifier
+                    .clip(CircleShape)
+                    .background(ResolveColors.ForestDeep.copy(alpha = 0.8f))
+                    .border(1.dp, ResolveColors.MintAccent.copy(alpha = 0.30f), CircleShape)
+                    .padding(horizontal = 10.dp, vertical = 4.dp)
+            )
+        }
+
+        // Hairline luminous divider
+        Box(
+            modifier = Modifier
+                .fillMaxWidth()
+                .height(1.dp)
+                .background(
+                    Brush.horizontalGradient(
+                        colors = listOf(
+                            Color.Transparent,
+                            ResolveColors.MintAccent.copy(alpha = 0.42f),
+                            Color.Transparent
+                        )
+                    )
+                )
+        )
+
+        Row(
+            modifier = Modifier.fillMaxWidth(),
+            horizontalArrangement = Arrangement.SpaceBetween,
+            verticalAlignment = Alignment.CenterVertically
+        ) {
+            Row(
+                verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.spacedBy(8.dp)
+            ) {
+                PulsingStatusDot(color = ResolveColors.MintBright, size = 5.dp)
+                KeyboardTypingText(
+                    fullText = "Developed by Tahan Official",
+                    style = MaterialTheme.typography.titleSmall.copy(
+                        fontWeight = FontWeight.SemiBold,
+                        letterSpacing = 0.35.sp
+                    ),
+                    color = ResolveColors.MintBright,
+                    startTyping = hasEnteredView,
+                    startDelayMillis = 920,
+                    typingDurationMillis = 680,
+                    reducedMotion = reducedMotion,
+                    modifier = Modifier.testTag("settings_developer_credit")
+                )
+            }
+        }
+    }
+}
+
+/**
+ * Reveals text character-by-character like smooth keyboard typing when scrolled into view,
+ * reserving final layout bounds via transparent spans so lines never jump or clip.
+ */
+@Composable
+private fun KeyboardTypingText(
+    fullText: String,
+    style: TextStyle,
+    color: Color,
+    startTyping: Boolean,
+    startDelayMillis: Int,
+    typingDurationMillis: Int,
+    reducedMotion: Boolean,
+    modifier: Modifier = Modifier,
+    highlightTipColor: Color = ResolveColors.MintBright
+) {
+    val progress = remember(fullText) { Animatable(if (reducedMotion) 1f else 0f) }
+    var showCursor by remember(fullText) { mutableStateOf(false) }
+    var textLayoutResult by remember { mutableStateOf<TextLayoutResult?>(null) }
+
+    LaunchedEffect(startTyping, reducedMotion, fullText) {
+        if (reducedMotion) {
+            showCursor = false
+            progress.snapTo(1f)
+            return@LaunchedEffect
+        }
+        if (startTyping && progress.value < 1f) {
+            if (startDelayMillis > 0) {
+                delay(startDelayMillis.toLong())
+            }
+            showCursor = true
+            progress.animateTo(
+                targetValue = 1f,
+                animationSpec = tween(
+                    durationMillis = typingDurationMillis,
+                    easing = LinearEasing
+                )
+            )
+            delay(260L)
+            showCursor = false
+        }
+    }
+
+    val visibleCharCount = if (reducedMotion) {
+        fullText.length
+    } else {
+        (progress.value * fullText.length).roundToInt().coerceIn(0, fullText.length)
+    }
+
+    val styledText = buildAnnotatedString {
+        if (visibleCharCount > 0) {
+            val freshStart = (visibleCharCount - 2).coerceAtLeast(0)
+            if (visibleCharCount < fullText.length && freshStart > 0) {
+                withStyle(SpanStyle(color = color)) {
+                    append(fullText.substring(0, freshStart))
+                }
+                withStyle(SpanStyle(color = highlightTipColor)) {
+                    append(fullText.substring(freshStart, visibleCharCount))
+                }
+            } else {
+                withStyle(SpanStyle(color = color)) {
+                    append(fullText.substring(0, visibleCharCount))
+                }
+            }
+        }
+        if (visibleCharCount < fullText.length) {
+            withStyle(SpanStyle(color = Color.Transparent)) {
+                append(fullText.substring(visibleCharCount))
+            }
+        }
+    }
+
+    Text(
+        text = styledText,
+        style = style,
+        onTextLayout = { textLayoutResult = it },
+        modifier = modifier.drawWithContent {
+            drawContent()
+            if (showCursor && !reducedMotion) {
+                val layout = textLayoutResult ?: return@drawWithContent
+                runCatching {
+                    val safeIndex = visibleCharCount.coerceIn(0, fullText.length)
+                    val caretRect = layout.getCursorRect(safeIndex)
+                    val caretHeight = (caretRect.height - 3f).coerceAtLeast(8f)
+                    drawRect(
+                        color = highlightTipColor,
+                        topLeft = Offset(caretRect.left, caretRect.top + 1.5f),
+                        size = Size(width = 1.8.dp.toPx(), height = caretHeight)
+                    )
+                }
+            }
+        }
+    )
+}
+
+/**
+ * Minimalist geometric emblem featuring an octagonal guardian shield, an open precision focus ring,
+ * and a luminous diagonal focus beam with a centered core point—symbolizing calm distraction defense.
+ */
+@Composable
+private fun FocusShieldEmblem(
+    size: Dp,
+    testTagName: String
+) {
+    Canvas(
+        modifier = Modifier
+            .size(size)
+            .testTag(testTagName)
+    ) {
+        val w = this.size.width
+        val h = this.size.height
+
+        // 1. Sleek geometric guardian shield crest
+        val shieldPath = Path().apply {
+            moveTo(w * 0.50f, h * 0.10f)
+            lineTo(w * 0.84f, h * 0.24f)
+            lineTo(w * 0.80f, h * 0.62f)
+            cubicTo(
+                w * 0.78f, h * 0.77f,
+                w * 0.64f, h * 0.87f,
+                w * 0.50f, h * 0.92f
+            )
+            cubicTo(
+                w * 0.36f, h * 0.87f,
+                w * 0.22f, h * 0.77f,
+                w * 0.20f, h * 0.62f
+            )
+            lineTo(w * 0.16f, h * 0.24f)
+            close()
+        }
+        drawPath(
+            path = shieldPath,
+            color = ResolveColors.MintSoftContainer.copy(alpha = 0.42f)
+        )
+        drawPath(
+            path = shieldPath,
+            color = ResolveColors.MintAccent,
+            style = Stroke(width = w * 0.058f, cap = StrokeCap.Round, join = StrokeJoin.Round)
+        )
+
+        // 2. Open precision focus ring inside the shield
+        drawArc(
+            color = Color(0xFFEAF7F1),
+            startAngle = -35f,
+            sweepAngle = 250f,
+            useCenter = false,
+            topLeft = Offset(w * 0.31f, h * 0.32f),
+            size = Size(w * 0.38f, h * 0.38f),
+            style = Stroke(width = w * 0.056f, cap = StrokeCap.Round)
+        )
+
+        // 3. Ascending geometric focus spark & center core dot
+        drawLine(
+            color = ResolveColors.MintBright,
+            start = Offset(w * 0.50f, h * 0.50f),
+            end = Offset(w * 0.69f, h * 0.29f),
+            strokeWidth = w * 0.056f,
+            cap = StrokeCap.Round
+        )
+        drawCircle(
+            color = ResolveColors.MintBright,
+            radius = w * 0.068f,
+            center = Offset(w * 0.50f, h * 0.51f)
+        )
+    }
+}
+

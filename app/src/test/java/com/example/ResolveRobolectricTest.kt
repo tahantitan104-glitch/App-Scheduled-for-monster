@@ -281,7 +281,9 @@ class ResolveRobolectricTest {
         composeRule.onNodeWithText("Accessibility Service").assertIsDisplayed()
         composeRule.onNodeWithTag("settings_list")
             .performScrollToNode(hasTestTag("settings_developer_credit"))
-        composeRule.onNodeWithText("Developed by \"Tahan Official\"").assertIsDisplayed()
+        composeRule.mainClock.advanceTimeBy(2_000L)
+        composeRule.waitForIdle()
+        composeRule.onNodeWithText("Developed by Tahan Official").assertIsDisplayed()
     }
 
     @Test

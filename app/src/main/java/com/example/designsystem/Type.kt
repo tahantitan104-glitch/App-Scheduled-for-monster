@@ -15,6 +15,13 @@ val PlusJakartaSansFamily = FontFamily(
     Font(R.font.plus_jakarta_sans, FontWeight.Bold)
 )
 
+val OutfitTimerFamily = FontFamily(
+    Font(R.font.outfit, FontWeight.Normal),
+    Font(R.font.outfit, FontWeight.Medium),
+    Font(R.font.outfit, FontWeight.SemiBold),
+    Font(R.font.outfit, FontWeight.Bold)
+)
+
 val JetBrainsMonoFamily = FontFamily(
     Font(R.font.jetbrains_mono, FontWeight.Normal),
     Font(R.font.jetbrains_mono, FontWeight.Medium),
@@ -23,18 +30,18 @@ val JetBrainsMonoFamily = FontFamily(
 
 val ResolveTypography = Typography(
     displayLarge = TextStyle(
-        fontFamily = JetBrainsMonoFamily,
+        fontFamily = OutfitTimerFamily,
         fontWeight = FontWeight.Medium,
         fontSize = 52.sp,
         lineHeight = 60.sp,
-        letterSpacing = (-1.0).sp
+        letterSpacing = 0.5.sp
     ),
     displayMedium = TextStyle(
-        fontFamily = JetBrainsMonoFamily,
+        fontFamily = OutfitTimerFamily,
         fontWeight = FontWeight.Medium,
         fontSize = 40.sp,
         lineHeight = 48.sp,
-        letterSpacing = (-0.5).sp
+        letterSpacing = 0.25.sp
     ),
     headlineLarge = TextStyle(
         fontFamily = PlusJakartaSansFamily,

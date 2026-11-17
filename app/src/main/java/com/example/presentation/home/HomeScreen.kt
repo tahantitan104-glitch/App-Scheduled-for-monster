@@ -27,6 +27,8 @@ import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.outlined.ArrowForward
+import androidx.compose.material.icons.outlined.Call
+import androidx.compose.material.icons.outlined.Info
 import androidx.compose.material.icons.outlined.Lock
 import androidx.compose.material.icons.outlined.Warning
 import androidx.compose.material3.Icon
@@ -35,7 +37,11 @@ import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
@@ -48,6 +54,8 @@ import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.hapticfeedback.HapticFeedbackType
 import androidx.compose.ui.platform.LocalHapticFeedback
 import androidx.compose.ui.platform.testTag
+import androidx.compose.ui.semantics.contentDescription
+import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
@@ -55,15 +63,19 @@ import com.example.designsystem.JetBrainsMonoFamily
 import com.example.designsystem.ResolveColors
 import com.example.domain.model.ActiveSession
 import com.example.domain.model.EnforcementMode
+import com.example.domain.model.MascotAnimationState
+import com.example.domain.model.MascotType
 import com.example.domain.model.SessionState
 import com.example.domain.model.SystemCapabilityStatus
-import com.example.presentation.components.BabyCloudMascot
+import com.example.presentation.components.FeatureTipNote
+import com.example.presentation.components.MascotRenderer
 import com.example.presentation.components.PulsingStatusDot
 import com.example.presentation.components.ResolveIcons
 import com.example.presentation.components.TactilePrimaryButton
 import com.example.presentation.components.pressScale
 import com.example.presentation.components.resolveGlassCard
 import com.example.presentation.lockscreen.formatCountdownHms
+import kotlinx.coroutines.delay
 
 @Composable
 fun HomeScreen(
@@ -76,7 +88,11 @@ fun HomeScreen(
     onOpenDeviceOwnerGuide: () -> Unit,
     onReturnToLockScreen: () -> Unit,
     onDismissTerminalSession: () -> Unit,
-    modifier: Modifier = Modifier
+    modifier: Modifier = Modifier,
+    mascotType: MascotType = MascotType.BABY_CLOUD,
+    bunnyPeekEntranceSeen: Boolean = true,
+    onBunnyPeekEntranceSeen: () -> Unit = {},
+    reducedMotion: Boolean = false
 ) {
     Box(
         modifier = modifier
@@ -113,9 +129,39 @@ fun HomeScreen(
                     verticalAlignment = Alignment.CenterVertically
                 ) {
                     Row(
+                        modifier = Modifier
+                            .weight(1f)
+                            .padding(end = 8.dp),
                         verticalAlignment = Alignment.CenterVertically,
                         horizontalArrangement = Arrangement.spacedBy(12.dp)
                     ) {
+                        var homeMascotState by remember(mascotType) { mutableStateOf(MascotAnimationState.IDLE) }
+                        var homePeekProgress by remember(mascotType) { mutableStateOf(1f) }
+                        var replayRequestCount by remember { mutableStateOf(0) }
+
+                        LaunchedEffect(mascotType, bunnyPeekEntranceSeen, reducedMotion, replayRequestCount) {
+                            val shouldPlayPeek = mascotType == MascotType.RESOLVE_BUNNY &&
+                                !reducedMotion &&
+                                (!bunnyPeekEntranceSeen || replayRequestCount > 0)
+                            if (shouldPlayPeek) {
+                                homeMascotState = MascotAnimationState.PEEK_ENTRANCE
+                                homePeekProgress = 0f
+                                val steps = 70
+                                for (i in 1..steps) {
+                                    delay(34L)
+                                    homePeekProgress = i / steps.toFloat()
+                                }
+                                homeMascotState = MascotAnimationState.IDLE
+                                homePeekProgress = 1f
+                                if (!bunnyPeekEntranceSeen) {
+                                    onBunnyPeekEntranceSeen()
+                                }
+                            } else {
+                                homeMascotState = MascotAnimationState.IDLE
+                                homePeekProgress = 1f
+                            }
+                        }
+
                         Box(
                             modifier = Modifier
                                 .size(50.dp)
@@ -125,10 +171,32 @@ fun HomeScreen(
                                     1.dp,
                                     ResolveColors.MintAccent.copy(alpha = 0.25f),
                                     RoundedCornerShape(16.dp)
-                                ),
+                                )
+                                .clickable {
+                                    if (mascotType == MascotType.RESOLVE_BUNNY) {
+                                        replayRequestCount++
+                                    } else if (!reducedMotion) {
+                                        homeMascotState = if (homeMascotState == MascotAnimationState.HEAD_EAR_ATTENTION) {
+                                            MascotAnimationState.IDLE
+                                        } else {
+                                            MascotAnimationState.HEAD_EAR_ATTENTION
+                                        }
+                                    }
+                                }
+                                .semantics {
+                                    contentDescription = "${mascotType.displayName} companion badge"
+                                }
+                                .testTag("home_mascot_badge"),
                             contentAlignment = Alignment.Center
                         ) {
-                            BabyCloudMascot(size = 46.dp, showFocusAura = false)
+                            MascotRenderer(
+                                mascot = mascotType,
+                                size = 46.dp,
+                                showFocusAura = false,
+                                animationState = homeMascotState,
+                                peekProgress = homePeekProgress,
+                                reducedMotion = reducedMotion
+                            )
                         }
                         Column {
                             Text(
@@ -190,6 +258,11 @@ fun HomeScreen(
                     style = MaterialTheme.typography.labelSmall.copy(letterSpacing = 1.3.sp),
                     color = ResolveColors.TextSecondary
                 )
+                Spacer(modifier = Modifier.height(4.dp))
+                FeatureTipNote(
+                    text = "Tip: Tap your companion badge above to preview.",
+                    icon = Icons.Outlined.Info
+                )
             }
 
             item {
@@ -222,6 +295,13 @@ fun HomeScreen(
                     accentBadge = "Automated",
                     onClick = onOpenScheduleSetup,
                     testTag = "mode_card_schedule"
+                )
+            }
+
+            item {
+                FeatureTipNote(
+                    text = "Note: Phone calls & chosen allowed apps stay usable during lock.",
+                    icon = Icons.Outlined.Call
                 )
             }
         }

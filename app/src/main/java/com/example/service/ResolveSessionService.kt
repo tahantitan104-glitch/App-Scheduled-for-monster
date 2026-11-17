@@ -187,7 +187,8 @@ class ResolveSessionService : Service() {
         }
 
         return NotificationCompat.Builder(this, CHANNEL_ID)
-            .setSmallIcon(R.mipmap.ic_launcher)
+            .setSmallIcon(R.drawable.ic_notification_resolve)
+            .setColor(0xFF75E0B5.toInt())
             .setContentTitle(title)
             .setContentText(text)
             .setOngoing(true)

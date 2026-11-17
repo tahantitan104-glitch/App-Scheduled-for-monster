@@ -34,6 +34,7 @@ import com.example.domain.model.LockMode
 import com.example.domain.model.SessionHistoryRecord
 import com.example.domain.model.SessionOutcome
 import com.example.domain.scheduling.ScheduleCalculator
+import com.example.presentation.components.FeatureTipNote
 import com.example.presentation.components.ResolveIcons
 import com.example.presentation.components.resolveGlassCard
 
@@ -71,6 +72,11 @@ fun HistoryScreen(
                     text = "Locally recorded session outcomes.",
                     style = MaterialTheme.typography.bodyMedium,
                     color = ResolveColors.TextSecondary
+                )
+                Spacer(Modifier.height(6.dp))
+                FeatureTipNote(
+                    text = "Note: All session logs remain private and offline on your device.",
+                    icon = ResolveIcons.Shield
                 )
             }
 

@@ -4,6 +4,7 @@ import androidx.compose.ui.graphics.Color
 
 object ResolveColors {
     val ForestDeep = Color(0xFF07110E)
+    val ForestBrandDeep = Color(0xFF10251F)
     val ForestSecondary = Color(0xFF101C17)
     val ForestSurface = Color(0xFF17251E)
     val ForestSurfaceElevated = Color(0xFF1E3027)
@@ -12,6 +13,7 @@ object ResolveColors {
     val ForestGlass = Color(0xCC12201A)
 
     val MintAccent = Color(0xFF9BE3B4)
+    val FocusMint = Color(0xFF75E0B5)
     val MintBright = Color(0xFFBEF5D0)
     val SageAccent = Color(0xFF6FAE88)
     val MintSoftContainer = Color(0xFF163526)

@@ -46,6 +46,7 @@ import com.example.domain.model.DurationSelection
 import com.example.domain.model.LockSchedule
 import com.example.domain.model.ScheduleType
 import com.example.domain.scheduling.ScheduleCalculator
+import com.example.presentation.components.FeatureTipNote
 import com.example.presentation.components.ResolveIcons
 import com.example.presentation.components.pressScale
 import com.example.presentation.components.resolveGlassCard
@@ -101,6 +102,11 @@ fun ScheduleScreen(
                         text = "Automatic restriction start times in local timezone.",
                         style = MaterialTheme.typography.bodyMedium,
                         color = ResolveColors.TextSecondary
+                    )
+                    Spacer(Modifier.height(6.dp))
+                    FeatureTipNote(
+                        text = "Tip: Tap any schedule to edit; overlaps are checked automatically.",
+                        icon = ResolveIcons.Schedule
                     )
                 }
 

@@ -9,6 +9,7 @@ import androidx.datastore.preferences.core.intPreferencesKey
 import androidx.datastore.preferences.core.longPreferencesKey
 import androidx.datastore.preferences.core.stringPreferencesKey
 import androidx.datastore.preferences.preferencesDataStore
+import com.example.domain.startup.StartupPreferences
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.flow.map
@@ -40,6 +41,8 @@ class ResolvePreferencesRepository(private val context: Context) {
         val RECOVERY_LOCKOUT_UNTIL_WALL_MS = longPreferencesKey("recovery_lockout_until_wall_ms")
         val DEFAULT_PHONE_ACCESS = booleanPreferencesKey("default_phone_access")
         val BOOT_GENERATION = intPreferencesKey("boot_generation")
+        val FIRST_LAUNCH_WELCOME_SEEN = booleanPreferencesKey("first_launch_welcome_seen")
+        val ONBOARDING_COMPLETED = booleanPreferencesKey("onboarding_completed")
     }
 
     val hasRecoveryCodeFlow: Flow<Boolean> = context.resolveDataStore.data.map { prefs ->
@@ -52,6 +55,37 @@ class ResolvePreferencesRepository(private val context: Context) {
 
     val defaultPhoneAccessFlow: Flow<Boolean> = context.resolveDataStore.data.map { prefs ->
         prefs[Keys.DEFAULT_PHONE_ACCESS] ?: true
+    }
+
+    val startupPreferencesFlow: Flow<StartupPreferences> = context.resolveDataStore.data.map { prefs ->
+        StartupPreferences(
+            firstLaunchWelcomeSeen = prefs[Keys.FIRST_LAUNCH_WELCOME_SEEN] ?: false,
+            onboardingCompleted = prefs[Keys.ONBOARDING_COMPLETED] ?: false
+        )
+    }
+
+    suspend fun getStartupPreferencesSnapshot(): StartupPreferences {
+        return startupPreferencesFlow.first()
+    }
+
+    suspend fun markFirstLaunchWelcomeSeen() {
+        context.resolveDataStore.edit { prefs ->
+            prefs[Keys.FIRST_LAUNCH_WELCOME_SEEN] = true
+        }
+    }
+
+    suspend fun markOnboardingCompleted() {
+        context.resolveDataStore.edit { prefs ->
+            prefs[Keys.FIRST_LAUNCH_WELCOME_SEEN] = true
+            prefs[Keys.ONBOARDING_COMPLETED] = true
+        }
+    }
+
+    suspend fun resetStartupStateForTesting() {
+        context.resolveDataStore.edit { prefs ->
+            prefs[Keys.FIRST_LAUNCH_WELCOME_SEEN] = false
+            prefs[Keys.ONBOARDING_COMPLETED] = false
+        }
     }
 
     suspend fun getRecoveryRecord(): StoredRecoveryRecord? {

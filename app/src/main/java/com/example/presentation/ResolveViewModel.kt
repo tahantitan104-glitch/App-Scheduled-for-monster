@@ -12,13 +12,21 @@ import androidx.lifecycle.viewmodel.CreationExtras
 import com.example.ResolveApplication
 import com.example.domain.model.ActiveSession
 import com.example.domain.model.DurationSelection
+import com.example.domain.model.FocusMessageFrequency
 import com.example.domain.model.InstalledAppInfo
+import com.example.domain.model.LockReminderStyle
 import com.example.domain.model.LockSchedule
+import com.example.domain.model.MascotPreferences
+import com.example.domain.model.MascotType
 import com.example.domain.model.ScheduleType
 import com.example.domain.model.SessionHistoryRecord
 import com.example.domain.model.SystemCapabilityStatus
 import com.example.domain.scheduling.ScheduleCalculator
+import com.example.domain.startup.StartupDecisionResolver
+import com.example.domain.startup.StartupPreferences
+import com.example.domain.startup.StartupStage
 import com.example.session.EngineStartResult
+import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.flow.MutableSharedFlow
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.SharedFlow
@@ -63,6 +71,15 @@ class ResolveViewModel(
     val recoveryCodeLength: StateFlow<Int> = container.recoveryCodeManager.recoveryCodeLengthFlow
         .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), 16)
 
+    val mascotPreferences: StateFlow<MascotPreferences> = container.mascotSelectionManager.preferencesFlow
+        .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), MascotPreferences())
+
+    val startupPreferences: StateFlow<StartupPreferences> = container.preferencesRepository.startupPreferencesFlow
+        .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), StartupPreferences())
+
+    private val _startupStage = MutableStateFlow(StartupStage.RESOLVING)
+    val startupStage: StateFlow<StartupStage> = _startupStage.asStateFlow()
+
     private val _installedApps = MutableStateFlow<List<InstalledAppInfo>>(emptyList())
     val installedApps: StateFlow<List<InstalledAppInfo>> = _installedApps.asStateFlow()
 
@@ -94,8 +111,32 @@ class ResolveViewModel(
     val events: SharedFlow<UiEvent> = _events.asSharedFlow()
 
     init {
-        refreshInstalledApps()
-        refreshCapabilities()
+        viewModelScope.launch {
+            engine.initialize()
+            refreshCapabilities()
+            val startupPrefs = container.preferencesRepository.getStartupPreferencesSnapshot()
+            val hasCode = container.recoveryCodeManager.hasRecoveryCodeFlow.first()
+            val setupReady = hasCode && engine.capabilities.value.canEnforceRealLock
+            _startupStage.value = StartupDecisionResolver.resolveInitialStage(
+                activeSession = engine.activeSession.value,
+                startupPreferences = startupPrefs,
+                isRequiredSetupComplete = setupReady
+            )
+            // Defer heavier PackageManager icon/app scan until after startup stage is determined
+            refreshInstalledApps()
+        }
+        viewModelScope.launch {
+            engine.activeSession.collect { session ->
+                if (StartupDecisionResolver.shouldRestoreLockImmediately(session)) {
+                    _startupStage.value = StartupStage.RESTORE_LOCK
+                } else if (_startupStage.value == StartupStage.RESTORE_LOCK && session != null && session.isTerminal) {
+                    val startupPrefs = container.preferencesRepository.getStartupPreferencesSnapshot()
+                    val hasCode = container.recoveryCodeManager.hasRecoveryCodeFlow.first()
+                    val setupReady = hasCode && engine.capabilities.value.canEnforceRealLock
+                    _startupStage.value = StartupDecisionResolver.resolvePostIntroStage(startupPrefs, setupReady)
+                }
+            }
+        }
     }
 
     fun refreshCapabilities() {
@@ -106,6 +147,54 @@ class ResolveViewModel(
         viewModelScope.launch {
             _installedApps.value = container.installedAppsRepository.loadLaunchableApps()
         }
+    }
+
+    fun onBrandIntroCompleted() {
+        viewModelScope.launch {
+            if (StartupDecisionResolver.shouldRestoreLockImmediately(engine.activeSession.value)) {
+                _startupStage.value = StartupStage.RESTORE_LOCK
+                return@launch
+            }
+            val startupPrefs = container.preferencesRepository.getStartupPreferencesSnapshot()
+            val hasCode = container.recoveryCodeManager.hasRecoveryCodeFlow.first()
+            val setupReady = hasCode && engine.capabilities.value.canEnforceRealLock
+            _startupStage.value = StartupDecisionResolver.resolvePostIntroStage(startupPrefs, setupReady)
+        }
+    }
+
+    fun onFirstTimeWelcomeContinue() {
+        viewModelScope.launch {
+            if (StartupDecisionResolver.shouldRestoreLockImmediately(engine.activeSession.value)) {
+                _startupStage.value = StartupStage.RESTORE_LOCK
+                return@launch
+            }
+            val hasCode = container.recoveryCodeManager.hasRecoveryCodeFlow.first()
+            val setupReady = hasCode && engine.capabilities.value.canEnforceRealLock
+            if (setupReady) {
+                container.preferencesRepository.markOnboardingCompleted()
+                _startupStage.value = StartupStage.HOME
+            } else {
+                container.preferencesRepository.markFirstLaunchWelcomeSeen()
+                _startupStage.value = StartupStage.REQUIRED_SETUP
+            }
+        }
+    }
+
+    fun onCompleteRequiredSetup() {
+        viewModelScope.launch {
+            val hasCode = container.recoveryCodeManager.hasRecoveryCodeFlow.first()
+            val setupReady = hasCode && engine.capabilities.value.canEnforceRealLock
+            if (setupReady) {
+                container.preferencesRepository.markOnboardingCompleted()
+                _startupStage.value = StartupStage.HOME
+            } else {
+                _events.emit(UiEvent.ShowMessage("Please configure Recovery Code and Focus Guard first."))
+            }
+        }
+    }
+
+    fun onDeferRequiredSetupToHome() {
+        _startupStage.value = StartupStage.HOME
     }
 
     suspend fun loadAppIcon(packageName: String): ImageBitmap? =
@@ -319,9 +408,7 @@ class ResolveViewModel(
 
     fun openLockScreenIfLocked() {
         val current = activeSession.value ?: return
-        if (current.state == com.example.domain.model.SessionState.LOCK_ENFORCEMENT_ACTIVE ||
-            current.state == com.example.domain.model.SessionState.LOCK_TRANSITION_PENDING
-        ) {
+        if (StartupDecisionResolver.shouldRestoreLockImmediately(current)) {
             val intent = android.content.Intent(
                 getApplication(),
                 com.example.presentation.lockscreen.LockScreenActivity::class.java
@@ -358,6 +445,95 @@ class ResolveViewModel(
 
     fun openNotificationSettings() {
         container.capabilityChecker.openNotificationSettings()
+    }
+
+    fun selectMascot(mascot: MascotType) {
+        viewModelScope.launch {
+            container.mascotSelectionManager.selectMascot(mascot)
+        }
+    }
+
+    fun markBunnyPeekEntranceSeen() {
+        viewModelScope.launch {
+            container.mascotSelectionManager.markBunnyPeekEntranceSeen(true)
+        }
+    }
+
+    fun setReducedMotion(enabled: Boolean) {
+        viewModelScope.launch {
+            container.mascotSelectionManager.setReducedMotion(enabled)
+        }
+    }
+
+    fun setFocusMessagesEnabled(enabled: Boolean) {
+        viewModelScope.launch {
+            container.focusMessageManager.setMessagesEnabled(enabled)
+        }
+    }
+
+    fun setFocusMessageFrequency(frequency: FocusMessageFrequency) {
+        viewModelScope.launch {
+            container.focusMessageManager.setFrequency(frequency)
+        }
+    }
+
+    fun addFocusMessage(rawText: String) {
+        viewModelScope.launch {
+            val added = container.focusMessageManager.addCustomMessage(rawText)
+            if (added) {
+                _events.emit(UiEvent.ShowMessage("Focus message added."))
+            } else {
+                _events.emit(UiEvent.ShowMessage("Enter a non-empty focus message."))
+            }
+        }
+    }
+
+    fun editFocusMessage(id: String, rawText: String) {
+        viewModelScope.launch {
+            val updated = container.focusMessageManager.editMessage(id, rawText)
+            if (updated) {
+                _events.emit(UiEvent.ShowMessage("Focus message updated."))
+            } else {
+                _events.emit(UiEvent.ShowMessage("Enter a non-empty focus message."))
+            }
+        }
+    }
+
+    fun deleteFocusMessage(id: String) {
+        viewModelScope.launch {
+            container.focusMessageManager.deleteMessage(id)
+        }
+    }
+
+    fun restoreDefaultFocusMessages() {
+        viewModelScope.launch {
+            container.focusMessageManager.restoreDefaultMessages()
+            _events.emit(UiEvent.ShowMessage("Default focus messages restored."))
+        }
+    }
+
+    fun setLockReminderEnabled(enabled: Boolean) {
+        viewModelScope.launch {
+            container.mascotSelectionManager.setLockReminderEnabled(enabled)
+        }
+    }
+
+    fun setLockReminderText(rawText: String) {
+        viewModelScope.launch {
+            val clean = rawText.replace('\n', ' ').replace(Regex("\\s+"), " ").trim()
+            if (clean.isEmpty()) {
+                _events.emit(UiEvent.ShowMessage("Enter a reminder sentence to display."))
+            } else {
+                container.mascotSelectionManager.setLockReminderText(clean)
+                _events.emit(UiEvent.ShowMessage("Lock screen reminder saved."))
+            }
+        }
+    }
+
+    fun setLockReminderStyle(style: LockReminderStyle) {
+        viewModelScope.launch {
+            container.mascotSelectionManager.setLockReminderStyle(style)
+        }
     }
 
     companion object {

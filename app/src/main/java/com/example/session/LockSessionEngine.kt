@@ -90,6 +90,7 @@ class LockSessionEngine(
             if (persisted != null && !persisted.isTerminal) {
                 reconcilePersistedSessionOnProcessStart(persisted)
             }
+            reconcileDueScheduleOnProcessStartLocked()
             rescheduleAllEnabledSchedulesInternal()
         }
         startTickerIfNeeded()
@@ -450,15 +451,21 @@ class LockSessionEngine(
                 return@withLock false
             }
 
-            // Lock Duration begins ONLY after enforcement is confirmed
+            // Lock Duration begins ONLY after enforcement is confirmed (preserving remaining window on scheduled/active restore)
             val nowWall = clockProvider.wallClockMs()
             val nowElapsed = clockProvider.elapsedRealtimeMs()
             val durationMs = current.lockDurationMinutes * 60_000L
+            val hasPreservedScheduleWindow = current.mode == LockMode.SCHEDULED &&
+                current.lockStartedWallMs != null &&
+                current.lockExpirationWallMs != null &&
+                current.lockExpirationElapsedMs != null
             val expireWall = current.lockExpirationWallMs?.takeIf {
-                current.state == SessionState.LOCK_ENFORCEMENT_ACTIVE && current.lockStartedElapsedMs != null
+                (current.state == SessionState.LOCK_ENFORCEMENT_ACTIVE && current.lockStartedElapsedMs != null) ||
+                    (hasPreservedScheduleWindow && it > nowWall)
             } ?: (nowWall + durationMs)
             val expireElapsed = current.lockExpirationElapsedMs?.takeIf {
-                current.state == SessionState.LOCK_ENFORCEMENT_ACTIVE && current.lockStartedElapsedMs != null
+                (current.state == SessionState.LOCK_ENFORCEMENT_ACTIVE && current.lockStartedElapsedMs != null) ||
+                    (hasPreservedScheduleWindow && it > nowElapsed)
             } ?: (nowElapsed + durationMs)
 
             val active = current.copy(
@@ -685,7 +692,8 @@ class LockSessionEngine(
                 }
             }
             SessionState.LOCK_ENFORCEMENT_ACTIVE,
-            SessionState.PHONE_CALL_ACTIVE -> {
+            SessionState.PHONE_CALL_ACTIVE,
+            SessionState.RECOVERY_IN_PROGRESS -> {
                 val remaining = computeRemainingMillis(persisted)
                 if (remaining <= 0L) {
                     onLockExpirationDuringRestoreLocked(persisted)
@@ -695,7 +703,50 @@ class LockSessionEngine(
                     platformBridge.startMonitorService()
                 }
             }
+            SessionState.LOCK_TRANSITION_PENDING -> {
+                platformBridge.startMonitorService()
+            }
             else -> Unit
+        }
+    }
+
+    private suspend fun reconcileDueScheduleOnProcessStartLocked() {
+        val current = _activeSession.value
+        if (current != null && !current.isTerminal) return
+
+        val nowWall = clockProvider.wallClockMs()
+        val nowElapsed = clockProvider.elapsedRealtimeMs()
+        val zone = clockProvider.zoneId()
+        val dueSchedule = scheduleRepository.getAllSchedules().firstOrNull { schedule ->
+            schedule.isEnabled &&
+                schedule.nextTriggerWallMs != null &&
+                schedule.nextTriggerWallMs <= nowWall &&
+                ScheduleCalculator.findInProgressWindowStartMs(schedule, nowWall, zone) != null
+        } ?: return
+
+        val startMs = ScheduleCalculator.findInProgressWindowStartMs(dueSchedule, nowWall, zone) ?: return
+        val endWallMs = startMs + (dueSchedule.lockDurationMinutes * 60_000L)
+        val remainingMs = (endWallMs - nowWall).coerceAtLeast(1_000L)
+        advanceScheduleAfterTriggerInternal(dueSchedule, nowWall)
+
+        val session = ActiveSession(
+            sessionId = UUID.randomUUID().toString(),
+            mode = LockMode.SCHEDULED,
+            state = SessionState.LOCK_TRANSITION_PENDING,
+            enforcementMode = resolveAvailableEnforcementMode(refreshCapabilitiesInternal()),
+            allowedPackages = dueSchedule.allowedPackages,
+            phoneAccessEnabled = dueSchedule.phoneAccessEnabled,
+            freeUseDurationMinutes = 0L,
+            lockDurationMinutes = dueSchedule.lockDurationMinutes,
+            createdAtWallMs = nowWall,
+            lockStartedWallMs = startMs,
+            lockExpirationWallMs = endWallMs,
+            lockExpirationElapsedMs = nowElapsed + remainingMs,
+            bootCountAtStart = preferencesRepository.getBootGeneration(),
+            scheduleId = dueSchedule.id
+        )
+        if (transitionToPendingLockInternal(session)) {
+            platformBridge.launchLockScreen()
         }
     }
 

@@ -531,6 +531,20 @@ object ResolveIcons {
         }
     }
 
+    val ExpandMore: ImageVector by lazy {
+        materialVector("ResolveExpandMore") {
+            path(fill = SolidColor(Color.Black)) {
+                moveTo(16.59f, 8.59f)
+                lineTo(12f, 13.17f)
+                lineTo(7.41f, 8.59f)
+                lineTo(6f, 10f)
+                lineToRelative(6f, 6f)
+                lineToRelative(6f, -6f)
+                close()
+            }
+        }
+    }
+
     private inline fun materialVector(
         name: String,
         block: ImageVector.Builder.() -> Unit

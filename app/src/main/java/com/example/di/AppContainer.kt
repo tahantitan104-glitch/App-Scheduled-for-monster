@@ -2,6 +2,7 @@ package com.example.di
 
 import android.content.Context
 import com.example.data.local.ResolveDatabase
+import com.example.data.preferences.MascotPreferencesRepository
 import com.example.data.preferences.ResolvePreferencesRepository
 import com.example.data.repository.AllowlistRepository
 import com.example.data.repository.HistoryRepository
@@ -11,6 +12,8 @@ import com.example.devicepolicy.AndroidDevicePolicyController
 import com.example.devicepolicy.DevicePolicyController
 import com.example.domain.time.ClockProvider
 import com.example.domain.time.SystemClockProvider
+import com.example.mascot.FocusMessageManager
+import com.example.mascot.MascotSelectionManager
 import com.example.platform.ForegroundEnforcementGuard
 import com.example.platform.InstalledAppsRepository
 import com.example.platform.SystemCapabilityChecker
@@ -28,6 +31,15 @@ class AppContainer(private val appContext: Context) {
     val database: ResolveDatabase by lazy { ResolveDatabase.create(appContext) }
     val preferencesRepository: ResolvePreferencesRepository by lazy {
         ResolvePreferencesRepository(appContext)
+    }
+    val mascotPreferencesRepository: MascotPreferencesRepository by lazy {
+        MascotPreferencesRepository(appContext)
+    }
+    val mascotSelectionManager: MascotSelectionManager by lazy {
+        MascotSelectionManager(mascotPreferencesRepository)
+    }
+    val focusMessageManager: FocusMessageManager by lazy {
+        FocusMessageManager(mascotPreferencesRepository)
     }
 
     val sessionRepository: SessionRepository by lazy {

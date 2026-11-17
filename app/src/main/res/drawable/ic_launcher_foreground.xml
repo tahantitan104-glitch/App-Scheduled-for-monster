@@ -1,8 +1,42 @@
 <?xml version="1.0" encoding="utf-8"?>
-<layer-list xmlns:android="http://schemas.android.com/apk/res/android">
-    <item
-        android:width="66dp"
-        android:height="66dp"
-        android:drawable="@drawable/ic_launcher_foreground_art_1794745511080"
-        android:gravity="center" />
-</layer-list>
+<vector xmlns:android="http://schemas.android.com/apk/res/android"
+    xmlns:aapt="http://schemas.android.com/aapt"
+    android:width="108dp"
+    android:height="108dp"
+    android:viewportWidth="108"
+    android:viewportHeight="108">
+
+    <!-- Restrained radial mint ambient glow around center focus point -->
+    <path android:pathData="M54,39 a15,15 0 1,0 0,30 a15,15 0 1,0 0,-30 z">
+        <aapt:attr name="android:fillColor">
+            <gradient
+                android:centerX="54"
+                android:centerY="54"
+                android:gradientRadius="15"
+                android:type="radial">
+                <item
+                    android:color="#2E75E0B5"
+                    android:offset="0.0" />
+                <item
+                    android:color="#1075E0B5"
+                    android:offset="0.55" />
+                <item
+                    android:color="#0075E0B5"
+                    android:offset="1.0" />
+            </gradient>
+        </aapt:attr>
+    </path>
+
+    <!-- Custom geometric abstract Focus Ring with intentional upper-right interruption -->
+    <path
+        android:fillColor="@android:color/transparent"
+        android:pathData="M76.32,48.44 A23,23 0 1,1 68.16,35.88"
+        android:strokeColor="#75E0B5"
+        android:strokeLineCap="round"
+        android:strokeWidth="4.6" />
+
+    <!-- Central mint-green Focus Point dot -->
+    <path
+        android:fillColor="#75E0B5"
+        android:pathData="M54,48.6 a5.4,5.4 0 1,0 0,10.8 a5.4,5.4 0 1,0 0,-10.8 z" />
+</vector>

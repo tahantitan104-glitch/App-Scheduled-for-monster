@@ -28,6 +28,7 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.outlined.ArrowBack
 import androidx.compose.material.icons.automirrored.outlined.KeyboardArrowRight
 import androidx.compose.material.icons.outlined.Call
+import androidx.compose.material.icons.outlined.Info
 import androidx.compose.material.icons.outlined.Lock
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.FilterChip
@@ -68,6 +69,7 @@ import com.example.domain.model.ScheduleType
 import com.example.presentation.components.AllowedAppsPickerSheet
 import com.example.presentation.components.CleanupTextInteractionsOnDispose
 import com.example.presentation.components.DurationSelector
+import com.example.presentation.components.FeatureTipNote
 import com.example.presentation.components.RecoveryCodeSetupDialog
 import com.example.presentation.components.ResolveIcons
 import com.example.presentation.components.TactilePrimaryButton
@@ -163,6 +165,15 @@ fun InstantLockSetupScreen(
                         icon = ResolveIcons.Key,
                         onClick = { showRecoveryDialog = true },
                         testTag = "instant_recovery_row"
+                    )
+                    Spacer(Modifier.height(4.dp))
+                    FeatureTipNote(
+                        text = if (hasRecoveryCode) {
+                            "Tip: Allowed apps & Phone Dialer stay accessible on Lock Screen."
+                        } else {
+                            "Note: Configure a 16-digit code first for emergency exit access."
+                        },
+                        icon = Icons.Outlined.Info
                     )
                 }
 
@@ -290,6 +301,11 @@ fun DelayedLockSetupScreen(
                         onMinutesChanged = onLockMinutesChanged,
                         onDurationReplaced = onLockReplaced,
                         testTagPrefix = "delayed_lock_duration"
+                    )
+                    Spacer(Modifier.height(4.dp))
+                    FeatureTipNote(
+                        text = "Tip: Lock Duration begins full-length right when Free Use ends.",
+                        icon = ResolveIcons.HourglassTop
                     )
                 }
 
@@ -576,6 +592,10 @@ fun ScheduleLockSetupScreen(
                                 ).show()
                             },
                             testTag = "schedule_time_picker"
+                        )
+                        FeatureTipNote(
+                            text = "Tip: Overlapping times with active schedules are prevented automatically.",
+                            icon = ResolveIcons.EventAvailable
                         )
                     }
                 }
