@@ -7,4 +7,13 @@
     <string name="notification_channel_session_name">Active Focus Session</string>
     <string name="notification_channel_session_desc">Keeps Resolve\'s free-use countdown and lock enforcement timing accurate.</string>
     <string name="developer_credit">Developed by Tahan Official</string>
+    <string name="nav_vision_label">Modes</string>
+    <string name="nav_modes_label">Modes</string>
+    <string name="flip_clock_title">Flip Clock</string>
+    <string name="flip_clock_enter">Enter</string>
+    <string name="flip_timer_channel_name">Flip Timer Alerts</string>
+    <string name="flip_timer_channel_desc">Alerts when a Flip Clock countdown timer completes.</string>
+    <string name="lock_strict_label">STRICT</string>
+    <string name="lock_allow_selected_apps">Allow Selected Apps</string>
+    <string name="lock_show_flip_clock_shortcut">Show Flip Clock Shortcut</string>
 </resources>

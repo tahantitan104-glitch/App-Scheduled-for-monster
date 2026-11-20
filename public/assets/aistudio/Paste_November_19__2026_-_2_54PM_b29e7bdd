@@ -1,0 +1,1871 @@
+RESOLVE — UNIFIED MASTER IMPLEMENTATION PROMPT
+
+Flip Clock Mode + Advanced Lock System + Strict Mode + Multi-Device Synchronization
+
+Target Environment: Google AI Studio
+Project: Existing RESOLVE Application
+Implementation Type: Native-quality feature integration into the existing project.
+
+---
+
+PART 1 — PROJECT OBJECTIVE AND DEVELOPMENT PRINCIPLES
+
+1.1 Overall Objective
+
+You are working on an existing application called RESOLVE.
+
+Your task is to implement and integrate a complete, professional Flip Clock system into RESOLVE while simultaneously upgrading and integrating it with the application's existing Lock System.
+
+This implementation includes:
+
+1. A complete Flip Clock Mode.
+2. Integration with the existing Modes navigation.
+3. Integration with Instant Lock.
+4. Integration with Delayed Lock.
+5. Integration with Scheduled Lock.
+6. A configurable Flip Clock shortcut on the active Lock Screen.
+7. An independent Strict Mode option.
+8. Configurable Allowed Apps functionality.
+9. Seamless integration with the existing Multi-Device Sync system.
+10. Smooth transitions and consistent functionality throughout the application.
+
+This is not a standalone application.
+
+Everything must remain part of the existing RESOLVE application.
+
+Primary Design Philosophy
+
+The most important requirement is:
+
+EVERYTHING MUST WORK SMOOTHLY, CONSISTENTLY, RELIABLY, AND PROFESSIONALLY.
+
+Visual quality is important, but functional accuracy, performance, stability, and architectural consistency are even more important.
+
+Do not build a superficial visual prototype.
+
+Every button, gesture, setting, navigation action, timer, notification, lock operation, and synchronization function must have its intended functionality.
+
+Do not claim that a feature is completed unless its implementation has actually been verified.
+
+---
+
+PART 2 — EXISTING PROJECT ANALYSIS AND SAFE INTEGRATION
+
+2.1 Inspect Before Modifying
+
+Before writing or modifying code, thoroughly inspect the existing RESOLVE project.
+
+Understand:
+
+- Existing application architecture.
+- Framework and technology stack.
+- Navigation structure.
+- Modes navigation screen.
+- Existing Lock System.
+- Instant Lock implementation.
+- Delayed Lock implementation.
+- Scheduled Lock implementation.
+- Existing bypass-code system.
+- Existing Emergency and Phone shortcuts.
+- Existing Allowed Apps system.
+- Existing authentication system.
+- Existing Firebase integration.
+- Existing Multi-Device Sync implementation.
+- Current state-management approach.
+- Local persistence.
+- Design system.
+- Existing Android integration capabilities.
+
+Do not replace existing architecture without a genuine technical reason.
+
+2.2 Preserve Existing Functionality
+
+The existing application must remain fully functional.
+
+Strictly avoid:
+
+- Rebuilding unrelated RESOLVE modules.
+- Replacing existing working navigation.
+- Removing existing Lock System functionality.
+- Breaking existing authentication.
+- Recreating an already implemented Multi-Device Sync system unnecessarily.
+- Introducing duplicate settings or conflicting state-management systems.
+- Deleting existing user data.
+- Modifying unrelated modules.
+
+Reuse existing components, services, data models, and infrastructure wherever appropriate.
+
+If existing functionality already satisfies a requirement, verify it and reuse it instead of unnecessarily implementing it again.
+
+2.3 Modular Architecture
+
+Implement Flip Clock and its Lock Screen integration as maintainable, logically separated modules.
+
+Keep the following responsibilities independent where appropriate:
+
+- Flip Clock main interface.
+- Clock engine.
+- Timer engine.
+- Stopwatch engine.
+- Flip Clock settings.
+- Gesture management.
+- Brightness management.
+- Zoom management.
+- Lock Screen integration.
+- Strict Mode controller.
+- Allowed Apps controller.
+- Lock profile configuration.
+- Background execution.
+- Notification handling.
+- Multi-Device Sync integration.
+- Local persistence.
+
+The components must communicate through consistent application state and existing project conventions.
+
+---
+
+PART 3 — EXISTING LOCK SYSTEM INTEGRATION
+
+This section is a critical part of the implementation.
+
+RESOLVE already contains a Lock System with three main locking methods:
+
+1. Instant Lock.
+2. Delayed Lock.
+3. Scheduled Lock.
+
+Do not replace these systems.
+
+Upgrade their existing configuration and active Lock Screen experience to support the new functionality.
+
+3.1 Lock Configuration Screen
+
+Inspect the existing Lock Configuration interface.
+
+Integrate the new controls naturally into its current layout.
+
+The existing bypass-code functionality supports:
+
+- 16-digit bypass codes.
+- 32-digit bypass codes.
+
+Preserve this functionality for normal, non-Strict locking.
+
+Add a new compact control labelled:
+
+STRICT
+
+Place it beside the existing bypass-code configuration controls.
+
+It must look like a natural part of the existing interface rather than an unrelated feature.
+
+The Strict control must have clear ON and OFF states.
+
+When enabled, it must configure the selected Lock Profile to use Strict Mode.
+
+Apply this functionality consistently to:
+
+- Instant Lock.
+- Delayed Lock.
+- Scheduled Lock.
+
+Where the existing architecture supports separate Lock Profiles, allow the relevant settings to be configured independently for each profile.
+
+Persist the user's choices.
+
+---
+
+PART 4 — STRICT MODE
+
+4.1 Strict Mode Objective
+
+Strict Mode is an alternative Lock Configuration that does not require the user to configure a 16-digit or 32-digit bypass code.
+
+The user should be able to activate Strict Mode directly through the STRICT control.
+
+When Strict Mode is enabled:
+
+- Do not require a 16-digit bypass code.
+- Do not require a 32-digit bypass code.
+- Disable the application's bypass-code unlock path for that Lock Profile.
+- Do not show bypass-code entry controls on the active Lock Screen.
+- Do not provide an alternative hidden application-level bypass route.
+- Keep the Lock Screen experience minimal.
+
+Strict Mode must not silently remove existing stored user configuration. Preserve any non-Strict configuration securely so it can be restored if the user deliberately turns Strict Mode off, where appropriate.
+
+The active Strict Profile must never accept the old bypass code as an alternative way to bypass that lock.
+
+4.2 Strict Lock Screen Appearance
+
+When Strict Mode is active, the default Lock Screen must remain extremely minimal.
+
+The Phone shortcut is the default visible application shortcut.
+
+Do not display the bypass-code shortcut or other unnecessary application-level unlock controls.
+
+Additional shortcuts may appear only when the user explicitly enables their corresponding settings.
+
+These optional shortcuts are:
+
+- Flip Clock.
+- Allowed Apps.
+
+Strict Mode must therefore have the following configurable options:
+
+1. Show Flip Clock Shortcut.
+2. Allow Selected Apps.
+
+Both must be independently configurable.
+
+If both are OFF, the Strict Lock Screen should remain minimal, with the Phone shortcut as its default app-level shortcut.
+
+4.3 Emergency Access
+
+Do not interfere with Android's emergency-calling functionality.
+
+The application's Strict Mode must never disable, hide, or obstruct the operating system's emergency-call capabilities.
+
+Strict Mode removes the application's normal bypass-code route; it must not prevent legitimate emergency access provided by Android.
+
+Preserve the existing Phone shortcut behaviour.
+
+---
+
+PART 5 — ALLOWED APPS CUSTOMIZATION
+
+The existing Lock System provides an Allowed Apps functionality.
+
+Improve and organize it without breaking its existing behaviour.
+
+5.1 Allow Selected Apps Toggle
+
+Provide a clear ON/OFF setting:
+
+Allow Selected Apps
+
+When OFF:
+
+- No additional selected applications should be accessible through the RESOLVE Lock Screen.
+- Hide the Allowed Apps shortcut.
+- Keep the Lock Screen minimal.
+
+When ON:
+
+- Allow the user to select specific installed applications.
+- Only selected applications should be accessible through the Allowed Apps interface, subject to Android's actual platform capabilities.
+- Display the Allowed Apps shortcut when a valid application selection exists.
+
+5.2 Application Selection
+
+Create a clean, visually organized application-selection interface.
+
+The user should be able to:
+
+- View available installed applications.
+- Select individual applications.
+- Deselect applications.
+- Review selected applications.
+- Save the selection.
+
+Use appropriate application icons and names.
+
+Do not display unavailable or invalid application entries as if they were functional.
+
+5.3 Strict Mode Compatibility
+
+Allowed Apps must be independently configurable while Strict Mode is active.
+
+Default Strict Mode behaviour:
+
+- Allow Selected Apps: OFF.
+- Phone shortcut: available.
+- Flip Clock shortcut: controlled by its separate setting.
+
+If the user explicitly enables Allow Selected Apps, selected applications may be accessed according to the configured Lock Policy.
+
+Do not interpret enabling Allowed Apps as disabling Strict Mode.
+
+Strict Mode must continue preventing the application's bypass-code unlock path.
+
+---
+
+PART 6 — FLIP CLOCK SHORTCUT ON THE LOCK SCREEN
+
+This is a new feature and must be integrated into all three existing Lock Methods.
+
+6.1 Shortcut Location
+
+On the active RESOLVE Lock Screen, the existing bottom shortcut area may contain:
+
+- Phone.
+- Emergency.
+- Allowed Apps.
+
+Add a small, professional Flip Clock icon button beside these existing shortcuts.
+
+The button should visually resemble a compact Flip Clock symbol.
+
+It must be:
+
+- Minimal.
+- Clearly recognizable.
+- Consistent with RESOLVE's existing design.
+- Properly spaced.
+- Responsive to screen dimensions.
+- Suitable for both Portrait and Landscape layouts.
+
+Do not introduce an oversized button or disturb the existing Lock Screen composition.
+
+6.2 Shortcut Visibility Customization
+
+Provide a setting:
+
+Show Flip Clock Shortcut
+
+The user must be able to enable or disable this shortcut.
+
+Default: OFF.
+
+Allow the setting to be configured for:
+
+1. Instant Lock.
+2. Delayed Lock.
+3. Scheduled Lock.
+
+Where supported by the existing Lock Profile architecture, remember the setting separately for each lock configuration.
+
+When Enabled
+
+Show the small Flip Clock button on the corresponding active Lock Screen.
+
+When Disabled
+
+Do not display the Flip Clock icon.
+
+Do not reserve unnecessary empty space for the hidden button.
+
+The remaining shortcuts should automatically reorganize their spacing.
+
+6.3 Strict Mode Compatibility
+
+The Flip Clock Shortcut remains independently configurable in Strict Mode.
+
+When Strict Mode is active:
+
+- If Show Flip Clock Shortcut is OFF, hide the icon.
+- If Show Flip Clock Shortcut is ON, display the icon.
+- Do not allow the icon to act as an application unlock.
+- Do not disable Strict Mode when the icon is tapped.
+
+The shortcut provides access to Flip Clock only.
+
+It does not bypass the active Lock.
+
+---
+
+PART 7 — LOCK-RESTRICTED FLIP CLOCK EXPERIENCE
+
+This is one of the most important integration requirements.
+
+When the user taps the Flip Clock icon on the active Lock Screen, launch the Flip Clock interface directly.
+
+Do not open the RESOLVE Dashboard.
+
+Do not navigate through the normal RESOLVE application.
+
+Do not expose unrelated RESOLVE modules.
+
+Instead, launch a dedicated, restricted Flip Clock environment inside the existing active Lock Session.
+
+7.1 Available Functionality
+
+Inside this restricted environment, the user must be able to use the complete Flip Clock system:
+
+- Clock.
+- Timer.
+- Stopwatch.
+- Clock Settings.
+- Time Format.
+- Date Display.
+- Zoom.
+- Brightness.
+- Timer Presets.
+- Custom Duration.
+- Timer Start.
+- Timer Pause/Resume.
+- Timer Reset.
+- Auto-repeat.
+- Stopwatch Start.
+- Stopwatch Pause/Resume.
+- Stopwatch Reset.
+
+All previously specified Flip Clock functionality must remain available.
+
+7.2 Isolation From RESOLVE
+
+While the user is accessing Flip Clock through the Lock Screen:
+
+- Do not show the RESOLVE Dashboard.
+- Do not show normal RESOLVE bottom navigation.
+- Do not expose unrelated application modules.
+- Do not expose general RESOLVE Settings.
+- Do not provide an application-unlock action.
+- Do not allow the Flip Clock shortcut to terminate or bypass the active Lock.
+
+Only the Flip Clock interface and its own Settings are available within this environment.
+
+The Allowed Apps system must continue following the active Lock Profile.
+
+7.3 Back and Exit Behaviour
+
+When the user exits the lock-restricted Flip Clock environment:
+
+- Return to the same active RESOLVE Lock Screen.
+- Keep the original Lock active.
+- Do not return to the normal RESOLVE Dashboard.
+- Do not disable Strict Mode.
+- Do not unlock the device through the application.
+- Preserve Clock, Timer, and Stopwatch states.
+
+If the user is using the Timer or Stopwatch when leaving Flip Clock, preserve the running state according to the established lifecycle rules.
+
+7.4 Shared Flip Clock Engine
+
+Do not create a visually separate or reduced-quality Flip Clock just for the Lock Screen.
+
+The normal Modes-based Flip Clock and Lock Screen-based Flip Clock must use the same underlying:
+
+- Clock engine.
+- Timer engine.
+- Stopwatch engine.
+- Animation system.
+- Settings model.
+- Preset management.
+- Gesture controller.
+- Persistence logic.
+
+Only the surrounding navigation and security context should differ.
+
+This ensures consistent behaviour and avoids duplicate implementations.
+
+---
+
+PART 8 — FLIP CLOCK MODES INTEGRATION
+
+Outside the Lock System, Flip Clock must also remain accessible through normal RESOLVE navigation.
+
+Navigation:
+
+RESOLVE → Modes → Flip Clock → Enter
+
+Add an appropriate entry card or navigation item inside the existing Modes section.
+
+Do not create a separate application.
+
+When accessed normally, open the default Clock page.
+
+When accessed through an active Lock Screen shortcut, open the restricted Flip Clock environment.
+
+When accessed through a Timer completion notification, open the Timer page.
+
+---
+
+PART 9 — FLIP CLOCK PAGE STRUCTURE
+
+The Flip Clock contains exactly three horizontal pages.
+
+Navigation order:
+
+Stopwatch ← Clock → Timer
+
+Page locations:
+
+- Center: Clock.
+- Left: Timer.
+- Right: Stopwatch.
+
+Gesture Navigation
+
+From Clock:
+
+- Swipe left: Timer.
+- Swipe right: Stopwatch.
+
+From Timer:
+
+- Swipe right: Clock.
+
+From Stopwatch:
+
+- Swipe left: Clock.
+
+Do not implement circular navigation.
+
+Entering Flip Clock normally must always open the Clock page.
+
+The current page must not reset the Timer or Stopwatch.
+
+All pages must preserve their states while switching.
+
+Use smooth horizontal page transitions.
+
+---
+
+PART 10 — FULL-SCREEN VISUAL DESIGN
+
+Use the previously supplied Flip Clock reference screenshot as the primary visual reference.
+
+Design Direction
+
+- Minimalist.
+- Modern.
+- Professional.
+- Black background.
+- Soft grey digits.
+- Clean digital typography.
+- No unnecessary decoration.
+
+Typography
+
+Match the supplied reference as closely as possible.
+
+Pay special attention to:
+
+- Digit proportions.
+- Character width.
+- Font weight.
+- Spacing.
+- Vertical alignment.
+- Overall composition.
+
+Use the exact font asset if it can be identified and is available.
+
+Otherwise, use the closest technically suitable alternative and reproduce the reference appearance carefully.
+
+Clock Composition
+
+- Large hour.
+- Small AM/PM indicator beneath the hour.
+- Weekday between hour and minute.
+- Large minute.
+- Small seconds beneath the minute.
+
+The colon separator must remain static.
+
+It must not blink.
+
+Avoid unnecessary borders, cards, shadows, or gradients.
+
+The interface must adapt correctly to both Portrait and Landscape.
+
+---
+
+PART 11 — CLOCK FUNCTIONALITY
+
+Time Source
+
+Use the device's real system clock.
+
+Do not simulate time through an inaccurate incrementing counter.
+
+Default Time Format
+
+12-hour format.
+
+Example: 09:55 PM.
+
+Provide a 24-hour alternative in Settings.
+
+Time Format changes must apply immediately and persist.
+
+Seconds
+
+- Visible by default.
+- Small display below the minute.
+- Accurate updates.
+
+Date and Weekday
+
+- Hidden by default.
+- Provide a Settings toggle.
+- When enabled, show the weekday/date information in a small, unobtrusive format.
+- Preserve the primary reference composition.
+
+Avoid creating unnecessary duplicate date controls.
+
+---
+
+PART 12 — FLIP ANIMATION
+
+Use Split-Flip digit design.
+
+Settings:
+
+- Animation Style: Minimal.
+- Digit Flip Speed: Normal.
+- Digit Transition: Smooth.
+- Performance Priority: Balanced.
+
+Animate when a digit changes.
+
+Avoid unnecessary animation.
+
+Prevent flicker, layout shifts, and inconsistent digit dimensions.
+
+Keep the colon static.
+
+Do not sacrifice performance for visual effects.
+
+---
+
+PART 13 — SETTINGS BOTTOM SHEET
+
+Swipe upward to open Settings.
+
+Use a Minimal Bottom Sheet, not a separate navigation page.
+
+Close through:
+
+- Downward swipe.
+- Visible close control.
+
+Settings must remain minimal, readable, and professionally organized.
+
+Required Settings
+
+1. Time Format: 12-hour / 24-hour.
+2. Orientation: Auto.
+3. Keep Screen Awake: ON/OFF.
+4. Date Display: ON/OFF.
+5. Auto-repeat: ON/OFF.
+6. Timer Preset Management.
+7. Zoom Reset.
+8. Reset Settings to Default.
+
+Persist preferences across sessions.
+
+Reset Settings Behaviour
+
+Provide a Reset Settings Only operation.
+
+Require confirmation before resetting.
+
+Restore default settings.
+
+Preserve user-created Custom Timer Presets.
+
+Restore the built-in default configuration where applicable, without deleting user-created custom data or exceeding the 15-preset limit.
+
+Do not delete unrelated application data.
+
+---
+
+PART 14 — FULL-SCREEN CONTROLS
+
+Initial state: Hidden.
+
+Single tap toggles controls between visible and hidden.
+
+Auto-hide after 5 seconds of inactivity.
+
+Do not auto-hide during active control interaction.
+
+Reset the inactivity period after meaningful user interaction.
+
+Android Back Behaviour
+
+1. If controls are visible, first Back hides controls.
+2. If controls are hidden, Back exits Flip Clock.
+
+In the restricted Lock Screen environment, exiting Flip Clock must return to the active Lock Screen, not the RESOLVE Dashboard.
+
+---
+
+PART 15 — GESTURE MANAGEMENT
+
+Implement one coordinated gesture controller.
+
+Priority:
+
+1. Two-finger pinch.
+2. Long press + vertical drag.
+3. Horizontal swipe.
+4. Vertical swipe upward.
+5. Single tap.
+
+Gesture Mapping
+
+- Two-finger pinch: Zoom.
+- Long press + vertical drag: Brightness.
+- Horizontal swipe: Page navigation.
+- Swipe upward: Open Settings.
+- Single tap: Show/Hide controls.
+
+Prevent conflicts with:
+
+- Timer input.
+- Stopwatch buttons.
+- Settings controls.
+- Confirmation dialogs.
+- Bottom Sheet interactions.
+
+Avoid Android edge-back gesture conflicts where possible.
+
+Gestures must be reliable and predictable.
+
+---
+
+PART 16 — BRIGHTNESS CONTROL
+
+Activation: Long Press + Vertical Drag.
+
+- Upward: Increase brightness.
+- Downward: Decrease brightness.
+
+Sensitivity: Low.
+
+Range
+
+Minimum: 15%.
+
+Maximum: 85%.
+
+Initial Brightness
+
+On the first Flip Clock entry:
+
+- Read the current System Brightness.
+- Constrain it to 15%–85%.
+
+On subsequent entries:
+
+- Restore the last brightness selected in Flip Clock.
+
+Exit Behaviour
+
+Keep the last selected brightness when leaving Flip Clock.
+
+Do not automatically restore the initial brightness.
+
+Indicator
+
+Display a Sun icon and horizontal brightness bar.
+
+No percentage text.
+
+Keep the indicator visible while the gesture is active.
+
+Hide it when the gesture ends.
+
+Use actual Android system brightness integration when supported.
+
+Do not claim that CSS or WebView styling changes the physical system brightness.
+
+If native integration is required, implement the supported Android bridge or document the limitation.
+
+---
+
+PART 17 — ZOOM SYSTEM
+
+Use continuous two-finger pinch-to-zoom.
+
+- Spread: Enlarge.
+- Pinch inward: Reduce.
+
+Limits:
+
+- Minimum: 50%.
+- Maximum: 140%.
+- Default: 100%.
+
+Maintain aspect ratio.
+
+Prevent the clock from moving outside screen boundaries.
+
+Apply the same zoom preference across Clock, Timer, and Stopwatch.
+
+Persist the setting.
+
+Zoom Reset must be available only through Settings.
+
+Keep zoom smooth and continuous.
+
+---
+
+PART 18 — ORIENTATION SUPPORT
+
+Orientation: Auto.
+
+Follow the device orientation.
+
+Portrait
+
+Use the primary reference composition.
+
+Landscape
+
+- Center-align the Clock.
+- Maintain visual proportions.
+- Adjust sizing and spacing.
+- Keep controls within screen boundaries.
+- Preserve the zoom preference.
+- Keep Timer and Stopwatch fully functional.
+
+Orientation changes must not reset any active Timer or Stopwatch.
+
+Use the same orientation logic in the Lock Screen-restricted Flip Clock environment.
+
+---
+
+PART 19 — TIMER SYSTEM
+
+Timer page position: Left of Clock.
+
+Implement a complete countdown Timer.
+
+Default Presets
+
+1. 1 Minute.
+2. 5 Minutes.
+3. 10 Minutes.
+4. 15 Minutes.
+5. 25 Minutes.
+6. 30 Minutes.
+7. 60 Minutes.
+8. 90 Minutes.
+9. 120 Minutes.
+
+Layout: Vertical List.
+
+Custom Duration
+
+Provide a Custom Duration button.
+
+Use a Time Picker with:
+
+- Hour.
+- Minute.
+- Second.
+
+Selecting a preset or custom duration does not start the Timer.
+
+Manual Start is required.
+
+Preset Management
+
+Allow users to:
+
+- Add presets.
+- Edit presets.
+- Delete presets.
+- Use duplicate durations.
+
+Maximum total preset count: 15, including default and custom presets together.
+
+Do not exceed this limit.
+
+Preserve preset changes across application sessions.
+
+Timer Controls
+
+Position: Bottom.
+
+Layout: Horizontal Floating Buttons.
+
+Controls:
+
+- Start.
+- Pause/Resume.
+- Reset.
+
+Tapping the Timer Display must also toggle Pause/Resume.
+
+Reset requires confirmation.
+
+Do not display a progress indicator.
+
+Timer must continue during page switching.
+
+---
+
+PART 20 — TIMER PRESET SELECTION DURING AN ACTIVE TIMER
+
+If the user selects another preset while a Timer is running, show a confirmation dialog.
+
+Confirm
+
+- Stop the current Timer.
+- Set the newly selected duration.
+- Do not automatically start the new Timer.
+- Require manual Start.
+
+Cancel
+
+- Continue the previous Timer.
+- Preserve its remaining time.
+- Do not modify its state.
+
+---
+
+PART 21 — TIMER COMPLETION
+
+When the countdown reaches zero:
+
+1. Play a short alert sound.
+2. Trigger vibration.
+3. Run a visual Flip Animation.
+4. Display a Finished Message.
+5. Reset the Timer to its previous duration.
+
+Completion Configuration
+
+- Sound: Short Alert Sound.
+- Vibration: Always ON.
+- Visual Alert: Flip Animation.
+- Finished Message: Enabled.
+- Finished Message Duration: 5 seconds.
+- Automatic Reset: ON.
+
+Auto-repeat
+
+Provide an ON/OFF setting.
+
+Preserve an existing project default if one is already defined. If no default exists, use OFF and make that default explicit.
+
+When OFF:
+
+- Reset the Timer to its previous duration.
+- Remain waiting for manual Start.
+
+When ON:
+
+- Show the Finished Message for 5 seconds.
+- Reset to the previous duration.
+- Restart automatically at the end of the same 5-second completion interval.
+
+Do not introduce an additional unnecessary 5-second waiting period.
+
+Prevent duplicate restart operations or overlapping Timer instances.
+
+Changing Auto-repeat in Settings must take effect immediately without resetting or stopping the currently running Timer.
+
+---
+
+PART 22 — TIMER BACKGROUND EXECUTION AND RECOVERY
+
+The Timer must continue functioning when:
+
+- Flip Clock is exited.
+- Another RESOLVE screen is opened.
+- RESOLVE enters the background.
+- The screen becomes locked.
+- RESOLVE is removed from Recent Apps, to the extent supported by Android background-execution rules.
+
+Do not rely only on a decrementing setInterval counter.
+
+Use a target-timestamp-based architecture.
+
+Persist:
+
+- Selected duration.
+- Target end timestamp.
+- Remaining time when paused.
+- Running/paused state.
+- Completion state.
+- Auto-repeat configuration.
+
+Calculate remaining time from the target timestamp.
+
+Force Stop Recovery
+
+Persist the required Timer state.
+
+When RESOLVE is manually launched again:
+
+If time remains, restore the correct remaining duration.
+
+If the Timer has already ended, restore the Finished State and avoid duplicate completion events.
+
+Android Force Stop prevents normal background execution until the user launches the app again.
+
+Do not claim guaranteed background notifications during Force Stop.
+
+Implement accurate recovery after relaunch.
+
+---
+
+PART 23 — TIMER NOTIFICATIONS
+
+Request Android notification permission the first time background Timer notification functionality is needed.
+
+Do not repeatedly display permission prompts.
+
+If permission is denied:
+
+- Timer must continue functioning.
+- Inform the user that notifications are unavailable until permission is granted.
+- Allow permission to be enabled later through Android App Settings.
+
+Completion Notification Content
+
+Use:
+
+Timer Name + Completion Message
+
+Example:
+
+25 Minutes Timer — Completed!
+
+No custom Notification Action Buttons.
+
+No Restart button.
+
+No application-specific Dismiss button.
+
+Preserve normal Android notification dismissal.
+
+Notification Tap
+
+When tapped:
+
+- Open RESOLVE.
+- Navigate to Modes → Flip Clock → Timer.
+- Do not open the default Clock page.
+- Restore the relevant completion state.
+- Do not automatically restart the Timer because of the tap.
+
+If a RESOLVE Lock Session is still active, open the Timer inside the restricted Flip Clock environment and preserve the active Lock.
+
+Never let a Timer notification become an unintended Lock bypass.
+
+---
+
+PART 24 — STOPWATCH SYSTEM
+
+Stopwatch page position: Right of Clock.
+
+Display
+
+MM:SS.
+
+Precision: Seconds only.
+
+Do not display milliseconds.
+
+No Lap System.
+
+Controls
+
+- Start.
+- Pause.
+- Resume.
+- Reset.
+
+Start: Manual.
+
+Pause/Resume: Dedicated button and display tap.
+
+Reset: Immediate, with no confirmation.
+
+Reset display: 00:00.
+
+Timing Architecture
+
+Use a monotonic high-resolution timing source.
+
+Do not rely on a basic interval counter as the authoritative elapsed-time calculation.
+
+Maintain correct elapsed time across:
+
+- Page changes.
+- Orientation changes.
+- Normal backgrounding.
+- Re-entry into Flip Clock.
+
+Persist the required Stopwatch state for lifecycle recovery.
+
+Do not claim guaranteed recovery after an Android Force Stop unless it is actually supported and verified.
+
+Controls Layout
+
+Portrait: Horizontal buttons.
+
+Landscape: Same horizontal buttons.
+
+Do not remove the Landscape buttons.
+
+Controls initially hidden.
+
+Auto-hide after 5 seconds of inactivity.
+
+---
+
+PART 25 — EXIT AND LIFECYCLE BEHAVIOUR
+
+When the user exits Flip Clock normally:
+
+- Timer continues running.
+- Stopwatch continues running.
+- Do not automatically pause either.
+- Do not show an exit confirmation dialog.
+- Preserve their states.
+
+When the user re-enters Flip Clock:
+
+- Open Clock by default.
+- Restore Timer state.
+- Restore Stopwatch state.
+
+When accessed from a Timer notification:
+
+- Open Timer directly.
+
+When accessed through a Lock Screen shortcut:
+
+- Enter the restricted Flip Clock environment.
+- Keep the active Lock intact.
+
+When exiting the restricted environment:
+
+- Return to the active Lock Screen.
+- Do not open the normal RESOLVE Dashboard.
+
+---
+
+PART 26 — SCREEN WAKE LOCK
+
+Provide a Keep Screen Awake toggle in Flip Clock Settings.
+
+ON:
+
+Keep the display awake while Flip Clock is active.
+
+OFF:
+
+Allow the normal Android screen timeout.
+
+Use the appropriate Wake Lock mechanism.
+
+Release Wake Locks when no longer needed.
+
+Do not waste system resources.
+
+Respect Android lifecycle restrictions.
+
+---
+
+PART 27 — MULTI-DEVICE SYNCHRONIZATION
+
+This is another critical integration requirement.
+
+RESOLVE already has an optional Multi-Device Sync architecture using:
+
+- Firebase Authentication.
+- Cloud Firestore.
+- Offline-first local operation.
+- Optional account connection.
+
+Inspect this existing implementation carefully.
+
+Do not unnecessarily build a second Sync System or duplicate Firebase integration.
+
+First verify what is already working.
+
+Then integrate the new Lock System and Flip Clock settings into the existing synchronization architecture.
+
+If existing functionality is incomplete, repair and extend it without breaking current users or existing data.
+
+27.1 Two-Device Objective
+
+The user should be able to use RESOLVE on two phones under the same authenticated account.
+
+The two devices should maintain consistent user-configurable settings.
+
+The experience should require minimal manual intervention.
+
+After the devices are connected to the same account:
+
+- Configuration changes should synchronize automatically.
+- New presets should become available on the other device.
+- Lock configuration changes should synchronize.
+- Flip Clock preferences should synchronize.
+- Strict Mode configuration should synchronize.
+- Shortcut visibility configuration should synchronize.
+- Allowed Apps selections should synchronize as application identifiers.
+- Scheduled Lock configuration should synchronize.
+
+Do not require repeated manual configuration on both devices.
+
+27.2 Settings That Must Synchronize
+
+Synchronize account-level preferences and configurations, including:
+
+Lock System
+
+- Instant Lock configuration.
+- Delayed Lock configuration.
+- Scheduled Lock configuration.
+- Strict Mode state for each Lock Profile.
+- Flip Clock shortcut visibility for each Lock Profile.
+- Allow Selected Apps ON/OFF.
+- Selected Allowed Apps identifiers.
+- Relevant existing bypass configuration, subject to secure handling.
+
+Flip Clock
+
+- Time Format.
+- Date Display.
+- Orientation preference.
+- Keep Screen Awake preference.
+- Zoom preference.
+- Auto-repeat preference.
+- Timer Presets.
+- Custom Timer Presets.
+- Relevant Flip Clock configuration.
+
+General Configuration
+
+Synchronize all appropriate user-customizable settings that should remain consistent across the user's connected devices.
+
+Do not silently leave newly introduced account-level settings out of synchronization.
+
+27.3 Device-Specific Information
+
+Not every value should be copied blindly between phones.
+
+Keep device-specific information separate where appropriate:
+
+- Actual installed application availability.
+- Local Android permissions.
+- Actual device brightness and hardware capabilities.
+- Device-specific system restrictions.
+- Local notification permission.
+- Device-specific runtime state.
+
+For Allowed Apps:
+
+- Synchronize stable application identifiers, such as package names.
+- Check whether each application is installed on the receiving phone.
+- If unavailable, mark it clearly as unavailable on that device.
+- Do not crash or silently delete the synchronized selection.
+- Allow the user to resolve the unavailable entry.
+
+Keep device-specific OS permission states local.
+
+Do not synchronize a permission as granted when it has not actually been granted on that device.
+
+27.4 Active Lock Sessions
+
+Synchronize Lock Profile configuration and schedules.
+
+Do not silently trigger a remote lock or unlock on another phone merely because a settings synchronization occurred.
+
+Keep transient active Lock Sessions and device-specific runtime state local by default unless the existing application already provides a separately implemented, explicit, user-controlled cross-device session feature.
+
+Never let a stale remote configuration accidentally unlock a currently active Strict Lock.
+
+27.5 Bypass-Code Security
+
+Never store or transmit raw bypass codes as ordinary plaintext synchronization data.
+
+If the existing application supports synchronizing bypass-code verification across devices:
+
+- Use a properly salted, cryptographically secure password verifier.
+- Keep raw user-entered codes transient.
+- Never log bypass codes.
+- Protect related records with appropriate user-scoped security rules.
+- Preserve the existing bypass-code security architecture if it is already correctly implemented.
+
+Strict Mode must remain independent of bypass-code synchronization.
+
+27.6 Offline-First Behaviour
+
+RESOLVE must remain usable without an internet connection.
+
+When offline:
+
+- Continue using locally stored settings.
+- Allow normal Flip Clock functionality.
+- Allow Lock System configuration where supported.
+- Store synchronization changes locally.
+- Queue pending updates.
+- Do not block essential functionality while waiting for the network.
+
+When connectivity returns:
+
+- Synchronize pending updates automatically.
+- Resolve configuration conflicts safely.
+- Update the UI when synchronization completes.
+
+Never erase local changes because the connection temporarily failed.
+
+27.7 Conflict Resolution
+
+Implement reliable synchronization conflict handling.
+
+Do not rely on blindly overwriting an entire Settings document.
+
+Use an organized, version-aware data structure.
+
+Where appropriate:
+
+- Track individual settings or configuration entities.
+- Track update metadata.
+- Use server timestamps and version information.
+- Use transactions or suitable conflict-resolution mechanisms.
+- Merge independent configuration changes without unnecessarily overwriting them.
+
+When two devices edit different settings, preserve both changes.
+
+When both devices change the same setting, use a consistent and deterministic conflict-resolution policy.
+
+Avoid stale offline updates overwriting newer confirmed settings without proper reconciliation.
+
+Prevent duplicate presets and duplicate Lock Profile records caused by repeated synchronization.
+
+27.8 Visual Synchronization Experience
+
+Create a clean, professional Multi-Device Sync interface using the existing RESOLVE design system.
+
+The interface should visually communicate:
+
+- Account connection status.
+- Connected devices.
+- Sync availability.
+- Synchronization progress.
+- Last successful synchronization.
+- Offline status.
+- Sync errors, when present.
+
+Use a modern, minimal graphical presentation.
+
+A visual two-device representation may be used to communicate that both phones are connected.
+
+Provide clear, understandable states such as:
+
+- Connected.
+- Syncing.
+- Synced.
+- Offline.
+- Needs attention.
+
+Do not display a permanently spinning animation or pretend that data is synchronized when it is not.
+
+If the existing design already includes a Sync Dashboard, extend it rather than creating a duplicate interface.
+
+27.9 Synchronization Reliability
+
+Ensure:
+
+- Automatic synchronization.
+- Persistent local storage.
+- Reliable offline recovery.
+- Authentication-aware synchronization.
+- User-scoped Firestore security.
+- No cross-account data leakage.
+- No duplicate listeners.
+- No duplicate writes.
+- No unnecessary network requests.
+
+If the user disconnects their account, handle local data safely according to the existing RESOLVE account-disconnection policy.
+
+Do not delete local user data without an explicit, appropriate confirmation.
+
+---
+
+PART 28 — ANDROID PLATFORM INTEGRATION AND TECHNICAL LIMITATIONS
+
+Some requested features require native Android functionality.
+
+Inspect the real project environment before implementing them.
+
+Potential native integration requirements include:
+
+- System brightness.
+- Wake Lock.
+- Background Timer execution.
+- Notifications.
+- Vibration.
+- Sound.
+- Lock Task Mode.
+- Application allowlisting.
+- Lifecycle recovery.
+
+Use the existing native integration architecture where available.
+
+If the current project uses a web frontend or WebView, implement the appropriate native bridge only when supported.
+
+Do not invent APIs.
+
+Do not simulate native functionality using CSS or frontend-only state.
+
+28.1 Strict Lock Enforcement
+
+Distinguish between:
+
+1. RESOLVE's application-level Lock Screen.
+2. Android system-level kiosk or Lock Task enforcement.
+
+A regular consumer application cannot automatically guarantee absolute device-wide application blocking on every Android device.
+
+Where supported, evaluate the official Android Lock Task Mode and Device Policy Controller requirements.
+
+Use platform-approved mechanisms and the required user/device provisioning.
+
+Where such provisioning is unavailable:
+
+- Implement the strongest legitimate application-level locking behaviour supported by the device.
+- Clearly identify its limitations.
+- Do not falsely claim system-level kiosk enforcement.
+- Do not misuse Accessibility Services or hidden overlays to simulate guaranteed blocking.
+- Do not obstruct Android emergency calling or legitimate system recovery.
+
+The Strict Mode setting must accurately represent the level of enforcement actually available.
+
+28.2 Background Execution
+
+Use the appropriate Android background execution mechanisms.
+
+Respect foreground service requirements and OS restrictions.
+
+Do not assume a background service can always be started freely.
+
+Handle permission denials and manufacturer-specific restrictions gracefully.
+
+Do not promise guaranteed operation when Android does not permit it.
+
+---
+
+PART 29 — GLOBAL SMOOTHNESS AND PERFORMANCE
+
+Smoothness is a core requirement across the entire RESOLVE application, not just Flip Clock.
+
+Every new feature must feel naturally integrated.
+
+Transitions
+
+Prioritize smooth transitions for:
+
+- Modes to Flip Clock.
+- Clock to Timer.
+- Clock to Stopwatch.
+- Timer to Clock.
+- Stopwatch to Clock.
+- Lock Screen to Flip Clock.
+- Flip Clock back to active Lock Screen.
+- Settings Bottom Sheet.
+- Confirmation dialogs.
+- Orientation changes.
+- Zoom adjustments.
+- Brightness adjustments.
+- Sync state transitions.
+
+No abrupt or unnecessary navigation reloads.
+
+Performance
+
+- Avoid unnecessary component re-renders.
+- Avoid excessive DOM manipulation.
+- Optimize animation loops.
+- Use efficient state updates.
+- Avoid layout shifts.
+- Avoid duplicated services.
+- Avoid unnecessary dependency additions.
+- Maintain good responsiveness on lower-end Android devices.
+
+Interaction Quality
+
+Every button should respond promptly.
+
+Every control should have a clear active state.
+
+Every transition should be consistent.
+
+Gestures should never trigger multiple conflicting actions.
+
+Resource Management
+
+Prevent:
+
+- Memory leaks.
+- Duplicate timers.
+- Duplicate notifications.
+- Duplicate background services.
+- Unreleased Wake Locks.
+- Unnecessary event listeners.
+- Stale synchronization listeners.
+- Infinite synchronization loops.
+
+The application must remain stable during prolonged use.
+
+---
+
+PART 30 — USER EXPERIENCE AND DESIGN CONSISTENCY
+
+Keep the existing RESOLVE design language.
+
+The new interfaces must look like they belong to RESOLVE.
+
+Do not create visually unrelated screens.
+
+The Lock Screen shortcuts must have consistent icon sizing and spacing.
+
+The Flip Clock icon should be visually distinguishable without dominating the Lock Screen.
+
+Strict Mode should be easy to understand.
+
+Allowed Apps configuration should be easy to operate.
+
+Sync information should be clearly presented.
+
+Use appropriate animations, touch feedback, spacing, and responsive layouts.
+
+Avoid unnecessary UI decoration.
+
+Maintain accessibility and readable touch targets.
+
+---
+
+PART 31 — IMPLEMENTATION WORKFLOW
+
+Follow this implementation sequence.
+
+Phase 1 — Existing Project Audit
+
+Inspect the complete existing project.
+
+Verify:
+
+- Navigation.
+- Lock System.
+- Bypass System.
+- Allowed Apps.
+- Firebase Authentication.
+- Firestore Sync.
+- Existing persistence.
+- Android integration.
+
+Produce an implementation plan before major modifications.
+
+Phase 2 — Lock System Upgrade
+
+Implement:
+
+1. Strict Mode control.
+2. Strict Mode state management.
+3. Allow Selected Apps toggle.
+4. Application selection integration.
+5. Per-Lock-Profile Flip Clock shortcut setting.
+6. Active Lock Screen Flip Clock icon.
+7. Restricted Flip Clock navigation.
+8. Safe return to the active Lock Screen.
+
+Verify all three Lock Methods.
+
+Phase 3 — Flip Clock Integration
+
+Add Flip Clock inside:
+
+RESOLVE → Modes → Flip Clock.
+
+Implement the complete shared Flip Clock engine.
+
+Phase 4 — Core Flip Clock UI
+
+Implement:
+
+- Clock.
+- Timer.
+- Stopwatch.
+- Full-screen layout.
+- Split-Flip animation.
+- Page navigation.
+- Settings Bottom Sheet.
+- Portrait and Landscape layouts.
+
+Phase 5 — Functional Systems
+
+Implement:
+
+- Timer engine.
+- Stopwatch engine.
+- Preset management.
+- Brightness.
+- Zoom.
+- Gestures.
+- Wake Lock.
+- Local persistence.
+
+Phase 6 — Background and Notification Integration
+
+Implement and test:
+
+- Background timing.
+- Notifications.
+- Permission handling.
+- Force Stop recovery.
+- Lifecycle restoration.
+
+Phase 7 — Multi-Device Sync Integration
+
+Audit the existing Sync system.
+
+Add all appropriate new settings and Lock Profile data to its existing architecture.
+
+Test synchronization between two connected devices.
+
+Phase 8 — Optimization and Regression Testing
+
+Test the entire implementation.
+
+Fix UI, functional, performance, and compatibility issues.
+
+Verify that the original RESOLVE features continue working.
+
+Do not stop after creating the UI.
+
+---
+
+PART 32 — REQUIRED TESTING CHECKLIST
+
+The feature is not complete until the following tests have been performed.
+
+A. Lock System
+
+- Instant Lock still works.
+- Delayed Lock still works.
+- Scheduled Lock still works.
+- Existing 16-digit bypass code works in non-Strict Mode.
+- Existing 32-digit bypass code works in non-Strict Mode.
+- Strict Mode can be enabled.
+- Strict Mode does not require bypass-code setup.
+- Strict Mode disables the application's bypass-code unlock path.
+- Phone shortcut remains functional.
+- Android emergency access remains available.
+- Allowed Apps toggle works.
+- Selected applications are accessible only according to the active policy.
+- Strict Mode works with Allowed Apps OFF.
+- Strict Mode works with Allowed Apps ON.
+- Settings remain consistent after relaunch.
+
+B. Lock Screen Flip Clock Shortcut
+
+- Shortcut setting is OFF by default.
+- Shortcut remains hidden when disabled.
+- Shortcut appears when enabled.
+- Instant Lock supports the shortcut.
+- Delayed Lock supports the shortcut.
+- Scheduled Lock supports the shortcut.
+- Shortcut is visually aligned with existing bottom controls.
+- Shortcut works in Strict Mode when explicitly enabled.
+- Tapping the icon does not open the RESOLVE Dashboard.
+- Tapping the icon does not unlock the application.
+- Flip Clock opens in the restricted environment.
+- Back returns to the active Lock Screen.
+- Lock remains active.
+
+C. Restricted Flip Clock
+
+- Clock works.
+- Timer works.
+- Stopwatch works.
+- All Flip Clock settings work.
+- Timer presets work.
+- Custom duration works.
+- Brightness works where native APIs permit.
+- Zoom works.
+- Orientation changes work.
+- No unrelated RESOLVE module can be opened.
+- No accidental unlock occurs.
+- Existing Lock state is preserved.
+
+D. Clock
+
+- Accurate device time.
+- 12-hour default.
+- 24-hour alternative.
+- Correct AM/PM.
+- Seconds.
+- Weekday/date toggle.
+- Static colon.
+- Minimal Flip animation.
+- Smooth page navigation.
+
+E. Timer
+
+- All nine default presets.
+- Custom duration.
+- Manual Start.
+- Pause.
+- Resume.
+- Display tap interaction.
+- Reset confirmation.
+- Preset editing.
+- Preset deletion.
+- Duplicate preset handling.
+- Maximum 15 presets.
+- Running Timer preset confirmation.
+- Completion sound.
+- Vibration.
+- Five-second Finished Message.
+- Automatic reset.
+- Five-second Auto-repeat sequence.
+- Immediate Auto-repeat setting changes.
+
+F. Background Timer
+
+- Page switching.
+- Leaving Flip Clock.
+- Opening another RESOLVE screen.
+- Background execution.
+- Screen lock.
+- Recent Apps removal.
+- Force Stop recovery after relaunch.
+- Notification permission granted.
+- Notification permission denied.
+- Correct notification content.
+- Notification Tap opens Timer.
+- Notification does not unlock an active Lock.
+
+G. Stopwatch
+
+- Start.
+- Pause.
+- Resume.
+- Immediate reset.
+- MM:SS.
+- No milliseconds.
+- No Lap system.
+- Accurate elapsed time.
+- Page switching.
+- Background behaviour.
+- Portrait controls.
+- Landscape controls.
+
+H. Brightness and Zoom
+
+- Initial System Brightness.
+- 15% minimum.
+- 85% maximum.
+- Last-used brightness.
+- Keep-last brightness after exit.
+- Sun indicator.
+- No numerical percentage.
+- 50% minimum zoom.
+- 140% maximum zoom.
+- 100% default.
+- Smooth continuous pinch.
+- Settings-only zoom reset.
+
+I. Multi-Device Sync
+
+Use two separate test devices.
+
+Verify:
+
+- Both devices can authenticate correctly.
+- Settings synchronize automatically.
+- Strict Mode settings synchronize.
+- Lock Profile settings synchronize.
+- Flip Clock shortcut settings synchronize.
+- Allowed Apps selections synchronize.
+- Presets synchronize.
+- Custom presets synchronize.
+- Flip Clock preferences synchronize.
+- Offline edits remain available.
+- Reconnection synchronizes pending updates.
+- Concurrent changes resolve correctly.
+- No duplicate presets appear.
+- Missing installed applications are handled correctly.
+- Device permissions remain device-specific.
+- No cross-account data is exposed.
+- No unexpected remote Lock or Unlock occurs.
+
+J. Reset and Regression
+
+- Reset Settings requires confirmation.
+- Custom presets remain preserved.
+- Preset limit remains enforced.
+- Existing RESOLVE navigation works.
+- Existing Lock features remain functional.
+- Existing account connection works.
+- Existing Sync functionality is preserved.
+- Other RESOLVE modules are unaffected.
+
+---
+
+PART 33 — FINAL ACCEPTANCE CRITERIA
+
+The implementation must meet all of these conditions:
+
+1. Flip Clock is correctly integrated into the existing Modes navigation.
+2. The active Lock Screen can optionally display a Flip Clock shortcut.
+3. The shortcut opens the complete restricted Flip Clock environment.
+4. Normal RESOLVE navigation remains inaccessible from that environment while the Lock is active.
+5. Strict Mode works without the application's bypass-code unlock path.
+6. Allowed Apps remain independently configurable.
+7. Instant, Delayed, and Scheduled Lock continue working.
+8. All previously specified Flip Clock features work.
+9. Timer and Stopwatch timing remain reliable.
+10. Background functionality uses appropriate Android mechanisms.
+11. Multi-Device Sync includes all appropriate new configurable settings.
+12. Offline-first behaviour remains intact.
+13. All transitions feel smooth and consistent.
+14. Existing RESOLVE modules remain unaffected.
+15. No feature is falsely reported as completed.
+
+---
+
+PART 34 — FINAL EXECUTION INSTRUCTION
+
+Now begin by analysing the existing RESOLVE project.
+
+Do not immediately rewrite the application.
+
+First understand the existing Lock System, navigation, authentication, synchronization architecture, and Android integration.
+
+Then implement the complete unified system.
+
+The final structure must support:
+
+RESOLVE → Modes → Flip Clock
+
+and:
+
+RESOLVE → Instant / Delayed / Scheduled Lock → Active Lock Screen → Flip Clock Shortcut → Restricted Flip Clock
+
+Both entry paths must use the same underlying Flip Clock functionality.
+
+The Lock Screen shortcut must never become an application-unlock shortcut.
+
+Strict Mode must genuinely disable the application's bypass-code path.
+
+Allowed Apps must follow the selected Lock Policy.
+
+Multi-Device Sync must preserve user preferences consistently without compromising device-specific permissions or active Lock Sessions.
+
+Above everything else, maintain the existing RESOLVE application and make every new interaction feel smooth, fast, stable, and professional.
+
+Do not stop after generating screens.
+
+Proceed through implementation, integration, persistence, testing, and optimization to the extent supported by the actual project environment.
+
+Report clearly:
+
+- What has been implemented.
+- What has been tested.
+- What has passed.
+- What remains incomplete.
+- Which features require additional native Android integration.
+- Which features are constrained by Android operating-system policies.
+
+FINAL PRIORITY:
+
+FUNCTIONAL ACCURACY
+→ SECURITY AND LOCK INTEGRITY
+→ RELIABLE SYNCHRONIZATION
+→ SMOOTH PERFORMANCE
+→ VISUAL QUALITY
+
+Build this as one cohesive, professional RESOLVE system—not as disconnected features.

@@ -4,6 +4,7 @@ import android.accessibilityservice.AccessibilityServiceInfo
 import android.app.ActivityManager
 import android.app.AlarmManager
 import android.app.AppOpsManager
+import android.app.NotificationManager
 import android.app.admin.DevicePolicyManager
 import android.content.ComponentName
 import android.content.Context
@@ -17,6 +18,7 @@ import android.view.accessibility.AccessibilityManager
 import androidx.core.app.NotificationManagerCompat
 import com.example.accessibility.ResolveAccessibilityService
 import com.example.devicepolicy.ResolveDeviceAdminReceiver
+import com.example.domain.model.AccessibilityHealthState
 import com.example.domain.model.DeviceOwnerState
 import com.example.domain.model.SystemCapabilityStatus
 
@@ -40,6 +42,11 @@ class SystemCapabilityChecker(private val context: Context) {
     private val powerManager: PowerManager?
         get() = runCatching {
             context.getSystemService(Context.POWER_SERVICE) as? PowerManager
+        }.getOrNull()
+
+    private val notificationManager: NotificationManager?
+        get() = runCatching {
+            context.getSystemService(Context.NOTIFICATION_SERVICE) as? NotificationManager
         }.getOrNull()
 
     fun queryStatus(): SystemCapabilityStatus {
@@ -79,26 +86,38 @@ class SystemCapabilityChecker(private val context: Context) {
             NotificationManagerCompat.from(context).areNotificationsEnabled()
         }.getOrDefault(false)
 
+        val isConnected = isAccessibilityServiceConnected()
+        val isEnabledInSettings = isAccessibilityEnabledInSettings()
+        val accHealthState = when {
+            isConnected -> AccessibilityHealthState.ENABLED_CONNECTED
+            isEnabledInSettings -> AccessibilityHealthState.ENABLED_DISCONNECTED
+            else -> AccessibilityHealthState.DISABLED
+        }
+
         return SystemCapabilityStatus(
             deviceOwnerState = ownerState,
             isLockTaskPermittedForApp = lockTaskPermitted,
             lockTaskModeState = lockTaskModeState,
-            isAccessibilityServiceEnabled = isAccessibilityServiceEnabled(),
+            isAccessibilityServiceEnabled = isConnected || isEnabledInSettings,
+            isAccessibilityEnabledInSettings = isEnabledInSettings,
+            isAccessibilityServiceConnected = isConnected,
+            accessibilityHealthState = accHealthState,
             canDrawOverlays = canDrawOverlays(),
             hasUsageStatsAccess = hasUsageStatsAccess(),
             isIgnoringBatteryOptimizations = isIgnoringBatteryOptimizations(),
             canScheduleExactAlarms = canScheduleExactAlarms,
             exactAlarmRequiredByOs = exactAlarmRequired,
             notificationsEnabled = notificationsEnabled,
+            hasNotificationPolicyAccess = hasNotificationPolicyAccess(),
             androidSdkInt = Build.VERSION.SDK_INT,
             manufacturer = Build.MANUFACTURER.orEmpty(),
             model = Build.MODEL.orEmpty()
         )
     }
 
-    fun isAccessibilityServiceEnabled(): Boolean {
-        if (ResolveAccessibilityService.isConnectedFlow.value) return true
+    fun isAccessibilityServiceConnected(): Boolean = ResolveAccessibilityService.isConnectedFlow.value
 
+    fun isAccessibilityEnabledInSettings(): Boolean {
         val expectedComponent = ComponentName(context, ResolveAccessibilityService::class.java)
         val expectedFlat = expectedComponent.flattenToString()
         val expectedShort = expectedComponent.flattenToShortString()
@@ -126,6 +145,22 @@ class SystemCapabilityChecker(private val context: Context) {
                     entry.equals(expectedShort, ignoreCase = true) ||
                     entry.contains(ResolveAccessibilityService::class.java.name)
             }
+        }.getOrDefault(false)
+    }
+
+    fun isAccessibilityServiceEnabled(): Boolean =
+        isAccessibilityServiceConnected() || isAccessibilityEnabledInSettings()
+
+    fun getAccessibilityHealthState(): AccessibilityHealthState = when {
+        isAccessibilityServiceConnected() -> AccessibilityHealthState.ENABLED_CONNECTED
+        isAccessibilityEnabledInSettings() -> AccessibilityHealthState.ENABLED_DISCONNECTED
+        else -> AccessibilityHealthState.DISABLED
+    }
+
+    fun hasNotificationPolicyAccess(): Boolean {
+        if (Build.VERSION.SDK_INT < Build.VERSION_CODES.M) return true
+        return runCatching {
+            notificationManager?.isNotificationPolicyAccessGranted == true
         }.getOrDefault(false)
     }
 
@@ -166,6 +201,16 @@ class SystemCapabilityChecker(private val context: Context) {
 
     fun openAccessibilitySettings(): Boolean {
         val intent = Intent(Settings.ACTION_ACCESSIBILITY_SETTINGS).apply {
+            addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+        }
+        return startSafe(intent) || openGeneralSettings()
+    }
+
+    fun openNotificationPolicySettings(): Boolean {
+        if (Build.VERSION.SDK_INT < Build.VERSION_CODES.M) {
+            return openNotificationSettings()
+        }
+        val intent = Intent(Settings.ACTION_NOTIFICATION_POLICY_ACCESS_SETTINGS).apply {
             addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
         }
         return startSafe(intent) || openGeneralSettings()

@@ -8,11 +8,13 @@ import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.test.assertIsDisplayed
+import androidx.compose.ui.test.hasTestTag
 import androidx.compose.ui.test.junit4.createComposeRule
 import androidx.compose.ui.test.onAllNodesWithTag
 import androidx.compose.ui.test.onNodeWithTag
 import androidx.compose.ui.test.onNodeWithText
 import androidx.compose.ui.test.performClick
+import androidx.compose.ui.test.performScrollToNode
 import androidx.room.Room
 import androidx.test.core.app.ApplicationProvider
 import com.example.data.local.ResolveDatabase
@@ -299,16 +301,25 @@ class MultiDeviceSyncRobolectricTest {
             }
         }
 
+        composeRule.onNodeWithTag("settings_list")
+            .performScrollToNode(hasTestTag("settings_account_signed_out_card"))
         composeRule.onNodeWithTag("settings_account_signed_out_card").assertIsDisplayed()
+        composeRule.onNodeWithTag("settings_list")
+            .performScrollToNode(hasTestTag("settings_google_signin_button"))
         composeRule.onNodeWithTag("settings_google_signin_button").performClick()
+        composeRule.mainClock.advanceTimeBy(450L)
         composeRule.waitForIdle()
 
         assertEquals(0, composeRule.onAllNodesWithTag("settings_account_signed_out_card").fetchSemanticsNodes().size)
+        composeRule.onNodeWithTag("settings_list")
+            .performScrollToNode(hasTestTag("settings_account_signed_in_card"))
         composeRule.onNodeWithTag("settings_account_signed_in_card").assertIsDisplayed()
         composeRule.onNodeWithTag("settings_profile_avatar_button").assertIsDisplayed()
         composeRule.onNodeWithTag("settings_device_sync_switch").assertIsDisplayed()
         composeRule.onNodeWithText("Pixel 8 (This)").assertIsDisplayed()
         composeRule.onNodeWithText("Galaxy S24").assertIsDisplayed()
+        composeRule.onNodeWithTag("settings_list")
+            .performScrollToNode(hasTestTag("settings_google_signout_button"))
         composeRule.onNodeWithTag("settings_google_signout_button").assertIsDisplayed()
     }
 
@@ -342,12 +353,17 @@ class MultiDeviceSyncRobolectricTest {
             }
         }
 
+        composeRule.onNodeWithTag("instant_setup_list")
+            .performScrollToNode(hasTestTag("instant_sync_switch"))
         composeRule.onNodeWithTag("instant_sync_switch").assertIsDisplayed()
-        composeRule.onNodeWithText("Device Sync: All Linked Devices").assertIsDisplayed()
+        composeRule.onNodeWithText("Selected: All Linked Devices").assertIsDisplayed()
 
         composeRule.onNodeWithTag("instant_sync_switch").performClick()
         composeRule.waitForIdle()
 
+        composeRule.onNodeWithText("Selected: This Phone Only").assertIsDisplayed()
+        composeRule.onNodeWithTag("instant_setup_list")
+            .performScrollToNode(hasTestTag("review_summary_card"))
         composeRule.onNodeWithText("Device Sync: This Phone Only").assertIsDisplayed()
     }
 
@@ -359,16 +375,16 @@ class MultiDeviceSyncRobolectricTest {
 
     private class FakeSyncDevicePolicyController : DevicePolicyController {
         override fun isDeviceOwner(): Boolean = true
-        override fun isAdminActive(): Boolean = true
-        override fun isLockTaskPermitted(packageName: String): Boolean = true
         override fun getLockTaskModeState(): Int = 0
-        override fun prepareLockTaskPolicy(
-            allowedPackages: List<String>,
+        override fun getAppliedLockTaskPackages(): List<String> = emptyList()
+        override suspend fun prepareLockTaskPolicy(
+            selectedPackages: List<String>,
             phoneAccessEnabled: Boolean
         ): EnforcementPreparationResult = EnforcementPreparationResult.Ready(emptyList())
 
         override fun enterLockTask(activity: Activity): Boolean = true
         override fun exitLockTask(activity: Activity): Boolean = true
+        override fun clearLockTaskPolicy() = Unit
     }
 
     private class NoOpAlarmScheduler : LockAlarmScheduler {

@@ -35,6 +35,7 @@ import androidx.compose.runtime.getValue
 import androidx.compose.runtime.remember
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.composed
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.draw.shadow
 import androidx.compose.ui.graphics.Brush
@@ -45,6 +46,7 @@ import androidx.compose.ui.hapticfeedback.HapticFeedbackType
 import androidx.compose.ui.platform.LocalHapticFeedback
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
+import com.example.designsystem.LocalResolveExtendedPalette
 import com.example.designsystem.ResolveColors
 
 @Composable
@@ -122,12 +124,15 @@ fun TactilePrimaryButton(
     onClick: () -> Unit,
     modifier: Modifier = Modifier,
     enabled: Boolean = true,
-    containerColor: Color = ResolveColors.MintAccent,
-    contentColor: Color = ResolveColors.ForestDeep,
+    containerColor: Color = Color.Unspecified,
+    contentColor: Color = Color.Unspecified,
     cornerRadius: Dp = 18.dp,
     height: Dp = 56.dp,
     content: @Composable RowScope.() -> Unit
 ) {
+    val palette = LocalResolveExtendedPalette.current
+    val resolvedContainer = if (containerColor == Color.Unspecified) palette.accent else containerColor
+    val resolvedContent = if (contentColor == Color.Unspecified) palette.onAccent else contentColor
     val haptic = LocalHapticFeedback.current
     val interactionSource = remember { MutableInteractionSource() }
 
@@ -141,10 +146,10 @@ fun TactilePrimaryButton(
         shape = RoundedCornerShape(cornerRadius),
         contentPadding = PaddingValues(horizontal = 20.dp, vertical = 12.dp),
         colors = ButtonDefaults.buttonColors(
-            containerColor = containerColor,
-            contentColor = contentColor,
-            disabledContainerColor = ResolveColors.ForestSurfaceElevated,
-            disabledContentColor = ResolveColors.TextDisabled
+            containerColor = resolvedContainer,
+            contentColor = resolvedContent,
+            disabledContainerColor = palette.cardBottom,
+            disabledContentColor = palette.textMuted
         ),
         elevation = ButtonDefaults.buttonElevation(
             defaultElevation = 4.dp,
@@ -160,8 +165,8 @@ fun TactilePrimaryButton(
                     Modifier.shadow(
                         elevation = 14.dp,
                         shape = RoundedCornerShape(cornerRadius),
-                        ambientColor = ResolveColors.MintAccent.copy(alpha = 0.25f),
-                        spotColor = ResolveColors.MintAccent.copy(alpha = 0.3f)
+                        ambientColor = resolvedContainer.copy(alpha = 0.25f),
+                        spotColor = resolvedContainer.copy(alpha = 0.3f)
                     )
                 } else Modifier
             )
@@ -177,19 +182,29 @@ fun resolveCardBrush(
 
 fun Modifier.resolveGlassCard(
     cornerRadius: Dp = 22.dp,
-    borderColor: Color = ResolveColors.ForestOutline
-): Modifier = this
-    .clip(RoundedCornerShape(cornerRadius))
-    .background(resolveCardBrush())
-    .border(1.dp, borderColor, RoundedCornerShape(cornerRadius))
+    borderColor: Color? = null
+): Modifier = composed {
+    val palette = LocalResolveExtendedPalette.current
+    val effectiveBorder = borderColor ?: palette.cardBorder
+    this
+        .clip(RoundedCornerShape(cornerRadius))
+        .background(
+            Brush.verticalGradient(
+                colors = listOf(palette.cardTop, palette.cardBottom)
+            )
+        )
+        .border(1.dp, effectiveBorder, RoundedCornerShape(cornerRadius))
+}
 
 @Composable
 fun FeatureTipNote(
     text: String,
     icon: ImageVector,
     modifier: Modifier = Modifier,
-    tint: Color = ResolveColors.MintAccent
+    tint: Color? = null
 ) {
+    val palette = LocalResolveExtendedPalette.current
+    val resolvedTint = tint ?: palette.accent
     Row(
         modifier = modifier
             .fillMaxWidth()
@@ -200,13 +215,13 @@ fun FeatureTipNote(
         Icon(
             imageVector = icon,
             contentDescription = null,
-            tint = tint.copy(alpha = 0.85f),
+            tint = resolvedTint.copy(alpha = 0.85f),
             modifier = Modifier.size(14.dp)
         )
         Text(
             text = text,
             style = MaterialTheme.typography.bodySmall,
-            color = ResolveColors.TextSecondary,
+            color = palette.textSecondary,
             maxLines = 2
         )
     }

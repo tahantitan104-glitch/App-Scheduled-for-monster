@@ -352,11 +352,22 @@ class MascotAnimationController(
                 }
 
                 // Cycle gently among organic idle reactions without disrupting focus
-                val nextPose = when (random.nextInt(4)) {
-                    0 -> MascotAnimationState.HEAD_EAR_ATTENTION to MascotMicroAnimation.EAR_WIGGLE
-                    1 -> MascotAnimationState.CURIOUS to MascotMicroAnimation.NONE
-                    2 -> MascotAnimationState.TURNING to MascotMicroAnimation.NONE
-                    else -> MascotAnimationState.IDLE to MascotMicroAnimation.EAR_WIGGLE
+                val nextPose = if (config.activeMascot == MascotType.BABY_CLOUD) {
+                    when (random.nextInt(5)) {
+                        0 -> MascotAnimationState.GENTLE_FLOAT to MascotMicroAnimation.NONE
+                        1 -> MascotAnimationState.CURIOUS_SWAY to MascotMicroAnimation.NONE
+                        2 -> MascotAnimationState.HAPPY_BOUNCE to MascotMicroAnimation.NONE
+                        3 -> MascotAnimationState.CURIOUS to MascotMicroAnimation.NONE
+                        else -> MascotAnimationState.HEAD_EAR_ATTENTION to MascotMicroAnimation.NONE
+                    }
+                } else {
+                    when (random.nextInt(5)) {
+                        0 -> MascotAnimationState.HEAD_EAR_ATTENTION to MascotMicroAnimation.EAR_WIGGLE
+                        1 -> MascotAnimationState.CURIOUS to MascotMicroAnimation.NONE
+                        2 -> MascotAnimationState.TURNING to MascotMicroAnimation.NONE
+                        3 -> MascotAnimationState.IDLE to MascotMicroAnimation.SMALL_HOP
+                        else -> MascotAnimationState.IDLE to MascotMicroAnimation.EAR_WIGGLE
+                    }
                 }
 
                 _uiState.update {

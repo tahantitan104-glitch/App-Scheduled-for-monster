@@ -1,0 +1,1303 @@
+RESOLVE — MASTER IMPLEMENTATION PROMPT
+
+Complete App Development, Multi-Device Sync, Security, UI, Animation & Performance Integration
+
+PROJECT OBJECTIVE
+
+Continue developing the existing RESOLVE Android application and implement all the requirements described in this document.
+
+This is a continuation of an existing project, not a request to create a new application.
+
+The objective is to make RESOLVE a polished, reliable, privacy-conscious, offline-first focus and productivity application with optional multi-device synchronization.
+
+All features must work together without breaking existing functionality.
+
+Core priorities:
+
+- Genuine functionality rather than visual simulations.
+- Local-first operation with optional cloud connectivity.
+- Secure and reliable multi-device synchronization.
+- Consistent design and interaction across all screens.
+- Smooth animations and transitions.
+- Android-version and device compatibility.
+- Preservation of existing data, settings, and functionality.
+
+Do not introduce unnecessary features, excessive complexity, or unrelated redesigns.
+
+---
+
+PART A — PROJECT AUDIT & IMPLEMENTATION STRATEGY
+
+1. Inspect the Existing Project First
+
+Before modifying anything, inspect the existing project and identify:
+
+- Current application architecture and navigation.
+- Existing Instant Lock, Delayed Lock, and Schedule Lock implementations.
+- Current App Lock implementation, if present.
+- Existing mascot renderer, mascot selection, and animation system.
+- Existing Home Screen, Insights, Settings, and About Screen.
+- Current Firebase Authentication and Firestore integration.
+- Existing "MultiDeviceSyncCoordinator", if present.
+- Current Firestore data structure and "firestore.rules".
+- Existing timer, alarm, background service, and session-restoration logic.
+
+Some Multi-Device Sync components and configuration files may already exist, while deployment, integration, and testing may still be pending.
+
+Do not assume that a feature is complete simply because its class, file, or description exists.
+
+Inspect the actual implementation and classify each feature as:
+
+- Already implemented and verified.
+- Partially implemented.
+- Present but not integrated.
+- Not implemented.
+- Requires external configuration or deployment.
+
+Reuse and improve existing components wherever practical. Avoid creating duplicate authentication systems, sync coordinators, navigation structures, timer engines, or mascot renderers.
+
+Preserve existing user data and working functionality.
+
+2. Implementation Environment
+
+The project is intended to remain a native Android application using its existing Kotlin and Jetpack Compose architecture.
+
+Maintain the current architecture and existing minimum Android support, including Android 9 / API 28.
+
+Adapt implementation to the actual project rather than performing unnecessary architectural migrations.
+
+Google AI Studio should be used to implement the project changes. If the environment cannot perform a Gradle build, Firebase deployment, or device testing directly, prepare the required project files and provide the exact next steps.
+
+Never claim that a build, deployment, or test succeeded unless it actually did.
+
+---
+
+PART B — MULTI-DEVICE SYNC SYSTEM
+
+3. Core Multi-Device Sync Philosophy
+
+Implement Multi-Device Sync as a completely optional system using:
+
+- Google Sign-In through Android Credential Manager.
+- Firebase Authentication.
+- Cloud Firestore.
+- The existing "MultiDeviceSyncCoordinator" architecture, if already implemented.
+
+The application must follow an Offline-First Architecture.
+
+Users must be able to use all local RESOLVE features without creating an account or connecting Google.
+
+Signing in should enable selected cloud features without making Firebase a dependency for the core focus-lock functionality.
+
+The local application must remain fully usable when:
+
+- The user stays signed out.
+- Internet connectivity is unavailable.
+- Firebase is temporarily unavailable.
+- Cloud synchronization is paused.
+- The user signs out.
+
+Cloud synchronization must never become a prerequisite for starting, maintaining, or completing a local lock session.
+
+4. Account Connection Flow
+
+Home Screen
+
+When the user is not connected, show a small, optional account connection card containing:
+
+- Connect Google
+- Stay Offline
+
+Keep this card visually subtle and consistent with the Home Screen design.
+
+After successful Google account connection:
+
+- Hide the introductory connection card.
+- Display the user's profile avatar on the Home Screen.
+- Show an Account card in Settings.
+- Display connected devices and their synchronization status.
+
+When the user chooses Stay Offline, do not repeatedly interrupt the experience with account connection prompts.
+
+Google Authentication
+
+Use the existing Credential Manager implementation if it is correct and functional.
+
+Retrieve the Google ID Token and authenticate with Firebase Authentication using the supported Google authentication flow.
+
+Avoid unnecessary or deprecated authentication implementations.
+
+After successful authentication, retrieve the Firebase UID and use it as the owner identifier for all user-specific Firestore paths.
+
+Sign Out
+
+When the user signs out:
+
+- Safely detach all Firestore listeners.
+- Stop receiving cloud lock commands.
+- Stop uploading changes.
+- Clear account-specific in-memory state.
+- Remove the connected account from the visible UI.
+
+Signing out must never delete, reset, or disable the device's local lock sessions, timers, mascots, presets, recovery configuration, or personal settings.
+
+5. Firestore Data Structure
+
+Inspect the existing Firestore schema before making changes.
+
+The existing intended structure is:
+
+User Profile
+
+"users/{userId}"
+
+Store:
+
+- Display name.
+- Email address.
+- Google profile photo URL.
+- Optional custom profile picture.
+- Account creation and update timestamps.
+- Schema version.
+
+If the existing implementation uses a small compressed JPEG stored as "avatarBase64", retain it where appropriate and enforce a safe image-size limit. Do not upload original full-resolution images unnecessarily.
+
+Linked Devices
+
+"users/{userId}/devices/{deviceId}"
+
+Each device record should contain:
+
+- Unique installation-specific device ID.
+- Device name.
+- Android version.
+- App version.
+- Device synchronization enabled/disabled status.
+- Last active or last seen timestamp.
+- Device registration and update information.
+
+Generate a stable random installation ID and store it locally. Do not use IMEI, serial numbers, or other unnecessary hardware identifiers.
+
+Lock Command Channel
+
+The existing planned path is:
+
+"users/{userId}/sync/lock_command"
+
+Inspect whether the current single-document command architecture can safely handle multiple commands without overwriting important events.
+
+If necessary, introduce an additive, versioned command collection such as:
+
+"users/{userId}/lock_commands/{commandId}"
+
+Use a reliable command identifier and maintain backward compatibility if the existing application already depends on the original path.
+
+Do not replace the existing schema blindly.
+
+6. What Should Synchronize?
+
+Use the following synchronization policy.
+
+A. Profile Data — Cloud Sync
+
+Synchronize:
+
+- Google account profile information.
+- Custom profile picture.
+- Profile updates.
+
+All connected devices using the same authenticated account should display the same profile information.
+
+B. Device Information — Cloud Sync
+
+Synchronize:
+
+- Linked-device registration.
+- Device names and relevant device information.
+- Individual device synchronization status.
+- Last-seen information.
+
+Provide a simple linked-device view in Settings.
+
+Users should be able to understand which devices are connected and which are currently allowed to participate in synchronization.
+
+Provide a safe unlink option without remotely deleting the device's local application data.
+
+C. Lock Commands — Cloud Sync
+
+Support cross-device lock commands for:
+
+1. Instant Lock.
+2. Delayed Lock.
+3. Schedule Lock.
+
+When a user starts a synchronized lock on one device, other eligible linked devices should receive the corresponding command through Firestore listeners and activate the same lock session.
+
+D. Custom Delayed Lock Presets — Cloud Sync
+
+Synchronize user-created Delayed Lock presets across linked devices.
+
+Sync only:
+
+- Preset ID.
+- Preset name.
+- Free Usage Duration.
+- Lock Duration.
+- Creation and update timestamps.
+
+The built-in Quick Recovery preset should remain a predefined local application default and should exist on every installation.
+
+Preset synchronization must not automatically start a lock or change an active session.
+
+E. What Must Remain Device-Local?
+
+The following information must not be synchronized by default:
+
+Feature / Data| Policy
+Mascot selection: Baby Cloud / RESOLVE Bunny| Local only
+Mascot animation preferences| Local only
+Installed app allowlist| Local only
+App Lock protected-app list| Local only
+App Lock PIN| Local only
+Pattern Lock credential| Local only
+Six-Cell Sequential Lock credential| Local only
+Recovery Code and verifier| Local only
+Device permissions| Local only
+Device Owner / DPC configuration| Local only
+Force Dark Mode preferences| Local only
+Color Inversion preferences| Local only
+App Usage and Screen Time| Local only
+Personal Insights and usage history| Local only
+Phone Call and Emergency settings| Local only
+Lock Screen Reminder preferences| Local only
+Focus Messages| Local only
+
+These settings depend on the individual device, installed applications, permissions, capabilities, and personal preferences.
+
+Do not copy them to another device automatically.
+
+Each device should independently enforce its own lock configuration.
+
+---
+
+7. Cross-Device Lock Synchronization Logic
+
+A. Global Synchronization Toggle
+
+Add a setting:
+
+Settings → Sync Lock Across Devices
+
+Provide an ON/OFF switch.
+
+When ON:
+
+- The device can send and receive eligible synchronized lock commands.
+- Commands can reach other linked devices that also have synchronization enabled.
+
+When OFF:
+
+- The device operates independently.
+- It must not receive or execute remote lock commands.
+- Its local lock systems must continue working normally.
+
+B. Per-Lock Synchronization Choice
+
+Inside the setup interface of Instant Lock, Delayed Lock, and Schedule Lock, provide:
+
+- All Linked Devices
+- This Phone Only
+
+Use This Phone Only as the safe initial default.
+
+If the user selects All Linked Devices, send the command only to eligible linked devices whose synchronization is enabled.
+
+Clearly show the selected mode before starting the lock.
+
+C. Consistent Timer Synchronization
+
+Do not independently restart the full duration on each receiving device.
+
+Every lock command should contain sufficient timing information, including:
+
+- Unique "commandId".
+- Origin device ID.
+- Lock mode.
+- Creation timestamp.
+- Intended start timestamp.
+- Free-usage end timestamp when applicable.
+- Lock end timestamp.
+- Relevant schedule or occurrence ID.
+- Expiration information.
+- Schema version.
+
+Use consistent absolute timestamps so all receiving devices calculate the same remaining duration.
+
+For example:
+
+Delayed Lock
+
+- Free Usage Duration: 20 minutes.
+- Lock Duration: 30 minutes.
+- Free-usage end: T + 20 minutes.
+- Lock end: T + 50 minutes.
+
+Every receiving device must use the same deadlines instead of starting its own independent 20-minute countdown after receiving the command.
+
+Do not send timer updates every second. Synchronize the command and deadlines, then maintain an accurate local timer on each device.
+
+D. Duplicate Prevention
+
+Use command IDs and persistent processed-command tracking.
+
+A repeated Firestore event must never activate the same lock twice.
+
+The application must handle:
+
+- Duplicate snapshots.
+- Listener reconnections.
+- Delayed command delivery.
+- Device restarts.
+- Network interruptions.
+- Commands arriving out of order.
+
+E. Offline and Late Command Handling
+
+If a device is offline when a command is issued:
+
+- When it reconnects, check whether the command is still valid.
+- If a valid lock is still active, apply only the remaining duration.
+- For Delayed Lock, if the free-use deadline has passed, begin the remaining restricted-lock period.
+- If the entire lock session has already expired, discard the stale command.
+- Never restart an expired lock with its original full duration.
+
+Persist active session state locally so temporary connectivity problems cannot interrupt an already active lock.
+
+F. Conflicting Commands
+
+Handle simultaneous commands from multiple devices deterministically.
+
+A new or delayed remote command must never silently shorten, bypass, or weaken a stricter active local lock.
+
+Use a documented conflict policy that preserves the safest valid active restriction or queues a compatible subsequent command.
+
+Make command processing idempotent and prevent race conditions.
+
+G. Schedule Lock Synchronization
+
+When a user creates a Schedule Lock for All Linked Devices, synchronize the schedule configuration to eligible devices.
+
+Each device should activate the corresponding scheduled occurrence only once.
+
+Use a stable schedule ID and unique occurrence ID.
+
+Preserve the intended schedule time zone and recurrence behavior. Handle daylight-saving changes where relevant.
+
+Each device should maintain the necessary local scheduling and reboot-restoration behavior.
+
+A device that is offline should not execute an expired schedule occurrence when it reconnects.
+
+---
+
+PART C — FIREBASE SECURITY & RELIABILITY
+
+8. Firestore Security Rules
+
+Inspect and finalize the existing "firestore.rules".
+
+The rules must ensure:
+
+- Unauthenticated users cannot access private user data.
+- Only the authenticated owner can access "users/{userId}".
+- A user cannot read or modify another user's profile, devices, presets, or lock commands.
+- Incoming documents contain only permitted fields and valid data types.
+- Command payloads are validated.
+- Device and command documents cannot be used to access another account.
+- No unnecessarily broad read/write permission exists.
+
+Use strict owner validation through the authenticated Firebase UID.
+
+Never use public read/write rules in production.
+
+Test rules with Firebase Emulator Suite before deployment wherever available.
+
+Consider Firebase App Check if it is compatible with the project's actual distribution and testing environment. Do not enable enforcement blindly if it could block legitimate installations.
+
+Never put service-account credentials, private signing keys, or other server secrets inside the Android application.
+
+9. Cloud Listener & Resource Management
+
+Use efficient Firestore listeners rather than unnecessary repeated polling.
+
+Listeners should:
+
+- Start only when the account and synchronization settings permit them.
+- Be detached when the user signs out or disables synchronization.
+- Recover gracefully after network reconnection.
+- Avoid duplicate subscriptions.
+- Avoid unnecessary database reads and writes.
+
+Keep cloud data minimal and synchronize only meaningful changes.
+
+Preserve local operation regardless of cloud state.
+
+---
+
+PART D — FOUR MAIN LOCK SYSTEMS
+
+10. Home Screen Feature Structure
+
+Maintain exactly four main feature cards:
+
+1. Instant Lock.
+2. Delayed Lock.
+3. Schedule Lock.
+4. App Lock.
+
+These should remain the primary Home Screen features.
+
+Redesign their current long horizontal list appearance as four attractive rounded rectangular cards.
+
+Retain their existing icons and labels.
+
+Use appropriate spacing, balanced proportions, and a modern premium appearance.
+
+11. Instant Lock
+
+Maintain the existing Instant Lock functionality.
+
+Allow the user to:
+
+- Select permitted apps.
+- Configure the required lock settings.
+- Set a duration.
+- Choose This Phone Only or All Linked Devices.
+- Start the lock immediately.
+
+Preserve existing timer, allowlist, emergency, and session-restoration behavior.
+
+12. Delayed Lock — Presets
+
+Improve Delayed Lock with ready-made and custom presets.
+
+Built-in Preset: Quick Recovery
+
+- Preset Name: Quick Recovery.
+- Free Usage Duration: 20 minutes.
+- Lock Duration: 30 minutes.
+
+Allow the user to select it and immediately start Delayed Lock.
+
+Custom Presets
+
+Allow users to:
+
+- Create presets.
+- Choose a custom name.
+- Set Free Usage Duration.
+- Set Lock Duration.
+- Save, edit, rename, and delete presets.
+
+Display saved presets clearly.
+
+Selecting a preset should automatically apply its saved durations and make starting Delayed Lock possible with a single action.
+
+Keep manual duration adjustment available.
+
+Sync user-created presets according to the Multi-Device Sync policy.
+
+Never allow preset selection or editing to reset, shorten, or bypass an active lock.
+
+13. Schedule Lock
+
+Preserve existing scheduling functionality.
+
+Support the existing:
+
+- One-Time schedule.
+- Daily schedule.
+- Custom Weekly schedule.
+
+Maintain correct handling of:
+
+- Schedule activation.
+- Repeated occurrences.
+- Overlapping schedules.
+- Time-zone behavior.
+- Reboot restoration.
+- Exact alarm permission requirements.
+- Pause and resume behavior.
+
+Respect each device's local permissions and platform capabilities.
+
+---
+
+PART E — APP LOCK SYSTEM
+
+14. App Lock Authentication Methods
+
+App Lock is the fourth main feature.
+
+Allow users to protect selected installed apps using three authentication methods.
+
+A. Pattern Lock
+
+Provide familiar Android-style pattern authentication. Users can create and confirm their own pattern.
+
+B. PIN Lock
+
+Support both:
+
+- 4-Digit PIN.
+- 6-Digit PIN.
+
+Let users choose either length during setup and require confirmation before saving.
+
+C. Six-Cell Sequential Lock
+
+Display six cells in a simple grid.
+
+During setup:
+
+- Show numbers or sequence indicators.
+- Allow users to create their preferred tapping sequence.
+
+During unlocking:
+
+- Hide all sequence numbers and indicators.
+- Show only the cells.
+- Provide subtle feedback after each tap.
+- Unlock only when the correct sequence is entered.
+
+Require the same authentication when the user enters App Lock Management to modify protected apps or settings.
+
+Store credentials securely. Never store plaintext credentials.
+
+Include reasonable protections against repeated incorrect attempts.
+
+15. App Lock — Mascot-Based Full-Screen Interface
+
+When a protected app is accessed, display a dedicated RESOLVE authentication screen.
+
+- Display the currently selected mascot near the center.
+- Position the selected authentication interface slightly below the mascot.
+- Show the correct method: Pattern, 4-Digit PIN, 6-Digit PIN, or Six-Cell Sequential Lock.
+- Use the existing Dark Forest Green visual identity.
+- Provide polished typography, spacing, feedback, and transitions.
+- Use subtle mascot animation without interfering with authentication.
+- Display only the selected mascot, never both together.
+
+The authentication screen should feel like a dedicated RESOLVE security experience, not a generic placeholder.
+
+The mascot is decorative. Authentication must always be verified independently.
+
+16. Genuine App Protection
+
+App Lock must provide genuine protection to the extent permitted by Android.
+
+Inspect the available Android enforcement mechanisms before implementation.
+
+Do not represent an overlay, accessibility-based detection, or decorative lock screen as bypass-proof app protection.
+
+Robust system-level allowlist enforcement through Android Lock Task Mode generally requires appropriate Device Owner or Profile Owner authority.
+
+Do not initiate Device Owner provisioning, factory reset, or other destructive device changes without explicit user consent.
+
+If a device cannot support the intended enforcement level, clearly report that limitation and use only a legitimate, accurately labelled supported mode.
+
+Preserve emergency calling and essential system access.
+
+---
+
+PART F — FORCE DARK MODE
+
+17. Force Dark Mode
+
+Add a new setting:
+
+Settings → Appearance & Accessibility → Force Dark Mode
+
+The feature should help users achieve a darker appearance in selected applications wherever Android genuinely supports it.
+
+Provide two approaches:
+
+A. Force Dark
+
+Use supported Android capabilities where available.
+
+Do not assume an ordinary application can force arbitrary third-party apps into dark mode. Detect actual device and operating-system capabilities.
+
+B. Color Inversion
+
+Provide Color Inversion as an alternative when appropriate.
+
+Standard Android Color Inversion affects the overall device display rather than a single selected app.
+
+Never present global inversion as per-app functionality.
+
+Use only legitimate Android system accessibility or display capabilities.
+
+Controls
+
+Provide:
+
+- Individual app selection.
+- Main ON/OFF switch.
+- Available method selection.
+- Individual app reset.
+- Reset All.
+- Clear instructions to restore previous settings.
+
+Compatibility Status
+
+Display:
+
+- Supported.
+- Partially Supported.
+- Unsupported.
+
+Base status on actual Android version, device capabilities, and available system features.
+
+Where Android provides a system-level expanded darkening setting, explain how the user can enable it through system settings. Do not falsely claim that RESOLVE can independently control every system-level feature.
+
+Do not use root, hidden APIs, exploits, or unauthorized system modifications.
+
+Preserve device stability and user control.
+
+---
+
+PART G — HOME SCREEN, APP USAGE & INSIGHTS
+
+18. Home Screen — Progress Overview
+
+Add a compact graphical overview of the user's progress.
+
+The overview should be useful and visually clean.
+
+Avoid unnecessary statistics, decorative numbers, and filler information.
+
+19. App Usage Dashboard
+
+Add a compact App Usage Dashboard to the Home Screen.
+
+Display:
+
+Today's Screen Time
+
+- Total phone usage time for the current day.
+
+App Usage Breakdown
+
+- App name.
+- App icon where available.
+- Time spent in each app.
+- Simple graphical comparison, such as compact bars.
+
+Keep the dashboard short, readable, and useful.
+
+Use legitimate Android usage-statistics capabilities, such as UsageStatsManager, and request the required Usage Access permission through the appropriate system settings.
+
+If the user does not grant permission, show an unobtrusive explanation rather than fabricated usage data.
+
+App usage information must remain local to each device and must never be uploaded to Firestore under the current synchronization policy.
+
+20. Insights Screen
+
+Rename the existing bottom-navigation History item to Insights.
+
+The Insights screen should contain:
+
+Top Section
+
+- Graphical progress overview.
+- Meaningful usage charts.
+- Relevant focus-session insights.
+- Useful summaries.
+
+Lower Section
+
+- Preserve the existing History interface and functionality.
+- Do not delete or alter historical records.
+
+Use a tasteful animation when the graphical section appears.
+
+Avoid unnecessary duplication between the Home Screen and Insights screen.
+
+Keep personal usage analytics and History local to the device.
+
+---
+
+PART H — SETTINGS & PERMISSIONS
+
+21. Permission Status Display
+
+Improve the permission overview in Settings.
+
+- Hide permissions that are already granted by default.
+- Show only missing permissions or permissions requiring attention.
+- When everything required is granted, show a clean Completed / Ready state with a checkmark.
+- If a permission is disabled later, show only the permission that needs attention.
+
+Provide an appropriate way to review or enable the required permission.
+
+Permission status must reflect the actual device state.
+
+Do not display permissions as granted simply because the application previously requested them.
+
+---
+
+PART I — MASCOT SYSTEM
+
+22. Two Exclusive Mascots
+
+RESOLVE has exactly two mascots:
+
+1. Baby Cloud.
+2. RESOLVE Bunny.
+
+The user can select either one.
+
+Never display both simultaneously.
+
+Preserve the existing Baby Cloud design. Do not redesign, replace, or damage it.
+
+Preserve the established RESOLVE Bunny design:
+
+- Original rabbit character.
+- Cream-colored fur.
+- Deep forest-green wall.
+- 2.5D hybrid illustration style.
+- Expressive eyes.
+- One upright ear and one gently bent ear.
+- Playful and curious personality.
+
+Do not introduce another mascot.
+
+Use one consistent mascot selection system throughout all relevant screens.
+
+Mascot selection remains device-local.
+
+23. RESOLVE Bunny — Animation Improvements
+
+Preserve the existing Bunny animations.
+
+Ensure its signature Peek-a-Boo Entrance animation works correctly on the main lock screen and other appropriate lock interfaces.
+
+The animation should follow its established sequence:
+
+- Begins hidden behind the wall.
+- Ears gradually appear.
+- Ears gently move.
+- Eyes and head appear.
+- Paws rest on the wall.
+- Bunny looks around curiously.
+- Bunny emerges beside the wall.
+- Transitions smoothly into its idle state.
+
+Also retain the two previously requested animations:
+
+1. Playful Head Tilt: A gentle side-to-side head tilt with a curious expression.
+2. Soft Hop: A small natural hop with a smooth return to the original position.
+
+Ensure the animations work alongside the existing animation collection.
+
+Do not replay the Peek-a-Boo animation every time a screen refreshes or the device rotates.
+
+Use appropriate animation triggers and state management.
+
+24. Baby Cloud — Three Additional Animations
+
+The existing Baby Cloud currently has only two animations.
+
+Inspect those existing animations before adding anything.
+
+Preserve both existing animations and introduce three additional, distinct animations:
+
+1. Gentle Float: A subtle floating movement with a soft breathing effect.
+2. Curious Sway: A gentle side-to-side movement with a small tilt or expressive motion, consistent with the existing Cloud illustration.
+3. Happy Bounce: A short, soft bounce using natural squash-and-stretch movement before returning to its normal idle position.
+
+If an existing animation already performs one of these functions, do not duplicate it. Replace that proposed animation with another distinct, complementary movement.
+
+Keep every animation lightweight, smooth, and visually consistent with the existing Baby Cloud design.
+
+Do not redesign the character or introduce unrelated visual elements.
+
+25. Mascot Animation Performance
+
+All mascot animations must remain decorative.
+
+They must never interfere with:
+
+- Authentication.
+- Lock enforcement.
+- Active timer calculations.
+- Session restoration.
+- Background services.
+- Device rotation.
+
+Avoid unnecessary animation replay.
+
+Use controlled triggers, appropriate lifecycle handling, and efficient rendering.
+
+---
+
+PART J — LOCK SCREEN LANDSCAPE DESIGN
+
+26. Adaptive Landscape Layout for All Three Focus Locks
+
+Implement a professional horizontal layout for:
+
+- Instant Lock.
+- Delayed Lock.
+- Schedule Lock.
+
+Preserve the existing portrait design.
+
+When the device enters landscape orientation, use the following core arrangement.
+
+A. Lock Screen Reminder Enabled
+
+Top:
+
+- Display the existing Focus Guard title at the top.
+- Keep it horizontally centered.
+
+Left Section:
+
+- Selected RESOLVE mascot.
+- Active lock timer.
+
+Right Section:
+
+- Existing motivational Lock Screen Reminder or Focus Message.
+- Below it, display three action buttons:
+  1. Allowed Apps.
+  2. Phone Call.
+  3. Emergency.
+
+Maintain a balanced visual relationship between the mascot and timer on the left and the motivational content and actions on the right.
+
+B. Lock Screen Reminder Disabled
+
+Use a different arrangement:
+
+Left Section:
+
+- Selected mascot.
+
+Right Section:
+
+- Active lock timer.
+
+Bottom Section:
+
+- Allowed Apps.
+- Phone Call.
+- Emergency.
+
+Do not leave an empty quote area or unnecessary blank space.
+
+The two layout states must be distinctly implemented and must not accidentally mix with each other.
+
+C. Adaptive Positioning
+
+Treat these positions as the intended visual hierarchy, not rigid pixel coordinates.
+
+Automatically adjust sizing, spacing, alignment, and component proportions according to the available display area.
+
+Support different:
+
+- Phone aspect ratios.
+- Tablet dimensions.
+- Display cutouts.
+- System bars.
+- Navigation configurations.
+- Landscape window sizes.
+
+All important controls must remain visible and accessible.
+
+---
+
+PART K — APP-WIDE ROTATION & ADAPTIVE NAVIGATION
+
+27. Device Rotation
+
+Allow RESOLVE to respond properly when the user rotates the device.
+
+Do not unnecessarily lock the app into portrait orientation.
+
+When the user rotates the phone during an active lock session:
+
+- Transition smoothly between portrait and landscape.
+- Preserve the selected lock mode.
+- Preserve the active session.
+- Preserve remaining time and absolute deadlines.
+- Preserve authentication state where appropriate.
+- Do not restart or reset timers.
+- Prevent crashes, flickering, blank screens, and overlapping UI.
+
+Use appropriate lifecycle and state-preservation practices.
+
+Do not rebuild the entire lock engine merely because the visual layout changes.
+
+28. Adaptive Navigation
+
+In landscape mode on phones, move the existing bottom navigation into a slim vertical navigation rail on the left side.
+
+Retain all navigation destinations and functionality.
+
+Keep the rail compact and let the main content use the remaining display space.
+
+On tablets, provide an appropriately scaled and balanced navigation layout.
+
+Base layout decisions on actual available window dimensions and responsive window-size classes, not only the physical device type or orientation flag.
+
+Support different window sizes, split-screen layouts, and tablets where available.
+
+29. Smooth Page Transitions
+
+When switching between pages:
+
+- Maintain smooth, consistent transitions.
+- Avoid abrupt position changes.
+- Avoid unnecessary animation layers.
+- Prevent navigation flickering.
+- Preserve page state where appropriate.
+
+All pages should respond consistently to portrait and landscape layouts.
+
+---
+
+PART L — ABOUT SCREEN & BRAND IDENTITY
+
+30. Animated RESOLVE Logo
+
+Inside the existing RESOLVE logo or icon illustration on the About screen, introduce a small human or character illustration.
+
+Initially, the character should remain still.
+
+When the user scrolls through Settings toward the About section, the character should begin a running animation inside the logo area.
+
+The animation must:
+
+- Remain confined to the logo.
+- Start only when the relevant section becomes visible.
+- Not run before the user reaches that section.
+- Remain smooth and lightweight.
+
+Do not introduce the running character elsewhere.
+
+31. Expandable About Introduction
+
+Add a hidden, expandable introduction section to the About screen.
+
+When expanded, display a professionally written English introduction explaining:
+
+- What RESOLVE is.
+- Its purpose and benefits.
+- How the major features work.
+- How users can use RESOLVE effectively to build focus and consistency.
+
+Use a slow keyboard-typing animation, noticeably slower than the previous implementation.
+
+The text should appear gradually from top to bottom.
+
+Use a small, clean font and a subtle sci-fi visual style.
+
+Keep the section hidden until the user chooses to expand it.
+
+Preserve the existing About screen information, including the exact credit:
+
+"Developed by "Tahan Official""
+
+32. App Icon & Startup Identity
+
+Preserve the previously established RESOLVE brand decisions.
+
+App Icon
+
+- Deep forest green background: "#10251F".
+- Abstract geometric focus ring.
+- Mint focus dot: "#75E0B5".
+- No text.
+- No mascot.
+- Clean adaptive icon layers.
+
+Standard Startup
+
+- Use a short animated brand introduction.
+- Reveal the focus symbol.
+- Display the RESOLVE wordmark.
+- Transition smoothly into the main screen.
+- Keep the animation brief, approximately 0.5–0.8 seconds.
+
+First-Launch Welcome
+
+- Show only on the first launch.
+- Main text: "Welcome to RESOLVE."
+- Supporting text: "Build focus. Stay consistent. Take control."
+
+Most importantly, restoring an active lock session must take priority over startup animations. Never delay or reset lock enforcement to show an animation.
+
+---
+
+PART M — LOCAL SECURITY, TIMER & DEVICE COMPATIBILITY
+
+33. Recovery Code
+
+Preserve the existing 16-digit Recovery Code concept for the applicable lock system.
+
+- Allow the user to create or generate the code.
+- Store only a secure verifier, never plaintext.
+- Use appropriate Android Keystore-backed protection and a suitable key-derivation or hashing approach.
+- Rate-limit repeated incorrect attempts.
+- Keep the Recovery Code local to each device.
+- Do not synchronize it through Firebase.
+
+A lost code should not create an insecure bypass. Preserve the existing session-expiration recovery behavior.
+
+When recovery is legitimately used, maintain the appropriate History records.
+
+34. Timer Reliability
+
+Preserve accurate duration handling in every lock system.
+
+Support:
+
+- Hours and minutes independently.
+- Short durations.
+- Long durations.
+- Correct timer restoration after rotation.
+- Correct timer restoration after process recreation or reboot.
+- Accurate deadline-based calculations.
+
+A change to one timer component must not accidentally modify another.
+
+Avoid using visual animation progress as the source of truth for lock timing.
+
+Use reliable local time and persisted deadlines.
+
+35. Android Compatibility
+
+Inspect the minimum and target Android versions before implementing platform-specific functionality.
+
+Handle differences in:
+
+- Permission requirements.
+- Usage Access.
+- Exact alarms.
+- Background execution.
+- Foreground services.
+- Package visibility.
+- Accessibility capabilities.
+- Device Owner support.
+- Display and orientation behavior.
+
+Use runtime capability detection wherever appropriate.
+
+Clearly distinguish Supported, Partially Supported, and Unsupported functionality.
+
+Do not claim a feature is available on a device merely because the code exists.
+
+Test Android 9 compatibility and newer supported Android versions without introducing unnecessary regressions.
+
+---
+
+PART N — IMPLEMENTATION ORDER
+
+36. Work in Logical Phases
+
+Implement the work in a controlled order rather than changing everything simultaneously.
+
+Phase 1 — Project Audit & Stability
+
+- Inspect the existing application.
+- Identify completed and incomplete work.
+- Understand the current architecture.
+- Preserve existing user data.
+- Establish a working baseline.
+
+Phase 2 — Multi-Device Sync Foundation
+
+- Complete Google Authentication.
+- Complete Firebase Auth integration.
+- Finalize the user profile structure.
+- Register linked devices.
+- Implement account and device settings.
+- Implement global synchronization controls.
+- Finalize Firestore Security Rules.
+
+Phase 3 — Cross-Device Lock Engine
+
+- Implement lock command creation and delivery.
+- Add per-lock synchronization selection.
+- Implement Instant, Delayed, and Scheduled lock synchronization.
+- Implement deadlines, duplicate prevention, conflict handling, and offline recovery.
+- Test synchronization between two or more devices.
+
+Phase 4 — Local Feature Integration
+
+- Finalize App Lock and its authentication methods.
+- Integrate the mascot-based authentication interface.
+- Implement Delayed Lock presets.
+- Implement Force Dark Mode with accurate compatibility reporting.
+- Implement the App Usage Dashboard.
+
+Phase 5 — Home Screen & Insights
+
+- Redesign the four Home Screen feature cards.
+- Add progress overview and App Usage Dashboard.
+- Rename History to Insights.
+- Integrate charts and preserve existing History records.
+
+Phase 6 — Mascots & UI Improvements
+
+- Complete Bunny Peek-a-Boo behavior.
+- Add the two additional Bunny animations.
+- Add three additional Baby Cloud animations.
+- Implement landscape Lock Screen layouts.
+- Implement app-wide adaptive navigation.
+- Improve Settings and About Screen.
+- Complete startup and transition behavior.
+
+Phase 7 — Integration & Testing
+
+- Test feature interactions.
+- Test offline and online behavior.
+- Test multiple devices.
+- Test Android compatibility.
+- Test security rules.
+- Test timers, lock restoration, animation, and rotation.
+- Fix regressions before creating the final build.
+
+Do not leave a feature as a non-functional placeholder simply to make the interface look complete.
+
+---
+
+PART O — FINAL TESTING & ACCEPTANCE CRITERIA
+
+37. Multi-Device Testing
+
+Test at least two installations using the same Google account.
+
+Verify:
+
+- Google connection and sign-out.
+- Profile synchronization.
+- Custom profile picture synchronization.
+- Device registration.
+- Device sync ON/OFF.
+- This Phone Only behavior.
+- All Linked Devices behavior.
+- Instant Lock synchronization.
+- Delayed Lock synchronization.
+- Schedule Lock synchronization.
+- Custom preset synchronization.
+- Duplicate command prevention.
+- Offline and reconnect behavior.
+- Expired command rejection.
+- Device-specific allowlist behavior.
+- Correct listener cleanup after sign-out.
+
+Also verify that two different Google accounts cannot access each other's private data.
+
+38. Local-Data Isolation Testing
+
+Verify that:
+
+- Mascot selection remains device-specific.
+- App Lock credentials are not uploaded.
+- Recovery Codes are not uploaded.
+- Allowed Apps lists remain device-specific.
+- App Usage data is not uploaded.
+- Force Dark preferences remain device-specific.
+- Permissions and Device Owner configuration remain device-specific.
+- Personal History and Insights are not unintentionally merged.
+
+39. UI & Animation Testing
+
+Verify:
+
+- Four Home Screen feature cards.
+- Home Screen App Usage Dashboard.
+- Insights graphics and existing History.
+- Permission status behavior.
+- App Lock mascot interface.
+- All three authentication methods.
+- Both PIN lengths.
+- Delayed Lock presets.
+- Force Dark Mode support labels.
+- Both landscape Lock Screen layouts.
+- Focus Guard title alignment.
+- Landscape navigation rail.
+- Smooth page transitions.
+- Bunny Peek-a-Boo animation.
+- Two additional Bunny animations.
+- Three additional Baby Cloud animations.
+- About logo running animation.
+- Expandable typing introduction.
+
+Test portrait, landscape, phone, and tablet window layouts.
+
+40. Security & Stability Testing
+
+Verify:
+
+- Unauthenticated Firestore access is denied.
+- Cross-account data access is denied.
+- Firestore rules enforce the intended ownership model.
+- Authentication credentials are never stored in plaintext.
+- No lock can be bypassed through duplicate or expired commands.
+- Active locks survive orientation changes.
+- Active locks restore correctly after process recreation and reboot.
+- Emergency access remains available.
+- Unsupported platform features are clearly identified.
+
+41. Final Build & Delivery
+
+After completing implementation:
+
+1. Run the available project checks.
+2. Run the appropriate Gradle build.
+3. Resolve compilation errors and relevant warnings.
+4. Test Firebase integration.
+5. Validate Firestore Security Rules.
+6. Test the application on available Android devices or emulators.
+7. Produce an updated APK if the build environment supports it.
+
+Deploy Firestore rules only after verifying the correct Firebase project, configuration, and deployment authorization.
+
+If deployment or device testing cannot be performed in the current environment, clearly identify the limitation and provide the exact remaining steps.
+
+Do not report successful builds, deployments, or tests without actual verification.
+
+Provide a final implementation report containing:
+
+- Completed features.
+- Partially completed features.
+- Unsupported platform-specific features.
+- Known limitations.
+- Tests actually performed.
+- Build and deployment status.
+- Any required manual configuration.
+
+---
+
+FINAL DEVELOPMENT PRINCIPLE
+
+RESOLVE must behave as one integrated application, not as a collection of disconnected features.
+
+The local lock engine must remain reliable even when Firebase, internet connectivity, or animations are unavailable.
+
+Cloud synchronization must be optional, secure, and predictable.
+
+Every device must maintain its own local security configuration while participating in explicitly authorized cross-device lock synchronization.
+
+Every screen must adapt smoothly to the available device dimensions.
+
+Every animation must improve the visual experience without affecting functionality.
+
+Preserve existing working implementations, avoid unnecessary rewrites, and prioritize correctness, stability, privacy, performance, and a consistent premium user experience.
+
+Implement the complete plan within the existing RESOLVE project, verify each stage, and do not claim completion until the relevant functionality has actually been implemented and tested.

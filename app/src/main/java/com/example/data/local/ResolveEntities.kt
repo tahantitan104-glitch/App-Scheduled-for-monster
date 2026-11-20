@@ -3,7 +3,9 @@ package com.example.data.local
 import androidx.room.Entity
 import androidx.room.PrimaryKey
 import com.example.domain.model.ActiveSession
+import com.example.domain.model.DelayedLockPreset
 import com.example.domain.model.EnforcementMode
+import com.example.domain.model.FlipTimerPreset
 import com.example.domain.model.LockMode
 import com.example.domain.model.LockSchedule
 import com.example.domain.model.ScheduleType
@@ -34,7 +36,9 @@ data class ActiveSessionEntity(
     val bootCountAtStart: Int,
     val scheduleId: Long?,
     val recoveryCodeLength: Int,
-    val failureReason: String?
+    val failureReason: String?,
+    val isStrictMode: Boolean = false,
+    val showFlipClockShortcut: Boolean = false
 )
 
 @Entity(tableName = "lock_schedules")
@@ -51,7 +55,29 @@ data class LockScheduleEntity(
     val phoneAccessEnabled: Boolean,
     val isEnabled: Boolean,
     val createdAtWallMs: Long,
-    val nextTriggerWallMs: Long?
+    val nextTriggerWallMs: Long?,
+    val cloudId: String = "",
+    val syncAcrossDevices: Boolean = false,
+    val isStrictMode: Boolean = false,
+    val allowSelectedApps: Boolean = true,
+    val showFlipClockShortcut: Boolean = false
+)
+
+@Entity(tableName = "delayed_presets")
+data class DelayedLockPresetEntity(
+    @PrimaryKey val presetId: String,
+    val name: String,
+    val freeUseMinutes: Long,
+    val lockDurationMinutes: Long,
+    val builtIn: Boolean,
+    val updatedAtWallMs: Long
+)
+
+@Entity(tableName = "app_lock_apps")
+data class AppLockAppEntity(
+    @PrimaryKey val packageName: String,
+    val displayName: String,
+    val addedAtWallMs: Long
 )
 
 @Entity(tableName = "session_history")
@@ -73,6 +99,16 @@ data class AllowedAppEntity(
     @PrimaryKey val packageName: String,
     val displayName: String,
     val addedAtWallMs: Long
+)
+
+@Entity(tableName = "flip_timer_presets")
+data class FlipTimerPresetEntity(
+    @PrimaryKey val presetId: String,
+    val name: String,
+    val durationSeconds: Long,
+    val builtIn: Boolean,
+    val sortOrder: Int,
+    val updatedAtWallMs: Long
 )
 
 object EntityMappers {
@@ -116,7 +152,9 @@ object EntityMappers {
         bootCountAtStart = bootCountAtStart,
         scheduleId = scheduleId,
         recoveryCodeLength = recoveryCodeLength,
-        failureReason = failureReason
+        failureReason = failureReason,
+        isStrictMode = isStrictMode,
+        showFlipClockShortcut = showFlipClockShortcut
     )
 
     fun ActiveSessionEntity.toDomain(): ActiveSession = ActiveSession(
@@ -139,7 +177,9 @@ object EntityMappers {
         bootCountAtStart = bootCountAtStart,
         scheduleId = scheduleId,
         recoveryCodeLength = recoveryCodeLength,
-        failureReason = failureReason
+        failureReason = failureReason,
+        isStrictMode = isStrictMode,
+        showFlipClockShortcut = showFlipClockShortcut
     )
 
     fun LockSchedule.toEntity(): LockScheduleEntity = LockScheduleEntity(
@@ -155,7 +195,12 @@ object EntityMappers {
         phoneAccessEnabled = phoneAccessEnabled,
         isEnabled = isEnabled,
         createdAtWallMs = createdAtWallMs,
-        nextTriggerWallMs = nextTriggerWallMs
+        nextTriggerWallMs = nextTriggerWallMs,
+        cloudId = cloudId,
+        syncAcrossDevices = syncAcrossDevices,
+        isStrictMode = isStrictMode,
+        allowSelectedApps = allowSelectedApps,
+        showFlipClockShortcut = showFlipClockShortcut
     )
 
     fun LockScheduleEntity.toDomain(): LockSchedule = LockSchedule(
@@ -171,7 +216,30 @@ object EntityMappers {
         phoneAccessEnabled = phoneAccessEnabled,
         isEnabled = isEnabled,
         createdAtWallMs = createdAtWallMs,
-        nextTriggerWallMs = nextTriggerWallMs
+        nextTriggerWallMs = nextTriggerWallMs,
+        cloudId = cloudId,
+        syncAcrossDevices = syncAcrossDevices,
+        isStrictMode = isStrictMode,
+        allowSelectedApps = allowSelectedApps,
+        showFlipClockShortcut = showFlipClockShortcut
+    )
+
+    fun DelayedLockPreset.toEntity(): DelayedLockPresetEntity = DelayedLockPresetEntity(
+        presetId = presetId,
+        name = name,
+        freeUseMinutes = freeUseMinutes,
+        lockDurationMinutes = lockDurationMinutes,
+        builtIn = builtIn,
+        updatedAtWallMs = updatedAtWallMs
+    )
+
+    fun DelayedLockPresetEntity.toDomain(): DelayedLockPreset = DelayedLockPreset(
+        presetId = presetId,
+        name = name,
+        freeUseMinutes = freeUseMinutes,
+        lockDurationMinutes = lockDurationMinutes,
+        builtIn = builtIn,
+        updatedAtWallMs = updatedAtWallMs
     )
 
     fun SessionHistoryRecord.toEntity(): SessionHistoryEntity = SessionHistoryEntity(
@@ -198,5 +266,23 @@ object EntityMappers {
         outcome = runCatching { SessionOutcome.valueOf(outcome) }.getOrDefault(SessionOutcome.INTERRUPTED),
         allowedAppCount = allowedAppCount,
         scheduleId = scheduleId
+    )
+
+    fun FlipTimerPreset.toEntity(): FlipTimerPresetEntity = FlipTimerPresetEntity(
+        presetId = presetId,
+        name = name,
+        durationSeconds = durationSeconds,
+        builtIn = builtIn,
+        sortOrder = sortOrder,
+        updatedAtWallMs = updatedAtWallMs
+    )
+
+    fun FlipTimerPresetEntity.toDomain(): FlipTimerPreset = FlipTimerPreset(
+        presetId = presetId,
+        name = name,
+        durationSeconds = durationSeconds,
+        builtIn = builtIn,
+        sortOrder = sortOrder,
+        updatedAtWallMs = updatedAtWallMs
     )
 }

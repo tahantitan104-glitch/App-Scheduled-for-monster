@@ -33,6 +33,9 @@ interface LockScheduleDao {
     @Query("SELECT * FROM lock_schedules WHERE id = :id LIMIT 1")
     suspend fun getScheduleById(id: Long): LockScheduleEntity?
 
+    @Query("SELECT * FROM lock_schedules WHERE cloudId = :cloudId LIMIT 1")
+    suspend fun getScheduleByCloudId(cloudId: String): LockScheduleEntity?
+
     @Insert(onConflict = OnConflictStrategy.REPLACE)
     suspend fun upsertSchedule(schedule: LockScheduleEntity): Long
 
@@ -76,4 +79,69 @@ interface AllowedAppDao {
             insertAll(apps)
         }
     }
+}
+
+@Dao
+interface DelayedLockPresetDao {
+    @Query("SELECT * FROM delayed_presets ORDER BY builtIn DESC, updatedAtWallMs DESC, name COLLATE NOCASE ASC")
+    fun observePresets(): Flow<List<DelayedLockPresetEntity>>
+
+    @Query("SELECT * FROM delayed_presets")
+    suspend fun getAllPresets(): List<DelayedLockPresetEntity>
+
+    @Query("SELECT * FROM delayed_presets WHERE presetId = :presetId LIMIT 1")
+    suspend fun getPresetById(presetId: String): DelayedLockPresetEntity?
+
+    @Insert(onConflict = OnConflictStrategy.REPLACE)
+    suspend fun upsertPreset(preset: DelayedLockPresetEntity)
+
+    @Query("DELETE FROM delayed_presets WHERE presetId = :presetId AND builtIn = 0")
+    suspend fun deleteCustomPreset(presetId: String)
+}
+
+@Dao
+interface AppLockAppDao {
+    @Query("SELECT * FROM app_lock_apps ORDER BY displayName COLLATE NOCASE ASC")
+    fun observeProtectedApps(): Flow<List<AppLockAppEntity>>
+
+    @Query("SELECT * FROM app_lock_apps")
+    suspend fun getProtectedApps(): List<AppLockAppEntity>
+
+    @Insert(onConflict = OnConflictStrategy.REPLACE)
+    suspend fun insertAll(apps: List<AppLockAppEntity>)
+
+    @Query("DELETE FROM app_lock_apps")
+    suspend fun clearAll()
+
+    @Transaction
+    suspend fun replaceAll(apps: List<AppLockAppEntity>) {
+        clearAll()
+        if (apps.isNotEmpty()) {
+            insertAll(apps)
+        }
+    }
+}
+
+@Dao
+interface FlipTimerPresetDao {
+    @Query("SELECT * FROM flip_timer_presets ORDER BY sortOrder ASC, durationSeconds ASC, name COLLATE NOCASE ASC")
+    fun observePresets(): Flow<List<FlipTimerPresetEntity>>
+
+    @Query("SELECT * FROM flip_timer_presets ORDER BY sortOrder ASC, durationSeconds ASC")
+    suspend fun getAllPresets(): List<FlipTimerPresetEntity>
+
+    @Query("SELECT COUNT(*) FROM flip_timer_presets")
+    suspend fun countPresets(): Int
+
+    @Query("SELECT * FROM flip_timer_presets WHERE presetId = :presetId LIMIT 1")
+    suspend fun getPresetById(presetId: String): FlipTimerPresetEntity?
+
+    @Insert(onConflict = OnConflictStrategy.REPLACE)
+    suspend fun upsertPreset(preset: FlipTimerPresetEntity)
+
+    @Insert(onConflict = OnConflictStrategy.REPLACE)
+    suspend fun upsertAll(presets: List<FlipTimerPresetEntity>)
+
+    @Query("DELETE FROM flip_timer_presets WHERE presetId = :presetId")
+    suspend fun deleteById(presetId: String)
 }

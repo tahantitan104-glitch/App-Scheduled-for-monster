@@ -9,6 +9,10 @@
           "type": "string",
           "description": "Firebase Auth UID of the account owner."
         },
+        "schemaVersion": {
+          "type": "integer",
+          "description": "Schema version identifier for forward-compatible sync deserialization."
+        },
         "displayName": {
           "type": "string",
           "description": "User display name from Google Sign-In."
@@ -47,6 +51,10 @@
           "type": "string",
           "description": "Firebase Auth UID of the account owner."
         },
+        "schemaVersion": {
+          "type": "integer",
+          "description": "Schema version identifier for linked device records."
+        },
         "deviceName": {
           "type": "string",
           "description": "Human-readable device label (e.g. Pixel 8)."
@@ -55,6 +63,14 @@
           "type": "string",
           "enum": ["android"],
           "description": "Device platform identifier."
+        },
+        "androidVersion": {
+          "type": "integer",
+          "description": "Android API level reported by this linked device."
+        },
+        "appVersion": {
+          "type": "string",
+          "description": "App version string reported by this linked device."
         },
         "syncEnabled": {
           "type": "boolean",
@@ -80,12 +96,16 @@
     },
     "SyncedLockCommand": {
       "title": "Synced Lock Command",
-      "description": "Latest cross-device focus lock trigger broadcast to linked devices with sync enabled.",
+      "description": "Cross-device focus lock trigger broadcast to linked devices with sync enabled.",
       "type": "object",
       "properties": {
         "userId": {
           "type": "string",
           "description": "Firebase Auth UID of the account owner."
+        },
+        "schemaVersion": {
+          "type": "integer",
+          "description": "Schema version identifier for lock command records."
         },
         "commandId": {
           "type": "string",
@@ -116,6 +136,10 @@
           "type": "integer",
           "description": "Origin wall-clock epoch milliseconds when lock trigger was created."
         },
+        "intendedStartWallMs": {
+          "type": "integer",
+          "description": "Intended wall-clock start time in epoch milliseconds."
+        },
         "freeUseDeadlineWallMs": {
           "type": "integer",
           "description": "Target epoch milliseconds when delayed free-use ends (0 when not delayed)."
@@ -123,6 +147,22 @@
         "lockExpirationWallMs": {
           "type": "integer",
           "description": "Target epoch milliseconds when lock enforcement ends."
+        },
+        "scheduleId": {
+          "type": "string",
+          "description": "Optional synced schedule identifier when mode is SCHEDULED."
+        },
+        "occurrenceId": {
+          "type": "string",
+          "description": "Deterministic occurrence key preventing duplicate scheduled lock execution across devices."
+        },
+        "strictMode": {
+          "type": "boolean",
+          "description": "Whether Strict Mode (no recovery unlock) is active for this session."
+        },
+        "showFlipClockShortcut": {
+          "type": "boolean",
+          "description": "Whether the Flip Clock shortcut is shown on the lock screen dock."
         },
         "createdAt": {
           "type": "string",
@@ -149,6 +189,276 @@
         "createdAt",
         "updatedAt"
       ]
+    },
+    "SyncedDelayedPreset": {
+      "title": "Synced Delayed Preset",
+      "description": "User-created Delayed Lock preset synced across signed-in devices.",
+      "type": "object",
+      "properties": {
+        "userId": {
+          "type": "string",
+          "description": "Firebase Auth UID of the account owner."
+        },
+        "schemaVersion": {
+          "type": "integer",
+          "description": "Schema version identifier for preset documents."
+        },
+        "presetId": {
+          "type": "string",
+          "description": "Unique preset identifier."
+        },
+        "name": {
+          "type": "string",
+          "description": "Human-readable preset name."
+        },
+        "freeUseMinutes": {
+          "type": "integer",
+          "description": "Free-use window duration in minutes."
+        },
+        "lockDurationMinutes": {
+          "type": "integer",
+          "description": "Lock duration in minutes."
+        },
+        "originDeviceId": {
+          "type": "string",
+          "description": "Device installation ID that created or updated this preset."
+        },
+        "updatedAtWallMs": {
+          "type": "integer",
+          "description": "Wall-clock timestamp in milliseconds for deterministic last-write merge."
+        },
+        "deleted": {
+          "type": "boolean",
+          "description": "Tombstone flag marking deletion across linked devices."
+        },
+        "createdAt": {
+          "type": "string",
+          "format": "date-time",
+          "description": "Server creation timestamp."
+        },
+        "updatedAt": {
+          "type": "string",
+          "format": "date-time",
+          "description": "Server update timestamp."
+        }
+      },
+      "required": [
+        "userId",
+        "presetId",
+        "name",
+        "freeUseMinutes",
+        "lockDurationMinutes",
+        "originDeviceId",
+        "updatedAtWallMs",
+        "deleted",
+        "createdAt",
+        "updatedAt"
+      ]
+    },
+    "SyncedSchedule": {
+      "title": "Synced Schedule",
+      "description": "Schedule rules synced across signed-in devices when explicitly opted in, excluding per-device allowlists.",
+      "type": "object",
+      "properties": {
+        "userId": {
+          "type": "string",
+          "description": "Firebase Auth UID of the account owner."
+        },
+        "schemaVersion": {
+          "type": "integer",
+          "description": "Schema version identifier for schedule documents."
+        },
+        "scheduleId": {
+          "type": "string",
+          "description": "Stable cloud schedule identifier."
+        },
+        "name": {
+          "type": "string",
+          "description": "Schedule label."
+        },
+        "type": {
+          "type": "string",
+          "enum": ["ONE_TIME", "DAILY", "CUSTOM_WEEKLY"],
+          "description": "Schedule recurrence type."
+        },
+        "oneTimeDateEpochDay": {
+          "type": "integer",
+          "description": "Epoch day for one-time schedules, or -1 for recurring schedules."
+        },
+        "weekdaysMask": {
+          "type": "integer",
+          "description": "Bitmask of selected weekdays (0..127)."
+        },
+        "startHour": {
+          "type": "integer",
+          "description": "Start hour (0..23)."
+        },
+        "startMinute": {
+          "type": "integer",
+          "description": "Start minute (0..59)."
+        },
+        "lockDurationMinutes": {
+          "type": "integer",
+          "description": "Lock duration in minutes (1..1440)."
+        },
+        "enabled": {
+          "type": "boolean",
+          "description": "Whether schedule is active."
+        },
+        "syncAcrossDevices": {
+          "type": "boolean",
+          "description": "Whether schedule is configured to sync across linked devices."
+        },
+        "strictMode": {
+          "type": "boolean",
+          "description": "Whether Strict Mode (no recovery exit) is enabled on this schedule."
+        },
+        "allowSelectedApps": {
+          "type": "boolean",
+          "description": "Whether selected allowlisted apps remain accessible during this schedule."
+        },
+        "showFlipClockShortcut": {
+          "type": "boolean",
+          "description": "Whether Flip Clock shortcut is shown during this schedule."
+        },
+        "originDeviceId": {
+          "type": "string",
+          "description": "Device installation ID that saved this schedule."
+        },
+        "updatedAtWallMs": {
+          "type": "integer",
+          "description": "Wall-clock timestamp in milliseconds for deterministic merge."
+        },
+        "deleted": {
+          "type": "boolean",
+          "description": "Tombstone flag marking schedule removal."
+        },
+        "createdAt": {
+          "type": "string",
+          "format": "date-time",
+          "description": "Server creation timestamp."
+        },
+        "updatedAt": {
+          "type": "string",
+          "format": "date-time",
+          "description": "Server update timestamp."
+        }
+      },
+      "required": [
+        "userId",
+        "scheduleId",
+        "name",
+        "type",
+        "oneTimeDateEpochDay",
+        "weekdaysMask",
+        "startHour",
+        "startMinute",
+        "lockDurationMinutes",
+        "enabled",
+        "syncAcrossDevices",
+        "originDeviceId",
+        "updatedAtWallMs",
+        "deleted",
+        "createdAt",
+        "updatedAt"
+      ]
+    },
+    "SyncedLockProfileSettings": {
+      "title": "Synced Lock Profile Settings",
+      "description": "Per-lock-mode profile defaults (Strict Mode, Allow Selected Apps, Flip Clock shortcut, allowed packages) synced across signed-in devices.",
+      "type": "object",
+      "properties": {
+        "userId": { "type": "string" },
+        "schemaVersion": { "type": "integer" },
+        "profileMode": { "type": "string", "enum": ["INSTANT", "DELAYED", "SCHEDULED"] },
+        "strictMode": { "type": "boolean" },
+        "allowSelectedApps": { "type": "boolean" },
+        "showFlipClockShortcut": { "type": "boolean" },
+        "allowedPackages": {
+          "type": "array",
+          "items": { "type": "string" }
+        },
+        "originDeviceId": { "type": "string" },
+        "updatedAtWallMs": { "type": "integer" },
+        "createdAt": { "type": "string", "format": "date-time" },
+        "updatedAt": { "type": "string", "format": "date-time" }
+      },
+      "required": [
+        "userId",
+        "profileMode",
+        "strictMode",
+        "allowSelectedApps",
+        "showFlipClockShortcut",
+        "allowedPackages",
+        "originDeviceId",
+        "updatedAtWallMs",
+        "createdAt",
+        "updatedAt"
+      ]
+    },
+    "SyncedFlipClockSettings": {
+      "title": "Synced Flip Clock Settings",
+      "description": "Flip Clock display preferences synced across linked devices (never stores local hardware brightness).",
+      "type": "object",
+      "properties": {
+        "userId": { "type": "string" },
+        "schemaVersion": { "type": "integer" },
+        "docId": { "type": "string", "enum": ["flip_clock_settings"] },
+        "use24HourFormat": { "type": "boolean" },
+        "keepScreenAwake": { "type": "boolean" },
+        "showDate": { "type": "boolean" },
+        "autoRepeat": { "type": "boolean" },
+        "zoomFraction": { "type": "number" },
+        "originDeviceId": { "type": "string" },
+        "updatedAtWallMs": { "type": "integer" },
+        "createdAt": { "type": "string", "format": "date-time" },
+        "updatedAt": { "type": "string", "format": "date-time" }
+      },
+      "required": [
+        "userId",
+        "docId",
+        "use24HourFormat",
+        "keepScreenAwake",
+        "showDate",
+        "autoRepeat",
+        "zoomFraction",
+        "originDeviceId",
+        "updatedAtWallMs",
+        "createdAt",
+        "updatedAt"
+      ]
+    },
+    "SyncedFlipTimerPreset": {
+      "title": "Synced Flip Timer Preset",
+      "description": "Flip Clock countdown preset (built-in or custom) synced across linked devices with LWW tombstones.",
+      "type": "object",
+      "properties": {
+        "userId": { "type": "string" },
+        "schemaVersion": { "type": "integer" },
+        "presetId": { "type": "string" },
+        "name": { "type": "string" },
+        "durationSeconds": { "type": "integer" },
+        "builtIn": { "type": "boolean" },
+        "sortOrder": { "type": "integer" },
+        "originDeviceId": { "type": "string" },
+        "updatedAtWallMs": { "type": "integer" },
+        "deleted": { "type": "boolean" },
+        "createdAt": { "type": "string", "format": "date-time" },
+        "updatedAt": { "type": "string", "format": "date-time" }
+      },
+      "required": [
+        "userId",
+        "presetId",
+        "name",
+        "durationSeconds",
+        "builtIn",
+        "sortOrder",
+        "originDeviceId",
+        "updatedAtWallMs",
+        "deleted",
+        "createdAt",
+        "updatedAt"
+      ]
     }
   },
   "firestore": {
@@ -168,7 +478,37 @@
       "schema": {
         "$ref": "#/entities/SyncedLockCommand"
       },
-      "description": "Single deterministic sync document (lock_command) broadcasting cross-device focus locks."
+      "description": "Deterministic sync documents (lock_command and flip_clock_settings)."
+    },
+    "/users/{userId}/lock_commands/{commandId}": {
+      "schema": {
+        "$ref": "#/entities/SyncedLockCommand"
+      },
+      "description": "Versioned cross-device lock commands collection with commandId and occurrenceId deduplication."
+    },
+    "/users/{userId}/presets/{presetId}": {
+      "schema": {
+        "$ref": "#/entities/SyncedDelayedPreset"
+      },
+      "description": "User-created Delayed Lock presets synced across linked devices."
+    },
+    "/users/{userId}/schedules/{scheduleId}": {
+      "schema": {
+        "$ref": "#/entities/SyncedSchedule"
+      },
+      "description": "Schedules explicitly opted into All Linked Devices sync."
+    },
+    "/users/{userId}/lock_profiles/{profileMode}": {
+      "schema": {
+        "$ref": "#/entities/SyncedLockProfileSettings"
+      },
+      "description": "Per-mode lock profile defaults (INSTANT, DELAYED, SCHEDULED) synced across linked devices."
+    },
+    "/users/{userId}/flip_timer_presets/{presetId}": {
+      "schema": {
+        "$ref": "#/entities/SyncedFlipTimerPreset"
+      },
+      "description": "Flip Clock timer presets (up to 15 active) synced with tombstone LWW resolution."
     }
   }
 }

@@ -29,10 +29,16 @@ class ResolveSystemReceiver : BroadcastReceiver() {
                         }
                         action == Intent.ACTION_TIME_CHANGED ||
                             action == Intent.ACTION_TIMEZONE_CHANGED ||
+                            action == Intent.ACTION_MY_PACKAGE_REPLACED ||
                             (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S &&
                                 action == AlarmManager.ACTION_SCHEDULE_EXACT_ALARM_PERMISSION_STATE_CHANGED) -> {
                             engine.onSystemBootOrTimeChange(isBoot = false)
                         }
+                    }
+                    val current = engine.activeSession.value
+                    val hasSchedules = app.container.scheduleRepository.getAllSchedules().any { it.isEnabled }
+                    if ((current != null && !current.isTerminal) || hasSchedules) {
+                        com.example.service.SessionRecoveryJobService.scheduleIfNeeded(context)
                     }
                 }
             } finally {

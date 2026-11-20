@@ -97,6 +97,8 @@ fun BabyCloudMascot(
     val floatOffsetY = when {
         !animateMotion -> 0f
         animationState == MascotAnimationState.CELEBRATING -> -7f - abs(activeWave) * 7f
+        animationState == MascotAnimationState.HAPPY_BOUNCE -> -abs(activeWave) * 15f
+        animationState == MascotAnimationState.GENTLE_FLOAT -> -9f + sin(rawCelebrationWave * 0.5f) * 5.5f
         animationState == MascotAnimationState.HAPPY_DANCE -> rawFloatOffsetY * 1.25f - 4f
         animationState == MascotAnimationState.POINTING -> -4.5f + rawFloatOffsetY * 0.4f
         else -> rawFloatOffsetY
@@ -111,7 +113,11 @@ fun BabyCloudMascot(
         ),
         label = "cloud_sway_x"
     )
-    val swayOffsetX = if (animateMotion) rawSwayOffsetX else 0f
+    val swayOffsetX = when {
+        !animateMotion -> 0f
+        animationState == MascotAnimationState.CURIOUS_SWAY -> activeWave * 11f
+        else -> rawSwayOffsetX
+    }
 
     val rawGentleTilt by transition.animateFloat(
         initialValue = -1.6f,
@@ -128,6 +134,7 @@ fun BabyCloudMascot(
             animationState == MascotAnimationState.HEAD_EAR_ATTENTION -> -4.5f
             animationState == MascotAnimationState.POINTING -> -5.5f
             animationState == MascotAnimationState.CURIOUS -> 6.5f
+            animationState == MascotAnimationState.CURIOUS_SWAY -> activeWave * 9.5f
             animationState == MascotAnimationState.CELEBRATING -> activeWave * 4.5f
             else -> 0f
         },
@@ -149,11 +156,25 @@ fun BabyCloudMascot(
         label = "cloud_breathe"
     )
     val celebrateScale by animateFloatAsState(
-        targetValue = if (!reducedMotion && animationState == MascotAnimationState.CELEBRATING) 1.05f else 1f,
+        targetValue = when {
+            reducedMotion -> 1f
+            animationState == MascotAnimationState.CELEBRATING -> 1.05f
+            animationState == MascotAnimationState.GENTLE_FLOAT -> 1.04f + 0.03f * sin(rawCelebrationWave * 0.5f)
+            else -> 1f
+        },
         animationSpec = tween(durationMillis = 300, easing = EaseInOutSine),
         label = "cloud_celebrate_scale"
     )
     val breatheScale = (if (animateMotion) rawBreatheScale else 1f) * celebrateScale
+
+    // Squash-and-stretch deformation exclusively for HAPPY_BOUNCE
+    val bounceStretchY = if (animateMotion && animationState == MascotAnimationState.HAPPY_BOUNCE) {
+        val jumpFactor = abs(activeWave) // 0 at ground impact, 1 at peak
+        0.90f + jumpFactor * 0.22f
+    } else 1f
+    val bounceSquashX = if (animateMotion && animationState == MascotAnimationState.HAPPY_BOUNCE) {
+        1f / bounceStretchY
+    } else 1f
 
     val tuftLift by animateFloatAsState(
         targetValue = when {
@@ -161,6 +182,9 @@ fun BabyCloudMascot(
             !animateMotion -> 0f
             animationState == MascotAnimationState.POINTING -> 0.92f
             animationState == MascotAnimationState.CELEBRATING -> 0.85f + 0.15f * activeWave
+            animationState == MascotAnimationState.HAPPY_BOUNCE -> 0.45f + 0.40f * abs(activeWave)
+            animationState == MascotAnimationState.CURIOUS_SWAY -> 0.35f + 0.25f * activeWave
+            animationState == MascotAnimationState.GENTLE_FLOAT -> 0.30f
             animationState == MascotAnimationState.HAPPY_DANCE -> 0.65f + 0.25f * activeWave
             else -> 0f
         },
@@ -180,7 +204,11 @@ fun BabyCloudMascot(
         ),
         label = "cloud_aura_pulse"
     )
-    val auraPulse = if (animateMotion) rawAuraPulse else 1f
+    val auraPulse = when {
+        !animateMotion -> 1f
+        animationState == MascotAnimationState.GENTLE_FLOAT -> rawAuraPulse * 1.12f
+        else -> rawAuraPulse
+    }
 
     val rawSparklePhase by transition.animateFloat(
         initialValue = 0f,
@@ -221,6 +249,7 @@ fun BabyCloudMascot(
         reducedMotion -> 1f
         isBlinkingExternal != null || animationState == MascotAnimationState.BLINK -> animatedExternalEye
         !animateMotion -> 1f
+        animationState == MascotAnimationState.GENTLE_FLOAT -> 0.72f
         else -> internalBlinkFraction
     }
 
@@ -290,7 +319,11 @@ fun BabyCloudMascot(
 
         translate(left = swayOffsetX * density, top = floatOffsetY * density) {
             rotate(degrees = gentleTilt, pivot = center) {
-                scale(scale = breatheScale, pivot = center) {
+                scale(
+                    scaleX = breatheScale * bounceSquashX,
+                    scaleY = breatheScale * bounceStretchY,
+                    pivot = Offset(w * 0.50f, h * 0.69f)
+                ) {
                     // Subtle floating micro-puff wisp behind upper-right
                     drawCircle(
                         brush = Brush.radialGradient(
@@ -418,6 +451,7 @@ fun BabyCloudMascot(
                     // Gaze subtly shifts toward lifted puff when pointing/curious
                     val gazeShiftX = when (animationState) {
                         MascotAnimationState.CURIOUS -> -w * 0.004f
+                        MascotAnimationState.CURIOUS_SWAY -> activeWave * w * 0.006f
                         MascotAnimationState.POINTING -> w * 0.004f
                         else -> 0f
                     }
@@ -428,7 +462,9 @@ fun BabyCloudMascot(
                     val leftEyeX = w * 0.415f
                     val rightEyeX = w * 0.585f
                     val browLift = if (animationState == MascotAnimationState.CELEBRATING ||
-                        animationState == MascotAnimationState.CURIOUS
+                        animationState == MascotAnimationState.CURIOUS ||
+                        animationState == MascotAnimationState.CURIOUS_SWAY ||
+                        animationState == MascotAnimationState.HAPPY_BOUNCE
                     ) -h * 0.010f else 0f
 
                     drawCloudBrow(paths.browPath, Offset(leftEyeX, eyeY - h * 0.048f + browLift), w * 0.042f)

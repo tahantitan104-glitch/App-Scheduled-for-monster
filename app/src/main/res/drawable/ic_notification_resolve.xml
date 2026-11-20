@@ -5,16 +5,15 @@
     android:viewportWidth="24"
     android:viewportHeight="24">
 
-    <!-- Monochrome open geometric focus ring for status bar notifications -->
+    <!-- Monochrome transparent-background small notification silhouette of RESOLVE Focus Symbol -->
     <path
         android:fillColor="@android:color/transparent"
-        android:pathData="M19.42,9.59 A7.8,7.8 0 1,1 16.58,5.69"
+        android:pathData="M19.01,8.58 A7.8,7.8 0 1,1 15.42,4.99"
         android:strokeColor="#FFFFFF"
         android:strokeLineCap="round"
-        android:strokeWidth="2.5" />
+        android:strokeWidth="2.6" />
 
-    <!-- Crisp central focus point -->
     <path
         android:fillColor="#FFFFFF"
-        android:pathData="M12,9.3 a2.7,2.7 0 1,0 0,5.4 a2.7,2.7 0 1,0 0,-5.4 z" />
+        android:pathData="M12,9.65 a2.35,2.35 0 1,0 0,4.7 a2.35,2.35 0 1,0 0,-4.7 z" />
 </vector>

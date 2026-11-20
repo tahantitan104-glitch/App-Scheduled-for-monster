@@ -60,7 +60,7 @@ import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.example.designsystem.JetBrainsMonoFamily
-import com.example.designsystem.ResolveColors
+import com.example.designsystem.LocalResolveExtendedPalette
 import com.example.domain.model.DurationSelection
 import kotlinx.coroutines.flow.distinctUntilChanged
 import kotlinx.coroutines.launch
@@ -89,6 +89,7 @@ fun DurationSelector(
     modifier: Modifier = Modifier,
     testTagPrefix: String = "duration"
 ) {
+    val palette = LocalResolveExtendedPalette.current
     var showNumericDialog by remember { mutableStateOf(false) }
     val haptic = LocalHapticFeedback.current
     val displayInteraction = remember { MutableInteractionSource() }
@@ -98,7 +99,7 @@ fun DurationSelector(
             .fillMaxWidth()
             .resolveGlassCard(
                 cornerRadius = 24.dp,
-                borderColor = ResolveColors.ForestBorderGlow.copy(alpha = 0.65f)
+                borderColor = palette.cardBorder
             )
             .padding(20.dp)
     ) {
@@ -115,33 +116,33 @@ fun DurationSelector(
                     modifier = Modifier
                         .size(28.dp)
                         .clip(CircleShape)
-                        .background(ResolveColors.MintSoftContainer),
+                        .background(palette.accentSoftContainer),
                     contentAlignment = Alignment.Center
                 ) {
                     Icon(
                         imageVector = ResolveIcons.Timer,
                         contentDescription = null,
-                        tint = ResolveColors.MintAccent,
+                        tint = palette.accent,
                         modifier = Modifier.size(16.dp)
                     )
                 }
                 Text(
                     text = label,
                     style = MaterialTheme.typography.titleMedium,
-                    color = ResolveColors.TextPrimary
+                    color = palette.textPrimary
                 )
             }
             Box(
                 modifier = Modifier
                     .clip(CircleShape)
-                    .background(ResolveColors.MintSoftContainer)
-                    .border(1.dp, ResolveColors.MintAccent.copy(alpha = 0.35f), CircleShape)
+                    .background(palette.accentSoftContainer)
+                    .border(1.dp, palette.accent.copy(alpha = 0.35f), CircleShape)
                     .padding(horizontal = 10.dp, vertical = 4.dp)
             ) {
                 Text(
                     text = duration.formattedCompact(),
                     style = MaterialTheme.typography.labelMedium.copy(fontFamily = JetBrainsMonoFamily),
-                    color = ResolveColors.MintAccent
+                    color = palette.accent
                 )
             }
         }
@@ -157,12 +158,12 @@ fun DurationSelector(
                 .background(
                     Brush.verticalGradient(
                         colors = listOf(
-                            ResolveColors.ForestDeep,
-                            ResolveColors.ForestSecondary
+                            palette.background,
+                            palette.cardBottom
                         )
                     )
                 )
-                .border(1.dp, ResolveColors.MintAccent.copy(alpha = 0.28f), RoundedCornerShape(20.dp))
+                .border(1.dp, palette.accent.copy(alpha = 0.28f), RoundedCornerShape(20.dp))
                 .clickable(
                     interactionSource = displayInteraction,
                     indication = androidx.compose.material3.ripple()
@@ -188,19 +189,19 @@ fun DurationSelector(
                         fontWeight = FontWeight.SemiBold,
                         fontFeatureSettings = "tnum"
                     ),
-                    color = ResolveColors.TextPrimary
+                    color = palette.textPrimary
                 )
                 Box(
                     modifier = Modifier
                         .size(34.dp)
                         .clip(CircleShape)
-                        .background(ResolveColors.MintSoftContainer.copy(alpha = 0.85f)),
+                        .background(palette.accentSoftContainer.copy(alpha = 0.85f)),
                     contentAlignment = Alignment.Center
                 ) {
                     Icon(
                         imageVector = Icons.Outlined.Edit,
                         contentDescription = "Edit duration directly",
-                        tint = ResolveColors.MintAccent,
+                        tint = palette.accent,
                         modifier = Modifier.size(16.dp)
                     )
                 }
@@ -231,7 +232,7 @@ fun DurationSelector(
                     fontFamily = JetBrainsMonoFamily,
                     fontWeight = FontWeight.Bold
                 ),
-                color = ResolveColors.MintAccent.copy(alpha = 0.7f),
+                color = palette.accent.copy(alpha = 0.7f),
                 modifier = Modifier.padding(top = 16.dp)
             )
 
@@ -256,12 +257,12 @@ fun DurationSelector(
             items(QUICK_PRESETS, key = { it.label }) { preset ->
                 val isSelected = duration.totalMinutes == preset.totalMinutes
                 val chipContainer by animateColorAsState(
-                    targetValue = if (isSelected) ResolveColors.MintSoftContainer else ResolveColors.ForestSecondary,
+                    targetValue = if (isSelected) palette.accentSoftContainer else palette.background,
                     animationSpec = tween(200),
                     label = "preset_bg"
                 )
                 val chipLabel by animateColorAsState(
-                    targetValue = if (isSelected) ResolveColors.MintAccent else ResolveColors.TextSecondary,
+                    targetValue = if (isSelected) palette.accent else palette.textSecondary,
                     animationSpec = tween(200),
                     label = "preset_fg"
                 )
@@ -287,8 +288,8 @@ fun DurationSelector(
                     border = FilterChipDefaults.filterChipBorder(
                         enabled = true,
                         selected = isSelected,
-                        borderColor = ResolveColors.ForestOutline,
-                        selectedBorderColor = ResolveColors.MintAccent.copy(alpha = 0.8f)
+                        borderColor = palette.cardBorder,
+                        selectedBorderColor = palette.accent.copy(alpha = 0.8f)
                     ),
                     modifier = Modifier.testTag("${testTagPrefix}_preset_${preset.label}")
                 )
@@ -369,6 +370,7 @@ private fun IndependentWheelPicker(
             }
     }
 
+    val palette = LocalResolveExtendedPalette.current
     Column(
         modifier = modifier,
         horizontalAlignment = Alignment.CenterHorizontally
@@ -376,7 +378,7 @@ private fun IndependentWheelPicker(
         Text(
             text = title,
             style = MaterialTheme.typography.labelSmall.copy(letterSpacing = 1.2.sp),
-            color = ResolveColors.TextSecondary
+            color = palette.textSecondary
         )
         Spacer(modifier = Modifier.height(6.dp))
         Box(
@@ -384,8 +386,8 @@ private fun IndependentWheelPicker(
                 .fillMaxWidth()
                 .height(itemHeight * 3)
                 .clip(RoundedCornerShape(18.dp))
-                .background(ResolveColors.ForestDeep.copy(alpha = 0.72f))
-                .border(1.dp, ResolveColors.ForestOutline, RoundedCornerShape(18.dp))
+                .background(palette.background.copy(alpha = 0.72f))
+                .border(1.dp, palette.cardBorder, RoundedCornerShape(18.dp))
         ) {
             // Center selection lens band
             Box(
@@ -398,13 +400,13 @@ private fun IndependentWheelPicker(
                     .background(
                         Brush.horizontalGradient(
                             colors = listOf(
-                                ResolveColors.MintSoftContainer.copy(alpha = 0.65f),
-                                ResolveColors.MintSoftContainer.copy(alpha = 0.92f),
-                                ResolveColors.MintSoftContainer.copy(alpha = 0.65f)
+                                palette.accentSoftContainer.copy(alpha = 0.65f),
+                                palette.accentSoftContainer.copy(alpha = 0.92f),
+                                palette.accentSoftContainer.copy(alpha = 0.65f)
                             )
                         )
                     )
-                    .border(1.dp, ResolveColors.MintAccent.copy(alpha = 0.55f), RoundedCornerShape(12.dp))
+                    .border(1.dp, palette.accent.copy(alpha = 0.55f), RoundedCornerShape(12.dp))
             )
 
             LazyColumn(
@@ -443,7 +445,7 @@ private fun IndependentWheelPicker(
                                 fontWeight = if (isCenter) FontWeight.Bold else FontWeight.Normal,
                                 fontFeatureSettings = "tnum"
                             ),
-                            color = if (isCenter) ResolveColors.MintBright else ResolveColors.TextSecondary,
+                            color = if (isCenter) palette.accentStrong else palette.textSecondary,
                             textAlign = TextAlign.Center,
                             modifier = Modifier.alpha(itemAlpha)
                         )
@@ -459,7 +461,7 @@ private fun IndependentWheelPicker(
                     .height(34.dp)
                     .background(
                         Brush.verticalGradient(
-                            colors = listOf(ResolveColors.ForestDeep.copy(alpha = 0.95f), Color.Transparent)
+                            colors = listOf(palette.background.copy(alpha = 0.95f), Color.Transparent)
                         )
                     )
             )
@@ -470,7 +472,7 @@ private fun IndependentWheelPicker(
                     .height(34.dp)
                     .background(
                         Brush.verticalGradient(
-                            colors = listOf(Color.Transparent, ResolveColors.ForestDeep.copy(alpha = 0.95f))
+                            colors = listOf(Color.Transparent, palette.background.copy(alpha = 0.95f))
                         )
                     )
             )
@@ -484,18 +486,19 @@ private fun DirectDurationEntryDialog(
     onDismiss: () -> Unit,
     onConfirm: (DurationSelection) -> Unit
 ) {
+    val palette = LocalResolveExtendedPalette.current
     var hoursText by remember { mutableStateOf(initialDuration.normalizedHours.toString()) }
     var minutesText by remember { mutableStateOf(initialDuration.normalizedMinutes.toString()) }
     var errorMessage by remember { mutableStateOf<String?>(null) }
 
     AlertDialog(
         onDismissRequest = onDismiss,
-        containerColor = ResolveColors.ForestSurface,
+        containerColor = palette.cardBottom,
         title = {
             Text(
                 text = "Set Duration",
                 style = MaterialTheme.typography.titleLarge,
-                color = ResolveColors.TextPrimary
+                color = palette.textPrimary
             )
         },
         text = {
@@ -505,7 +508,7 @@ private fun DirectDurationEntryDialog(
                     Text(
                         text = "Enter hours (0–23) and minutes (0–59).",
                         style = MaterialTheme.typography.bodyMedium,
-                        color = ResolveColors.TextSecondary
+                        color = palette.textSecondary
                     )
                     Row(horizontalArrangement = Arrangement.spacedBy(12.dp)) {
                         OutlinedTextField(
@@ -543,7 +546,7 @@ private fun DirectDurationEntryDialog(
                         Text(
                             text = errorMessage!!,
                             style = MaterialTheme.typography.bodyMedium,
-                            color = ResolveColors.ErrorCoral
+                            color = palette.error
                         )
                     }
                 }
@@ -575,7 +578,7 @@ private fun DirectDurationEntryDialog(
                 },
                 modifier = Modifier.testTag("direct_duration_confirm")
             ) {
-                Text("Apply", color = ResolveColors.MintAccent)
+                Text("Apply", color = palette.accent)
             }
         },
         dismissButton = {
@@ -588,7 +591,7 @@ private fun DirectDurationEntryDialog(
                     onDismiss()
                 }
             ) {
-                Text("Cancel", color = ResolveColors.TextSecondary)
+                Text("Cancel", color = palette.textSecondary)
             }
         }
     )

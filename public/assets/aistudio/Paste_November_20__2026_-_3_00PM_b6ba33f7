@@ -1,0 +1,899 @@
+RESOLVE — COMPLETE MASTER IMPLEMENTATION PROMPT
+
+More Navigation + Focus Guard + Landscape Tilt Mode + Flip Clock + Color Inversion + Modes Restoration
+
+Implement all the following improvements in the existing RESOLVE application.
+
+This is a consolidated implementation request covering all previously discussed and approved design decisions.
+
+The objective is to complete these improvements together, integrate them properly into the existing application, preserve all working features, and deliver a polished, stable, responsive user experience.
+
+IMPORTANT: Treat the specifications below as the authoritative implementation requirements. Do not reinterpret, unnecessarily redesign, or omit previously agreed decisions.
+
+---
+
+PART 1 — MORE NAVIGATION REDESIGN
+
+Redesign and reorganize the More Navigation page according to the following exact section order:
+
+1. Profile & Account Sync
+2. Permissions
+3. System Health
+4. Focus Settings
+5. Mascot Selection
+6. Notification Settings
+7. About RESOLVE
+
+Do not create a separate Settings menu or an "Other Preferences" section.
+
+All existing relevant settings must be organized directly within these sections.
+
+1. Profile & Account Sync
+
+Place a compact Profile Card at the top of the More page.
+
+Display:
+
+- Profile Picture
+- Profile Name
+- Connected Google Account
+- Google Sync Status
+
+Requirements:
+
+- Maintain a compact, attractive profile layout.
+- Support profile picture and name management.
+- Display the actual Google account connection status.
+- Provide access to existing Google synchronization and connected-device management.
+- Preserve existing Multi-Device Sync functionality.
+
+2. Permissions
+
+Place Permissions immediately below the Profile Card.
+
+Requirements:
+
+- Display only permissions that have not yet been granted.
+- Show their current status and appropriate enable actions.
+- Automatically hide each permission after successful authorization.
+- Automatically hide the entire Permissions section when all required permissions are granted.
+- Never provide an option to display previously granted permissions.
+- Use actual Android permission states rather than unreliable stored UI values.
+
+3. System Health
+
+Place System Health directly below Permissions.
+
+Use one unified card with a vertical list layout.
+
+Include:
+
+- System Status
+- Device Analysis
+- Hardware Check
+- Readiness Diagnostics
+- System Repair
+
+Each item must have:
+
+- Appropriate icon
+- Clear title
+- Short description
+- Navigation indicator
+
+Keep the five existing functions organized within the same System Health section.
+
+Preserve their existing functionality.
+
+4. Focus Settings
+
+Place Focus Settings immediately below System Health.
+
+Organize existing Focus-related settings within this section.
+
+Include the new Landscape Tilt Mode setting described in Part 3.
+
+Preserve all existing Focus configurations and functionality.
+
+Do not introduce unnecessary duplicate controls.
+
+5. Mascot Selection
+
+Place Mascot Selection immediately after Focus Settings.
+
+Keep the complete existing Mascot Selection interface directly within the More page.
+
+Do not redirect users to another page.
+
+Preserve:
+
+- Baby Cloud
+- RESOLVE Bunny
+- Mascot Selection
+- Animation Previews
+- Existing Animation Controls
+- Reduced Motion
+
+Keep the interface compact and visually consistent.
+
+6. Notification Settings
+
+Place Notification Settings immediately below Mascot Selection.
+
+All existing notification-related settings and controls must remain directly accessible within this section.
+
+Do not create a separate settings page.
+
+Preserve existing notification functionality and permission-dependent behavior.
+
+7. About RESOLVE
+
+Place About RESOLVE at the absolute bottom of the More page.
+
+Use the existing About RESOLVE card design.
+
+The card must support Expand and Collapse interactions.
+
+When expanded, display all existing About-related information directly within the same page.
+
+Include:
+
+- About RESOLVE
+- What RESOLVE Offers
+- How RESOLVE Works
+- How to Use RESOLVE
+- Practical Tips
+- Multi-Device Sync Information
+- Developer Information
+- All other existing About-related content
+
+Do not navigate to another page.
+
+Preserve the previously requested slow keyboard-typing animation when expanded.
+
+Display information progressively with smooth animation. Avoid unnecessarily restarting the animation during ordinary scrolling or UI updates.
+
+---
+
+PART 2 — FOCUS GUARD LANDSCAPE LOCK SCREEN REFINEMENT
+
+Use the previously supplied Landscape Lock Screen screenshot as the visual reference.
+
+The current layout needs better visual balance between its left and right sides.
+
+Maintain the existing:
+
+- Dark background
+- Emerald-green accents
+- Rounded components
+- Mascot appearance
+- Focus Guard status indicator
+- Timer functionality
+- Overall RESOLVE visual identity
+
+1. Left Side — Mascot
+
+The current Mascot appears too low.
+
+Adjust its position:
+
+- Move the Mascot slightly upward.
+- Keep it visually centered within its allocated area.
+- Preserve its existing size, appearance, animation, and visual effects.
+- Maintain comfortable spacing around it.
+
+2. Left Side — Remaining Timer
+
+Move the Remaining Timer Card slightly upward.
+
+Requirements:
+
+- Position it closer to the Mascot.
+- Maintain comfortable spacing between both elements.
+- Keep the timer large, readable, and prominent.
+- Preserve countdown functionality.
+- Preserve the progress indicator and timer status.
+
+The Mascot and Remaining Timer must form a balanced vertical composition.
+
+Avoid placing either element unnecessarily close to the bottom screen boundary.
+
+3. Right Side — Motivational Quote
+
+Keep the existing Focus Reminder / Motivational Quote in its current general position.
+
+Preserve:
+
+- Existing quote functionality
+- Typography
+- Background treatment
+- Rounded container
+- Motivational message behavior
+
+Only adjust spacing if necessary to accommodate the revised button layout.
+
+4. Right Side — Vertical Action Buttons
+
+Replace the existing horizontal button arrangement with a vertical arrangement.
+
+The exact order must be:
+
+1. Allowed Apps
+2. Phone Call
+3. Emergency
+4. Flip Clock
+
+Each button must appear directly below the previous button.
+
+Button Design
+
+Each button must contain:
+
+- Recognizable icon
+- Short text label
+- Consistent dimensions
+- Appropriate spacing
+- Clear interaction feedback
+
+Keep both icons and labels rather than icon-only buttons.
+
+Use compact buttons with readable typography.
+
+Flip Clock Visibility
+
+Respect the existing Flip Clock visibility preference.
+
+- If enabled, show Flip Clock beneath Emergency.
+- If disabled, completely hide the Flip Clock button.
+- The other three buttons must remain visible and functional.
+- Do not create a duplicate visibility setting.
+- Preserve the existing Flip Clock launch functionality.
+
+---
+
+PART 3 — CUSTOMIZABLE LANDSCAPE TILT MODE
+
+Introduce a separate setting named:
+
+Landscape Tilt Mode
+
+Place it inside the existing Focus Settings section in More.
+
+Suggested description:
+
+"Allow the Focus Guard screen to switch to Landscape mode when you tilt your phone."
+
+Default Behavior
+
+- Default state: OFF.
+- Normal presentation: Portrait.
+- Do not automatically activate Landscape presentation when disabled.
+
+When Enabled
+
+- Detect actual device orientation.
+- When the phone enters Landscape orientation, activate the refined Landscape Focus Guard layout.
+- Display the Mascot and Remaining Timer on the left.
+- Display the Motivational Quote and vertical action buttons on the right.
+- Respect the existing Flip Clock visibility preference.
+- Return to the normal Portrait presentation when the phone returns to Portrait orientation.
+
+When Disabled
+
+- Do not activate the Landscape layout through phone tilting.
+- Keep the normal Portrait presentation.
+- Prevent accidental orientation changes from activating the Landscape interface.
+
+Technical Requirements
+
+- Use the appropriate Android orientation detection mechanism.
+- Avoid unnecessary sensor polling and excessive battery consumption.
+- Ensure smooth transitions without flickering or layout jumps.
+- Save the user's preference across app restarts.
+- Do not alter the orientation behavior of unrelated application screens.
+
+---
+
+PART 4 — COMPLETE FLIP CLOCK EXPERIENCE REDESIGN
+
+1. Selected Reference Application
+
+The selected reference is:
+
+Flip Clock: World Clock — Developer: wssc
+
+Google Play package:
+
+"com.wssc.simpleclock"
+
+Official reference:
+
+https://play.google.com/store/apps/details?id=com.wssc.simpleclock
+
+This is the specific application previously selected as our Flip Clock design and interaction reference.
+
+Study its characteristic full-screen flip-clock presentation, split-flap design, digit transitions, and interaction principles.
+
+The objective is to reproduce a comparable experience within RESOLVE using an original implementation and original assets.
+
+Do not simply create a conventional digital clock with large numbers.
+
+2. Remove the Incorrect Current Implementation
+
+The current Flip Clock implementation does not meet our agreed requirements.
+
+The following problems must be corrected:
+
+- Flat-looking digital number displays.
+- Unnecessary black pocket-like containers.
+- Incorrect digit proportions.
+- Missing realistic split-flap appearance.
+- Missing or inadequate page-flipping animation.
+- Poor visual depth.
+- Overall appearance resembling ordinary digital timer cards.
+
+Remove the unnecessary black pocket-like boxes and incorrect decorative containers.
+
+Rebuild the clock display around the actual split-flap concept.
+
+3. Authentic Split-Flap Clock Design
+
+The main clock must have a realistic split-flap appearance.
+
+Digit Structure
+
+- Large, bold, rounded, soft-grey digits.
+- Deep black background.
+- Every digit must have an upper and lower flap.
+- A clearly visible horizontal split must run through the center of each digit.
+- The upper and lower portions must form one continuous digit.
+- Maintain subtle physical separation and mechanical depth.
+- Use restrained shadows and realistic perspective.
+- Keep digit proportions and spacing consistent.
+
+The horizontal center split is essential.
+
+Do not replace the split-flap structure with ordinary text, flat number cards, or unrelated rectangular containers.
+
+4. Realistic Flip Animation
+
+Implement a genuine split-flap page-turn animation.
+
+When a digit changes:
+
+1. The upper flap must rotate around its horizontal center axis.
+2. The rotating flap must create a realistic mechanical page-turn effect.
+3. The next digit must become visible naturally.
+4. The lower portion must complete the corresponding transition.
+5. The animation must have realistic perspective and depth.
+6. The final digit must align perfectly with the new upper and lower flap.
+
+Avoid:
+
+- Simple fading.
+- Ordinary sliding.
+- Basic scaling.
+- Abrupt number replacement.
+- Artificial animation that does not resemble a mechanical flip.
+
+Use smooth, balanced animation timing.
+
+The colon between time groups must remain static and must not participate in digit-flipping animation.
+
+Apply the same visual system and animation principles consistently to Clock, Timer, and Stopwatch modes.
+
+5. Full-Screen Clock Presentation
+
+When entering Flip Clock mode, open Clock mode first.
+
+The clock should occupy the main screen prominently.
+
+Requirements:
+
+- Large central clock display.
+- Balanced horizontal and vertical positioning.
+- Clearly visible split-flap digits.
+- Static colon.
+- Default time format: 12-hour.
+- Preserve the existing 12-hour/24-hour selection setting.
+- Display the date and day in the existing agreed compact presentation.
+- Avoid unnecessary labels and decorative elements.
+
+The clock must look like a dedicated full-screen Flip Clock, not an ordinary settings screen.
+
+Hide the bottom navigation while Flip Clock is active.
+
+Android Back must exit Flip Clock and restore the previous application state correctly.
+
+6. Flip Clock Navigation and Gestures
+
+Preserve the agreed mode order:
+
+- Clock opens first.
+- Timer is accessible on the left.
+- Stopwatch is accessible on the right.
+
+Support:
+
+- Horizontal swipe to switch between Clock, Timer, and Stopwatch.
+- Swipe-based brightness adjustment.
+- Two-finger pinch gesture to zoom the clock display.
+- Tap to reveal controls.
+- Automatic control hiding after approximately 5 seconds of inactivity.
+
+Use the established gesture behavior consistently.
+
+Avoid conflicting gesture detection or accidental mode switching.
+
+Keep the mode navigation compact and unobtrusive.
+
+7. Timer Mode — Major Layout Correction
+
+The current Timer Mode incorrectly displays its preset list too prominently.
+
+This must be corrected.
+
+Initial Timer Screen
+
+When entering Timer Mode:
+
+- Show the large split-flap Timer Display prominently.
+- Use the same visual size and design language as the main Clock Display.
+- Keep the screen clean and focused.
+- Do not immediately display the entire preset list.
+- Do not allow settings or preset controls to dominate the initial screen.
+
+A previously selected/default timer preset must remain available as the initial timer duration.
+
+The user should first see the actual Timer Display.
+
+Scrollable Timer Configuration
+
+Place preset and configuration controls below the main Timer Display in a vertically scrollable area.
+
+The user must scroll down to access them.
+
+Preserve these exact presets:
+
+- 1 Minute
+- 5 Minutes
+- 10 Minutes
+- 15 Minutes
+- 25 Minutes
+- 30 Minutes
+- 60 Minutes
+- 90 Minutes
+- 120 Minutes
+
+Also include:
+
+- Custom Duration Button
+- Custom Duration Input
+
+Use the previously selected vertical preset layout.
+
+Selecting a preset must immediately update the large Flip Clock Timer Display.
+
+Do not force the user to navigate to another settings page just to select a duration.
+
+Keep the initial Timer screen uncluttered.
+
+8. Timer Controls and Behavior
+
+Preserve the previously confirmed specifications:
+
+- Start Behaviour: Manual.
+- Pause: Available.
+- Resume: Available.
+- Reset: Confirmation required.
+- Switching between Clock, Timer, and Stopwatch must not interrupt an active timer.
+
+Preserve existing timer completion notification behavior.
+
+The timer must continue functioning when the app moves into the background.
+
+Preserve:
+
+- Background timer continuation.
+- Recent Apps behavior: Continue.
+- Timer completion notification.
+- Force-stop recovery: Restore the previous timer state where technically possible.
+- Notification permission handling.
+
+Do not reset or lose an active timer merely because the user changes display modes.
+
+Use an accurate elapsed-time calculation rather than relying solely on UI update intervals.
+
+9. Stopwatch Mode
+
+Use the same full-screen split-flap visual design.
+
+Preserve these specifications:
+
+- Display seconds in MM:SS format.
+- Manual Start.
+- Pause and Resume.
+- No Lap functionality.
+- Reset immediately to 00:00.
+- Keep controls minimal.
+- Preserve existing overlay-control behavior.
+
+Do not turn the Stopwatch into a conventional small digital stopwatch card.
+
+10. Flip Clock Brightness
+
+Preserve the existing brightness specification:
+
+- Low sensitivity.
+- Continuous visual brightness indicator.
+- Small horizontal indicator bar.
+- No numerical percentage display.
+
+The brightness adjustment gesture must work smoothly.
+
+Restore the previous brightness level when exiting Flip Clock mode.
+
+11. Flip Clock Zoom
+
+Preserve these exact settings:
+
+- Minimum: 50%.
+- Maximum: 140%.
+- Default: 100%.
+- Reset option: Settings.
+
+Support two-finger pinch-to-zoom.
+
+Zoom must scale the clock display proportionally without distorting the split-flap structure.
+
+Preserve the selected zoom level across sessions.
+
+12. Flip Clock Settings and Controls
+
+- Reveal controls when the user interacts with the display.
+- Automatically hide controls after approximately 5 seconds of inactivity.
+- Use minimal, unobtrusive controls.
+- Preserve the existing bottom-sheet Settings interaction.
+- Keep the display visually clean when controls are hidden.
+- Preserve the static colon.
+- Preserve the existing display configuration options.
+
+Do not unnecessarily clutter the full-screen clock.
+
+---
+
+PART 5 — RESTORE THE ORIGINAL MODES NAVIGATION LABEL
+
+The navigation label "Modes" was incorrectly renamed in the current implementation.
+
+Restore the exact original label:
+
+Modes
+
+Requirements:
+
+- Replace the incorrect renamed label with exactly "Modes".
+- Preserve its original navigation position.
+- Preserve its existing icon where appropriate.
+- Preserve the existing route and functionality.
+- Do not create a duplicate navigation destination.
+- Ensure the bottom navigation displays the correct label.
+
+Do not rename any other navigation items.
+
+---
+
+PART 6 — DARK MODE FUNCTIONALITY
+
+Preserve the existing Dark Mode functionality.
+
+Dark Mode and Color Inversion must remain two completely separate features.
+
+Dark Mode Requirements
+
+- Detect whether the selected application supports native Dark Mode.
+- If supported, allow the user to activate its native Dark Mode.
+- If unsupported, display "Not Supported".
+- Do not force Dark Mode on applications that do not support it.
+- Do not simulate Dark Mode by simply inverting colors.
+- Preserve the application's native Dark Mode implementation wherever available.
+
+The existing RESOLVE Dark Mode functionality must remain unaffected.
+
+---
+
+PART 7 — UNIVERSAL COLOR INVERSION
+
+Implement a dedicated Color Inversion system in RESOLVE.
+
+The objective is to allow users to invert displayed colors in as many compatible applications as Android technically permits.
+
+This feature must be independent of Dark Mode.
+
+1. Genuine Color Inversion
+
+Color Inversion must perform actual mathematical color inversion.
+
+It must not simply convert a light background into a dark background.
+
+Examples:
+
+- Black becomes White.
+- White becomes Black.
+- Red becomes Cyan.
+- Blue becomes Yellow.
+- Green becomes Magenta.
+- Other colors must receive their mathematically corresponding inverted colors.
+
+For an RGB color, the basic inversion principle is:
+
+"R' = 255 - R"
+
+"G' = 255 - G"
+
+"B' = 255 - B"
+
+Preserve appropriate alpha/transparency behavior.
+
+The goal is to provide a genuine color-inverted visual experience rather than a simplified dark theme.
+
+2. Application-Level Color Inversion
+
+Provide a dedicated Color Inversion action for supported applications.
+
+When the user selects Color Inversion:
+
+1. Identify the selected application's compatibility.
+2. Analyze the Android version and available device capabilities.
+3. Determine the appropriate supported inversion mechanism.
+4. Apply the transformation when technically possible.
+5. Preserve the original application layout and functionality as much as possible.
+6. Allow the user to disable inversion and restore the normal appearance.
+
+Do not modify an application's underlying data or settings unnecessarily.
+
+Prioritize application-specific inversion where the Android platform genuinely supports it.
+
+Important Scope Rule
+
+If only Android system-wide inversion is available:
+
+- Clearly identify that the operation affects the system display rather than only the selected app.
+- Obtain the necessary user authorization.
+- Do not silently activate global inversion when the user expects application-specific inversion.
+- Preserve the user's previous system-level accessibility configuration.
+
+Do not falsely claim that a system-wide operation is application-specific.
+
+3. Android Version and Device Compatibility Analysis
+
+Before implementation, analyze:
+
+- Android OS version.
+- Android API level.
+- Device manufacturer and customized Android environment.
+- Available Accessibility features.
+- Native display inversion support.
+- Relevant system permissions.
+- Protected-window restrictions.
+- Supported rendering and display mechanisms.
+
+Choose the most appropriate supported implementation for the detected environment.
+
+Do not assume all Android versions and manufacturers provide identical capabilities.
+
+Use official Android APIs and supported Accessibility mechanisms.
+
+Do not attempt to modify protected Android Secure Settings without the required authorization.
+
+Do not rely on unsupported APIs or hidden permissions.
+
+4. Unsupported Application Handling
+
+Some applications may prevent or restrict color transformation.
+
+Examples:
+
+- Protected or secure application windows.
+- DRM-protected content.
+- Certain video and media surfaces.
+- Applications that opt out of system transformations.
+- Incompatible rendering implementations.
+
+When inversion cannot be applied reliably:
+
+- Display "Not Supported".
+- Do not crash or freeze the application.
+- Do not repeatedly attempt unsupported operations.
+- Preserve the normal display.
+- Clearly communicate the limitation.
+
+Prioritize compatibility with the largest technically supported range of applications without compromising system stability.
+
+5. Color Inversion Safety and Stability
+
+Color Inversion must not disturb normal Android functionality.
+
+Requirements:
+
+- No application crashes.
+- No unexpected screen flickering.
+- No broken touch interactions.
+- No notification delivery interruptions.
+- No interference with unrelated applications.
+- No accidental permanent changes to accessibility settings.
+- No unnecessary background processing.
+- No excessive battery consumption.
+
+If a system-level inversion feature is activated, provide a reliable way to restore the previous system state when the user disables it or exits the feature.
+
+Avoid overriding an inversion setting that was already independently enabled by the user.
+
+Handle lifecycle changes and application switching correctly.
+
+6. Color Inversion User Experience
+
+Provide a clearly identifiable Color Inversion action and status.
+
+Distinguish between:
+
+- Dark Mode Available
+- Dark Mode Unavailable
+- Color Inversion Available
+- Color Inversion Active
+- Not Supported
+
+Use clear visual feedback.
+
+Keep the interface consistent with RESOLVE's existing design language.
+
+Do not confuse users by presenting Dark Mode and Color Inversion as interchangeable options.
+
+7. Compatibility Verification
+
+Verify actual color transformation across different Android API levels and supported application types.
+
+Check:
+
+- Actual RGB color inversion.
+- Correct behavior when enabled.
+- Correct behavior when disabled.
+- Restoration of original appearance.
+- Compatibility with native Dark Mode.
+- Application-specific versus system-wide scope.
+- Permission handling.
+- Protected content handling.
+- Application switching.
+- Notification behavior.
+- Device stability.
+
+Do not report an application as supporting Color Inversion merely because its button responds to a click.
+
+Only report success when the intended transformation has actually been applied.
+
+---
+
+PART 8 — OVERALL DESIGN AND FUNCTIONAL INTEGRITY
+
+1. Visual Consistency
+
+Maintain RESOLVE's established visual identity:
+
+- Dark aesthetic.
+- Emerald/green accents.
+- Clean typography.
+- Rounded components.
+- Subtle depth.
+- Consistent spacing.
+- Professional interaction feedback.
+
+Do not introduce unrelated visual styles.
+
+2. Preserve Existing Functionality
+
+Preserve all existing working features, application data, configurations, and underlying logic.
+
+Pay particular attention to:
+
+- Existing timer engine.
+- Timer state and session persistence.
+- Existing settings and preferences.
+- Existing navigation behavior.
+- Mascot functionality.
+- Notification functionality.
+- Google synchronization.
+- Multi-Device Sync.
+- Focus Guard behavior.
+- Existing Dark Mode.
+- Existing Flip Clock visibility preference.
+
+Avoid creating duplicate functionality or replacing working systems unnecessarily.
+
+3. Responsive Design
+
+Ensure correct behavior across supported Android screen sizes and orientations.
+
+Prevent:
+
+- Overlapping components.
+- Clipped timer digits.
+- Broken split-flap animations.
+- Unreadable labels.
+- Layout jumps.
+- Unexpected orientation changes.
+- Excessive scrolling.
+- Unnecessary screen transitions.
+
+4. Scope Restrictions
+
+For More Navigation:
+
+- Do not modify Home, Focus, Insights, or Modes navigation sections unnecessarily.
+- App Lock and related functionality must remain exclusively within Home.
+
+For Focus Guard:
+
+- Modify only the specified Landscape layout, action buttons, Flip Clock visibility integration, and Tilt Mode behavior.
+
+For Flip Clock:
+
+- Implement the agreed full-screen Clock, Timer, and Stopwatch experience.
+- Do not unnecessarily modify unrelated application modules.
+
+For navigation:
+
+- Restore the exact label "Modes".
+
+For Color Inversion:
+
+- Keep it independent of Dark Mode.
+- Respect Android platform restrictions.
+- Never compromise existing notification, accessibility, or system functionality.
+
+---
+
+PART 9 — FINAL IMPLEMENTATION AND COMPLETION REQUIREMENTS
+
+Complete all requested implementations and integrate them into the existing RESOLVE application.
+
+Do not stop after producing a visual mockup, design proposal, or partial implementation.
+
+Follow the specifications carefully and preserve all previously agreed decisions.
+
+Critical Priorities
+
+1. Complete More Navigation organization.
+2. Correct Focus Guard Landscape layout.
+3. Implement customizable Landscape Tilt Mode.
+4. Implement genuine split-flap Flip Clock design.
+5. Implement realistic mechanical digit-flipping animation.
+6. Remove incorrect black pocket-like containers and flat clock appearance.
+7. Correct Timer Mode initial presentation and scrollable presets.
+8. Preserve all agreed Timer and Stopwatch behavior.
+9. Restore the original "Modes" navigation label.
+10. Preserve native Dark Mode functionality.
+11. Implement genuine Color Inversion using supported Android mechanisms.
+12. Ensure correct compatibility handling and restoration of previous system settings.
+
+Implementation Discipline
+
+- Work with the existing application architecture.
+- Reuse existing components, logic, and configurations wherever appropriate.
+- Do not unnecessarily rebuild already working features.
+- Do not remove previously implemented functionality.
+- Do not create duplicate settings or navigation routes.
+- Do not invent unsupported functionality.
+- Do not claim success for features that have not actually been implemented.
+- Do not start an unrelated debugging or refactoring process.
+
+Before considering the implementation complete, verify that the requested changes are integrated correctly and that existing functionality has not been broken.
+
+If a specific requirement is technically restricted by Android, implement the best supported alternative and clearly preserve the correct status rather than pretending it works.
+
+FINAL OBJECTIVE
+
+Deliver a complete, cohesive, professionally implemented RESOLVE application that follows all the above specifications.
+
+All requested changes must be integrated into the existing app, with particular attention to visual accuracy, functionality, Android compatibility, smooth interaction, and preservation of existing features.
+
+Complete the implementation and update the application with the finished changes. Do not stop at planning or presenting proposed designs.

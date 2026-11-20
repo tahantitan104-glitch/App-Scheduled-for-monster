@@ -477,7 +477,7 @@ class MascotSystemRobolectricTest {
     }
 
     @Test
-    fun `settings crafted signature card shows distraction emblem, tagline, and developer credit cleanly`() {
+    fun `settings crafted signature card shows runner logo, tagline, and developer credit cleanly`() {
         composeRule.setContent {
             ResolveTheme {
                 SettingsScreen(
@@ -501,13 +501,13 @@ class MascotSystemRobolectricTest {
             .performScrollToNode(hasTestTag("settings_developer_credit"))
         composeRule.mainClock.advanceTimeBy(2_200L)
         composeRule.waitForIdle()
-        composeRule.onNodeWithTag("settings_about_distraction_emblem").assertIsDisplayed()
+        composeRule.onNodeWithTag("settings_about_runner_logo").assertIsDisplayed()
         composeRule.onNodeWithText("Your distraction killing is resolve duty.").assertIsDisplayed()
         composeRule.onNodeWithText("Developed by Tahan Official").assertIsDisplayed()
     }
 
     @Test
-    fun `settings permissions dropdown auto-collapses when all 6 permissions are ready and toggles on tap`() {
+    fun `settings hides granted permissions immediately and shows ready banner when all 6 permissions are allowed`() {
         val allReady = SystemCapabilityStatus(
             isAccessibilityServiceEnabled = true,
             canDrawOverlays = true,
@@ -538,24 +538,27 @@ class MascotSystemRobolectricTest {
             }
         }
         composeRule.waitForIdle()
-        // Incomplete state: expanded by default
-        composeRule.onNodeWithTag("settings_permissions_dropdown_header").assertIsDisplayed()
-        composeRule.onNodeWithTag("settings_permissions_dropdown_content").assertIsDisplayed()
-
-        // Once all 6 permissions are allowed: auto-collapses to hidden state
-        status = allReady
-        composeRule.waitForIdle()
+        // Incomplete state: Accessibility shown first, no reveal toggle
+        composeRule.onNodeWithTag("settings_list")
+            .performScrollToNode(hasTestTag("settings_accessibility_action"))
+        composeRule.onNodeWithTag("settings_accessibility_action").assertIsDisplayed()
         assertTrue(
-            composeRule.onAllNodesWithTag("settings_permissions_dropdown_content")
+            composeRule.onAllNodesWithTag("settings_permissions_show_granted_chip")
                 .fetchSemanticsNodes()
                 .isEmpty()
         )
-        composeRule.onNodeWithText("6 / 6 ready • Hidden (tap to view)").assertIsDisplayed()
 
-        // User can tap dropdown header to view or manage anytime
-        composeRule.onNodeWithTag("settings_permissions_dropdown_header").performClick()
+        // Once all 6 permissions are allowed: all unresolved rows vanish and ready banner shows
+        status = allReady
         composeRule.waitForIdle()
-        composeRule.onNodeWithTag("settings_permissions_dropdown_content").assertIsDisplayed()
+        composeRule.onNodeWithTag("settings_list")
+            .performScrollToNode(hasTestTag("settings_all_permissions_ready_banner"))
+        composeRule.onNodeWithText("All required system access is ready.").assertIsDisplayed()
+        assertTrue(
+            composeRule.onAllNodesWithTag("settings_accessibility_action")
+                .fetchSemanticsNodes()
+                .isEmpty()
+        )
     }
 
     @Test

@@ -24,9 +24,14 @@ service cloud.firestore {
       return id is string && id.size() >= 1 && id.size() <= 128 && id.matches('^[a-zA-Z0-9_\\-]+$');
     }
 
+    function isValidSchemaVersion(data) {
+      return !('schemaVersion' in data) || (data.schemaVersion is int && data.schemaVersion >= 1 && data.schemaVersion <= 100);
+    }
+
     function isValidUserProfile(data) {
       return data.userId is string &&
              data.userId == request.auth.uid &&
+             isValidSchemaVersion(data) &&
              data.displayName is string &&
              data.displayName.size() >= 1 &&
              data.displayName.size() <= 80 &&
@@ -38,11 +43,14 @@ service cloud.firestore {
     function isValidSyncedDevice(data) {
       return data.userId is string &&
              data.userId == request.auth.uid &&
+             isValidSchemaVersion(data) &&
              data.deviceName is string &&
              data.deviceName.size() >= 1 &&
              data.deviceName.size() <= 80 &&
              data.platform is string &&
              data.platform == 'android' &&
+             (!('androidVersion' in data) || (data.androidVersion is int && data.androidVersion >= 21 && data.androidVersion <= 100)) &&
+             (!('appVersion' in data) || (data.appVersion is string && data.appVersion.size() <= 40)) &&
              data.syncEnabled is bool &&
              data.lastSeenAt is timestamp &&
              data.lastSeenAt <= request.time;
@@ -51,6 +59,7 @@ service cloud.firestore {
     function isValidLockCommand(data) {
       return data.userId is string &&
              data.userId == request.auth.uid &&
+             isValidSchemaVersion(data) &&
              isValidId(data.commandId) &&
              isValidId(data.originDeviceId) &&
              data.originDeviceName is string &&
@@ -66,10 +75,126 @@ service cloud.firestore {
              data.lockDurationMinutes <= 1440 &&
              data.issuedAtWallMs is int &&
              data.issuedAtWallMs >= 0 &&
+             (!('intendedStartWallMs' in data) || (data.intendedStartWallMs is int && data.intendedStartWallMs >= 0)) &&
              data.freeUseDeadlineWallMs is int &&
              data.freeUseDeadlineWallMs >= 0 &&
              data.lockExpirationWallMs is int &&
-             data.lockExpirationWallMs >= 0;
+             data.lockExpirationWallMs >= 0 &&
+              (!('scheduleId' in data) || (data.scheduleId is string && data.scheduleId.size() <= 128)) &&
+              (!('occurrenceId' in data) || (data.occurrenceId is string && data.occurrenceId.size() <= 128)) &&
+              (!('strictMode' in data) || data.strictMode is bool) &&
+              (!('showFlipClockShortcut' in data) || data.showFlipClockShortcut is bool);
+    }
+
+    function isValidDelayedPreset(data) {
+      return data.userId is string &&
+             data.userId == request.auth.uid &&
+             isValidSchemaVersion(data) &&
+             isValidId(data.presetId) &&
+             data.name is string &&
+             data.name.size() >= 1 &&
+             data.name.size() <= 60 &&
+             data.freeUseMinutes is int &&
+             data.freeUseMinutes >= 1 &&
+             data.freeUseMinutes <= 1440 &&
+             data.lockDurationMinutes is int &&
+             data.lockDurationMinutes >= 1 &&
+             data.lockDurationMinutes <= 1440 &&
+             isValidId(data.originDeviceId) &&
+             data.updatedAtWallMs is int &&
+             data.updatedAtWallMs >= 0 &&
+             data.deleted is bool;
+    }
+
+    function isValidSyncedSchedule(data) {
+      return data.userId is string &&
+             data.userId == request.auth.uid &&
+             isValidSchemaVersion(data) &&
+             isValidId(data.scheduleId) &&
+             data.name is string &&
+             data.name.size() >= 1 &&
+             data.name.size() <= 80 &&
+             data.type is string &&
+             data.type in ['ONE_TIME', 'DAILY', 'CUSTOM_WEEKLY'] &&
+             data.oneTimeDateEpochDay is int &&
+             data.oneTimeDateEpochDay >= -1 &&
+             data.weekdaysMask is int &&
+             data.weekdaysMask >= 0 &&
+             data.weekdaysMask <= 127 &&
+             data.startHour is int &&
+             data.startHour >= 0 &&
+             data.startHour <= 23 &&
+             data.startMinute is int &&
+             data.startMinute >= 0 &&
+             data.startMinute <= 59 &&
+             data.lockDurationMinutes is int &&
+             data.lockDurationMinutes >= 1 &&
+             data.lockDurationMinutes <= 1440 &&
+             data.enabled is bool &&
+             data.syncAcrossDevices is bool &&
+             (!('strictMode' in data) || data.strictMode is bool) &&
+             (!('allowSelectedApps' in data) || data.allowSelectedApps is bool) &&
+             (!('showFlipClockShortcut' in data) || data.showFlipClockShortcut is bool) &&
+             isValidId(data.originDeviceId) &&
+             data.updatedAtWallMs is int &&
+             data.updatedAtWallMs >= 0 &&
+             data.deleted is bool;
+    }
+
+    function isValidLockProfile(data, profileMode) {
+      return data.userId is string &&
+             data.userId == request.auth.uid &&
+             isValidSchemaVersion(data) &&
+             data.profileMode is string &&
+             data.profileMode == profileMode &&
+             data.profileMode in ['INSTANT', 'DELAYED', 'SCHEDULED'] &&
+             data.strictMode is bool &&
+             data.allowSelectedApps is bool &&
+             data.showFlipClockShortcut is bool &&
+             data.allowedPackages is list &&
+             data.allowedPackages.size() <= 200 &&
+             isValidId(data.originDeviceId) &&
+             data.updatedAtWallMs is int &&
+             data.updatedAtWallMs >= 0;
+    }
+
+    function isValidFlipClockSettings(data) {
+      return data.userId is string &&
+             data.userId == request.auth.uid &&
+             isValidSchemaVersion(data) &&
+             data.docId is string &&
+             data.docId == 'flip_clock_settings' &&
+             data.use24HourFormat is bool &&
+             data.keepScreenAwake is bool &&
+             data.showDate is bool &&
+             data.autoRepeat is bool &&
+             data.zoomFraction is number &&
+             data.zoomFraction >= 0.5 &&
+             data.zoomFraction <= 1.4 &&
+             isValidId(data.originDeviceId) &&
+             data.updatedAtWallMs is int &&
+             data.updatedAtWallMs >= 0;
+    }
+
+    function isValidFlipTimerPreset(data) {
+      return data.userId is string &&
+             data.userId == request.auth.uid &&
+             isValidSchemaVersion(data) &&
+             isValidId(data.presetId) &&
+             data.name is string &&
+             data.name.size() >= 1 &&
+             data.name.size() <= 60 &&
+             data.durationSeconds is int &&
+             data.durationSeconds >= 1 &&
+             data.durationSeconds <= 86399 &&
+             data.builtIn is bool &&
+             data.sortOrder is int &&
+             data.sortOrder >= 0 &&
+             data.sortOrder <= 1000 &&
+             isValidId(data.originDeviceId) &&
+             data.updatedAtWallMs is int &&
+             data.updatedAtWallMs >= 0 &&
+             data.deleted is bool;
     }
 
     // Owner profile & synced avatar
@@ -81,7 +206,7 @@ service cloud.firestore {
                        isValidId(userId) &&
                        request.auth.uid == userId &&
                        incoming().keys().hasAll(['userId', 'displayName', 'createdAt', 'updatedAt']) &&
-                       incoming().keys().hasOnly(['userId', 'displayName', 'email', 'photoUrl', 'avatarBase64', 'createdAt', 'updatedAt']) &&
+                       incoming().keys().hasOnly(['userId', 'schemaVersion', 'displayName', 'email', 'photoUrl', 'avatarBase64', 'createdAt', 'updatedAt']) &&
                        incoming().createdAt is timestamp &&
                        incoming().createdAt <= request.time &&
                        incoming().updatedAt is timestamp &&
@@ -96,7 +221,7 @@ service cloud.firestore {
                        incoming().createdAt == existing().createdAt &&
                        incoming().updatedAt is timestamp &&
                        incoming().updatedAt <= request.time &&
-                       incoming().diff(existing()).affectedKeys().hasOnly(['displayName', 'email', 'photoUrl', 'avatarBase64', 'updatedAt']);
+                       incoming().diff(existing()).affectedKeys().hasOnly(['schemaVersion', 'displayName', 'email', 'photoUrl', 'avatarBase64', 'updatedAt']);
 
       allow delete: if isSignedIn() && isValidId(userId) && request.auth.uid == userId;
 
@@ -109,7 +234,7 @@ service cloud.firestore {
                          isValidId(deviceId) &&
                          request.auth.uid == userId &&
                          incoming().keys().hasAll(['userId', 'deviceName', 'platform', 'syncEnabled', 'lastSeenAt', 'createdAt', 'updatedAt']) &&
-                         incoming().keys().hasOnly(['userId', 'deviceName', 'platform', 'syncEnabled', 'lastSeenAt', 'createdAt', 'updatedAt']) &&
+                         incoming().keys().hasOnly(['userId', 'schemaVersion', 'deviceName', 'platform', 'androidVersion', 'appVersion', 'syncEnabled', 'lastSeenAt', 'createdAt', 'updatedAt']) &&
                          incoming().createdAt is timestamp &&
                          incoming().createdAt <= request.time &&
                          incoming().updatedAt is timestamp &&
@@ -124,20 +249,147 @@ service cloud.firestore {
                          incoming().createdAt == existing().createdAt &&
                          incoming().updatedAt is timestamp &&
                          incoming().updatedAt <= request.time &&
-                         incoming().diff(existing()).affectedKeys().hasOnly(['deviceName', 'platform', 'syncEnabled', 'lastSeenAt', 'updatedAt']);
+                         incoming().diff(existing()).affectedKeys().hasOnly(['schemaVersion', 'deviceName', 'platform', 'androidVersion', 'appVersion', 'syncEnabled', 'lastSeenAt', 'updatedAt']);
 
         allow delete: if isSignedIn() && isValidId(deviceId) && request.auth.uid == userId;
       }
 
-      // Deterministic multi-device lock sync channel (/users/{userId}/sync/lock_command)
+      // Deterministic sync docs (/users/{userId}/sync/lock_command and flip_clock_settings)
       match /sync/{syncDocId} {
         allow get: if isSignedIn() && isValidId(syncDocId) && request.auth.uid == userId;
         allow list: if isSignedIn() && request.auth.uid == userId;
 
         allow create: if isSignedIn() &&
                          isValidId(syncDocId) &&
-                         syncDocId == 'lock_command' &&
                          request.auth.uid == userId &&
+                         incoming().createdAt is timestamp &&
+                         incoming().createdAt <= request.time &&
+                         incoming().updatedAt is timestamp &&
+                         incoming().updatedAt <= request.time &&
+                         (
+                           (syncDocId == 'lock_command' &&
+                            incoming().keys().hasAll([
+                              'userId',
+                              'commandId',
+                              'originDeviceId',
+                              'originDeviceName',
+                              'mode',
+                              'freeUseDurationMinutes',
+                              'lockDurationMinutes',
+                              'issuedAtWallMs',
+                              'freeUseDeadlineWallMs',
+                              'lockExpirationWallMs',
+                              'createdAt',
+                              'updatedAt'
+                            ]) &&
+                            incoming().keys().hasOnly([
+                              'userId',
+                              'schemaVersion',
+                              'commandId',
+                              'originDeviceId',
+                              'originDeviceName',
+                              'mode',
+                              'freeUseDurationMinutes',
+                              'lockDurationMinutes',
+                              'issuedAtWallMs',
+                              'intendedStartWallMs',
+                              'freeUseDeadlineWallMs',
+                              'lockExpirationWallMs',
+                              'scheduleId',
+                              'occurrenceId',
+                              'strictMode',
+                              'showFlipClockShortcut',
+                              'createdAt',
+                              'updatedAt'
+                            ]) &&
+                            isValidLockCommand(incoming())) ||
+                           (syncDocId == 'flip_clock_settings' &&
+                            incoming().keys().hasAll([
+                              'userId',
+                              'docId',
+                              'use24HourFormat',
+                              'keepScreenAwake',
+                              'showDate',
+                              'autoRepeat',
+                              'zoomFraction',
+                              'originDeviceId',
+                              'updatedAtWallMs',
+                              'createdAt',
+                              'updatedAt'
+                            ]) &&
+                            incoming().keys().hasOnly([
+                              'userId',
+                              'schemaVersion',
+                              'docId',
+                              'use24HourFormat',
+                              'keepScreenAwake',
+                              'showDate',
+                              'autoRepeat',
+                              'zoomFraction',
+                              'originDeviceId',
+                              'updatedAtWallMs',
+                              'createdAt',
+                              'updatedAt'
+                            ]) &&
+                            isValidFlipClockSettings(incoming()))
+                         );
+
+        allow update: if isSignedIn() &&
+                         isValidId(syncDocId) &&
+                         request.auth.uid == userId &&
+                         incoming().userId == existing().userId &&
+                         incoming().createdAt == existing().createdAt &&
+                         incoming().updatedAt is timestamp &&
+                         incoming().updatedAt <= request.time &&
+                         (
+                           (syncDocId == 'lock_command' &&
+                            isValidLockCommand(incoming()) &&
+                            incoming().diff(existing()).affectedKeys().hasOnly([
+                              'schemaVersion',
+                              'commandId',
+                              'originDeviceId',
+                              'originDeviceName',
+                              'mode',
+                              'freeUseDurationMinutes',
+                              'lockDurationMinutes',
+                              'issuedAtWallMs',
+                              'intendedStartWallMs',
+                              'freeUseDeadlineWallMs',
+                              'lockExpirationWallMs',
+                              'scheduleId',
+                              'occurrenceId',
+                              'strictMode',
+                              'showFlipClockShortcut',
+                              'updatedAt'
+                            ])) ||
+                           (syncDocId == 'flip_clock_settings' &&
+                            isValidFlipClockSettings(incoming()) &&
+                            incoming().docId == existing().docId &&
+                            incoming().diff(existing()).affectedKeys().hasOnly([
+                              'schemaVersion',
+                              'use24HourFormat',
+                              'keepScreenAwake',
+                              'showDate',
+                              'autoRepeat',
+                              'zoomFraction',
+                              'originDeviceId',
+                              'updatedAtWallMs',
+                              'updatedAt'
+                            ]))
+                         );
+
+        allow delete: if isSignedIn() && isValidId(syncDocId) && syncDocId in ['lock_command', 'flip_clock_settings'] && request.auth.uid == userId;
+      }
+
+      // Versioned multi-device lock commands collection (/users/{userId}/lock_commands/{commandId})
+      match /lock_commands/{commandId} {
+        allow get: if isSignedIn() && isValidId(commandId) && request.auth.uid == userId;
+        allow list: if isSignedIn() && request.auth.uid == userId;
+
+        allow create: if isSignedIn() &&
+                         isValidId(commandId) &&
+                         request.auth.uid == userId &&
+                         incoming().commandId == commandId &&
                          incoming().keys().hasAll([
                            'userId',
                            'commandId',
@@ -154,6 +406,7 @@ service cloud.firestore {
                          ]) &&
                          incoming().keys().hasOnly([
                            'userId',
+                           'schemaVersion',
                            'commandId',
                            'originDeviceId',
                            'originDeviceName',
@@ -161,8 +414,13 @@ service cloud.firestore {
                            'freeUseDurationMinutes',
                            'lockDurationMinutes',
                            'issuedAtWallMs',
+                           'intendedStartWallMs',
                            'freeUseDeadlineWallMs',
                            'lockExpirationWallMs',
+                           'scheduleId',
+                           'occurrenceId',
+                           'strictMode',
+                           'showFlipClockShortcut',
                            'createdAt',
                            'updatedAt'
                          ]) &&
@@ -172,29 +430,286 @@ service cloud.firestore {
                          incoming().updatedAt <= request.time &&
                          isValidLockCommand(incoming());
 
-        allow update: if isSignedIn() &&
-                         isValidId(syncDocId) &&
-                         syncDocId == 'lock_command' &&
+        allow update: if false;
+        allow delete: if isSignedIn() && isValidId(commandId) && request.auth.uid == userId;
+      }
+
+      // User-created Delayed Lock presets (/users/{userId}/presets/{presetId})
+      match /presets/{presetId} {
+        allow get: if isSignedIn() && isValidId(presetId) && request.auth.uid == userId;
+        allow list: if isSignedIn() && request.auth.uid == userId;
+
+        allow create: if isSignedIn() &&
+                         isValidId(presetId) &&
                          request.auth.uid == userId &&
-                         isValidLockCommand(incoming()) &&
+                         incoming().presetId == presetId &&
+                         incoming().keys().hasAll([
+                           'userId',
+                           'presetId',
+                           'name',
+                           'freeUseMinutes',
+                           'lockDurationMinutes',
+                           'originDeviceId',
+                           'updatedAtWallMs',
+                           'deleted',
+                           'createdAt',
+                           'updatedAt'
+                         ]) &&
+                         incoming().keys().hasOnly([
+                           'userId',
+                           'schemaVersion',
+                           'presetId',
+                           'name',
+                           'freeUseMinutes',
+                           'lockDurationMinutes',
+                           'originDeviceId',
+                           'updatedAtWallMs',
+                           'deleted',
+                           'createdAt',
+                           'updatedAt'
+                         ]) &&
+                         incoming().createdAt is timestamp &&
+                         incoming().createdAt <= request.time &&
+                         incoming().updatedAt is timestamp &&
+                         incoming().updatedAt <= request.time &&
+                         isValidDelayedPreset(incoming());
+
+        allow update: if isSignedIn() &&
+                         isValidId(presetId) &&
+                         request.auth.uid == userId &&
+                         isValidDelayedPreset(incoming()) &&
                          incoming().userId == existing().userId &&
+                         incoming().presetId == existing().presetId &&
                          incoming().createdAt == existing().createdAt &&
                          incoming().updatedAt is timestamp &&
                          incoming().updatedAt <= request.time &&
                          incoming().diff(existing()).affectedKeys().hasOnly([
-                           'commandId',
-                           'originDeviceId',
-                           'originDeviceName',
-                           'mode',
-                           'freeUseDurationMinutes',
+                           'schemaVersion',
+                           'name',
+                           'freeUseMinutes',
                            'lockDurationMinutes',
-                           'issuedAtWallMs',
-                           'freeUseDeadlineWallMs',
-                           'lockExpirationWallMs',
+                           'originDeviceId',
+                           'updatedAtWallMs',
+                           'deleted',
                            'updatedAt'
                          ]);
 
-        allow delete: if isSignedIn() && isValidId(syncDocId) && syncDocId == 'lock_command' && request.auth.uid == userId;
+        allow delete: if isSignedIn() && isValidId(presetId) && request.auth.uid == userId;
+      }
+
+      // Synced Schedules (rule metadata only, excluding per-device allowlists)
+      match /schedules/{scheduleId} {
+        allow get: if isSignedIn() && isValidId(scheduleId) && request.auth.uid == userId;
+        allow list: if isSignedIn() && request.auth.uid == userId;
+
+        allow create: if isSignedIn() &&
+                         isValidId(scheduleId) &&
+                         request.auth.uid == userId &&
+                         incoming().scheduleId == scheduleId &&
+                         incoming().keys().hasAll([
+                           'userId',
+                           'scheduleId',
+                           'name',
+                           'type',
+                           'oneTimeDateEpochDay',
+                           'weekdaysMask',
+                           'startHour',
+                           'startMinute',
+                           'lockDurationMinutes',
+                           'enabled',
+                           'syncAcrossDevices',
+                           'originDeviceId',
+                           'updatedAtWallMs',
+                           'deleted',
+                           'createdAt',
+                           'updatedAt'
+                         ]) &&
+                         incoming().keys().hasOnly([
+                           'userId',
+                           'schemaVersion',
+                           'scheduleId',
+                           'name',
+                           'type',
+                           'oneTimeDateEpochDay',
+                           'weekdaysMask',
+                           'startHour',
+                           'startMinute',
+                           'lockDurationMinutes',
+                           'enabled',
+                           'syncAcrossDevices',
+                           'strictMode',
+                           'allowSelectedApps',
+                           'showFlipClockShortcut',
+                           'originDeviceId',
+                           'updatedAtWallMs',
+                           'deleted',
+                           'createdAt',
+                           'updatedAt'
+                         ]) &&
+                         incoming().createdAt is timestamp &&
+                         incoming().createdAt <= request.time &&
+                         incoming().updatedAt is timestamp &&
+                         incoming().updatedAt <= request.time &&
+                         isValidSyncedSchedule(incoming());
+
+        allow update: if isSignedIn() &&
+                         isValidId(scheduleId) &&
+                         request.auth.uid == userId &&
+                         isValidSyncedSchedule(incoming()) &&
+                         incoming().userId == existing().userId &&
+                         incoming().scheduleId == existing().scheduleId &&
+                         incoming().createdAt == existing().createdAt &&
+                         incoming().updatedAt is timestamp &&
+                         incoming().updatedAt <= request.time &&
+                         incoming().diff(existing()).affectedKeys().hasOnly([
+                           'schemaVersion',
+                           'name',
+                           'type',
+                           'oneTimeDateEpochDay',
+                           'weekdaysMask',
+                           'startHour',
+                           'startMinute',
+                           'lockDurationMinutes',
+                           'enabled',
+                           'syncAcrossDevices',
+                           'strictMode',
+                           'allowSelectedApps',
+                           'showFlipClockShortcut',
+                           'originDeviceId',
+                           'updatedAtWallMs',
+                           'deleted',
+                           'updatedAt'
+                         ]);
+
+        allow delete: if isSignedIn() && isValidId(scheduleId) && request.auth.uid == userId;
+      }
+
+      // Per-profile Lock settings (/users/{userId}/lock_profiles/{profileMode})
+      match /lock_profiles/{profileMode} {
+        allow get: if isSignedIn() && isValidId(profileMode) && request.auth.uid == userId;
+        allow list: if isSignedIn() && request.auth.uid == userId;
+
+        allow create: if isSignedIn() &&
+                         isValidId(profileMode) &&
+                         request.auth.uid == userId &&
+                         incoming().keys().hasAll([
+                           'userId',
+                           'profileMode',
+                           'strictMode',
+                           'allowSelectedApps',
+                           'showFlipClockShortcut',
+                           'allowedPackages',
+                           'originDeviceId',
+                           'updatedAtWallMs',
+                           'createdAt',
+                           'updatedAt'
+                         ]) &&
+                         incoming().keys().hasOnly([
+                           'userId',
+                           'schemaVersion',
+                           'profileMode',
+                           'strictMode',
+                           'allowSelectedApps',
+                           'showFlipClockShortcut',
+                           'allowedPackages',
+                           'originDeviceId',
+                           'updatedAtWallMs',
+                           'createdAt',
+                           'updatedAt'
+                         ]) &&
+                         incoming().createdAt is timestamp &&
+                         incoming().createdAt <= request.time &&
+                         incoming().updatedAt is timestamp &&
+                         incoming().updatedAt <= request.time &&
+                         isValidLockProfile(incoming(), profileMode);
+
+        allow update: if isSignedIn() &&
+                         isValidId(profileMode) &&
+                         request.auth.uid == userId &&
+                         isValidLockProfile(incoming(), profileMode) &&
+                         incoming().userId == existing().userId &&
+                         incoming().profileMode == existing().profileMode &&
+                         incoming().createdAt == existing().createdAt &&
+                         incoming().updatedAt is timestamp &&
+                         incoming().updatedAt <= request.time &&
+                         incoming().diff(existing()).affectedKeys().hasOnly([
+                           'schemaVersion',
+                           'strictMode',
+                           'allowSelectedApps',
+                           'showFlipClockShortcut',
+                           'allowedPackages',
+                           'originDeviceId',
+                           'updatedAtWallMs',
+                           'updatedAt'
+                         ]);
+
+        allow delete: if isSignedIn() && isValidId(profileMode) && request.auth.uid == userId;
+      }
+
+      // Synced Flip Timer Presets (/users/{userId}/flip_timer_presets/{presetId})
+      match /flip_timer_presets/{presetId} {
+        allow get: if isSignedIn() && isValidId(presetId) && request.auth.uid == userId;
+        allow list: if isSignedIn() && request.auth.uid == userId;
+
+        allow create: if isSignedIn() &&
+                         isValidId(presetId) &&
+                         request.auth.uid == userId &&
+                         incoming().presetId == presetId &&
+                         incoming().keys().hasAll([
+                           'userId',
+                           'presetId',
+                           'name',
+                           'durationSeconds',
+                           'builtIn',
+                           'sortOrder',
+                           'originDeviceId',
+                           'updatedAtWallMs',
+                           'deleted',
+                           'createdAt',
+                           'updatedAt'
+                         ]) &&
+                         incoming().keys().hasOnly([
+                           'userId',
+                           'schemaVersion',
+                           'presetId',
+                           'name',
+                           'durationSeconds',
+                           'builtIn',
+                           'sortOrder',
+                           'originDeviceId',
+                           'updatedAtWallMs',
+                           'deleted',
+                           'createdAt',
+                           'updatedAt'
+                         ]) &&
+                         incoming().createdAt is timestamp &&
+                         incoming().createdAt <= request.time &&
+                         incoming().updatedAt is timestamp &&
+                         incoming().updatedAt <= request.time &&
+                         isValidFlipTimerPreset(incoming());
+
+        allow update: if isSignedIn() &&
+                         isValidId(presetId) &&
+                         request.auth.uid == userId &&
+                         isValidFlipTimerPreset(incoming()) &&
+                         incoming().userId == existing().userId &&
+                         incoming().presetId == existing().presetId &&
+                         incoming().createdAt == existing().createdAt &&
+                         incoming().updatedAt is timestamp &&
+                         incoming().updatedAt <= request.time &&
+                         incoming().diff(existing()).affectedKeys().hasOnly([
+                           'schemaVersion',
+                           'name',
+                           'durationSeconds',
+                           'builtIn',
+                           'sortOrder',
+                           'originDeviceId',
+                           'updatedAtWallMs',
+                           'deleted',
+                           'updatedAt'
+                         ]);
+
+        allow delete: if isSignedIn() && isValidId(presetId) && request.auth.uid == userId;
       }
     }
   }

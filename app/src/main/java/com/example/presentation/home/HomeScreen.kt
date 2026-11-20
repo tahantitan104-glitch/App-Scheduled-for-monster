@@ -1,20 +1,27 @@
 package com.example.presentation.home
 
 import androidx.compose.animation.AnimatedVisibility
+import androidx.compose.animation.core.FastOutSlowInEasing
+import androidx.compose.animation.core.animateFloatAsState
+import androidx.compose.animation.core.tween
 import androidx.compose.animation.expandVertically
 import androidx.compose.animation.fadeIn
 import androidx.compose.animation.fadeOut
 import androidx.compose.animation.shrinkVertically
+import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.interaction.MutableInteractionSource
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.BoxWithConstraints
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.IntrinsicSize
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
+import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
@@ -31,9 +38,11 @@ import androidx.compose.material.icons.outlined.Call
 import androidx.compose.material.icons.outlined.Info
 import androidx.compose.material.icons.outlined.Lock
 import androidx.compose.material.icons.outlined.Warning
+import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.Icon
 import androidx.compose.material3.LinearProgressIndicator
 import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
@@ -41,6 +50,7 @@ import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -49,6 +59,7 @@ import androidx.compose.ui.draw.drawBehind
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.ImageBitmap
 import androidx.compose.ui.graphics.StrokeCap
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.hapticfeedback.HapticFeedbackType
@@ -57,19 +68,29 @@ import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.example.designsystem.JetBrainsMonoFamily
+import com.example.designsystem.LocalResolveExtendedPalette
 import com.example.designsystem.ResolveColors
 import com.example.domain.model.ActiveSession
+import com.example.domain.model.DailyAppUsageItem
+import com.example.domain.model.DailyAppUsageSummary
+import com.example.domain.model.DurationSelection
 import com.example.domain.model.EnforcementMode
 import com.example.domain.model.MascotAnimationState
 import com.example.domain.model.MascotType
+import com.example.domain.model.ProtectionRecoveryAction
+import com.example.domain.model.ProtectionStatus
+import com.example.domain.model.SessionHistoryRecord
+import com.example.domain.model.SessionOutcome
 import com.example.domain.model.SessionState
 import com.example.domain.model.SystemCapabilityStatus
 import com.example.presentation.components.FeatureTipNote
 import com.example.presentation.components.HomeOptionalSyncBanner
 import com.example.presentation.components.MascotRenderer
+import com.example.presentation.components.ProtectionStatusCard
 import com.example.presentation.components.PulsingStatusDot
 import com.example.presentation.components.ResolveIcons
 import com.example.presentation.components.SyncedAvatarBadge
@@ -78,6 +99,8 @@ import com.example.presentation.components.pressScale
 import com.example.presentation.components.resolveGlassCard
 import com.example.presentation.lockscreen.formatCountdownHms
 import com.example.sync.AccountSyncUiState
+import java.time.LocalDate
+import java.time.ZoneId
 import kotlinx.coroutines.delay
 
 @Composable
@@ -92,6 +115,11 @@ fun HomeScreen(
     onReturnToLockScreen: () -> Unit,
     onDismissTerminalSession: () -> Unit,
     modifier: Modifier = Modifier,
+    onOpenAppLockSetup: () -> Unit = {},
+    historyRecords: List<SessionHistoryRecord> = emptyList(),
+    dailyAppUsage: DailyAppUsageSummary = DailyAppUsageSummary(),
+    loadAppIcon: suspend (String) -> ImageBitmap? = { null },
+    onGrantUsageAccess: () -> Unit = {},
     mascotType: MascotType = MascotType.BABY_CLOUD,
     bunnyPeekEntranceSeen: Boolean = true,
     onBunnyPeekEntranceSeen: () -> Unit = {},
@@ -100,17 +128,21 @@ fun HomeScreen(
     syncPromoDismissed: Boolean = true,
     onConnectGoogleAccount: () -> Unit = {},
     onDismissSyncPromo: () -> Unit = {},
-    onOpenAccountSettings: () -> Unit = {}
+    onOpenAccountSettings: () -> Unit = {},
+    protectionStatus: ProtectionStatus = ProtectionStatus.ProtectionActive(),
+    onProtectionAction: (ProtectionRecoveryAction) -> Unit = {}
 ) {
+    val palette = LocalResolveExtendedPalette.current
+
     Box(
         modifier = modifier
             .fillMaxSize()
-            .background(ResolveColors.ForestDeep)
+            .background(palette.background)
             .drawBehind {
                 drawCircle(
                     brush = Brush.radialGradient(
                         colors = listOf(
-                            ResolveColors.MintAccent.copy(alpha = 0.08f),
+                            palette.accent.copy(alpha = 0.08f),
                             Color.Transparent
                         ),
                         center = Offset(size.width * 0.5f, 0f),
@@ -124,7 +156,7 @@ fun HomeScreen(
     ) {
         LazyColumn(
             modifier = Modifier
-                .widthIn(max = 620.dp)
+                .widthIn(max = 680.dp)
                 .fillMaxSize()
                 .testTag("home_list"),
             contentPadding = PaddingValues(horizontal = 20.dp, vertical = 18.dp),
@@ -146,12 +178,16 @@ fun HomeScreen(
                         var homeMascotState by remember(mascotType) { mutableStateOf(MascotAnimationState.IDLE) }
                         var homePeekProgress by remember(mascotType) { mutableStateOf(1f) }
                         var replayRequestCount by remember { mutableStateOf(0) }
+                        var playedInitialSessionPeek by rememberSaveable(mascotType.storageKey) {
+                            mutableStateOf(false)
+                        }
 
                         LaunchedEffect(mascotType, bunnyPeekEntranceSeen, reducedMotion, replayRequestCount) {
                             val shouldPlayPeek = mascotType == MascotType.RESOLVE_BUNNY &&
                                 !reducedMotion &&
-                                (!bunnyPeekEntranceSeen || replayRequestCount > 0)
+                                ((!bunnyPeekEntranceSeen && !playedInitialSessionPeek) || replayRequestCount > 0)
                             if (shouldPlayPeek) {
+                                playedInitialSessionPeek = true
                                 homeMascotState = MascotAnimationState.PEEK_ENTRANCE
                                 homePeekProgress = 0f
                                 val steps = 70
@@ -174,10 +210,13 @@ fun HomeScreen(
                             modifier = Modifier
                                 .size(50.dp)
                                 .clip(RoundedCornerShape(16.dp))
-                                .background(ResolveColors.MintSoftContainer.copy(alpha = 0.7f))
+                                .background(
+                                    if (palette.isDark) ResolveColors.MintSoftContainer.copy(alpha = 0.7f)
+                                    else ResolveColors.ForestBrandDeep.copy(alpha = 0.90f)
+                                )
                                 .border(
                                     1.dp,
-                                    ResolveColors.MintAccent.copy(alpha = 0.25f),
+                                    palette.accent.copy(alpha = 0.30f),
                                     RoundedCornerShape(16.dp)
                                 )
                                 .clickable {
@@ -213,12 +252,12 @@ fun HomeScreen(
                                     fontWeight = FontWeight.Bold,
                                     letterSpacing = 1.sp
                                 ),
-                                color = ResolveColors.TextPrimary
+                                color = palette.textPrimary
                             )
                             Text(
                                 text = "Device Focus Control",
                                 style = MaterialTheme.typography.bodyMedium,
-                                color = ResolveColors.TextSecondary
+                                color = palette.textSecondary
                             )
                         }
                     }
@@ -262,14 +301,24 @@ fun HomeScreen(
                 }
             }
 
-            // Helpful permission readiness prompt when no enforcement tier is active yet
+            // Helpful protection readiness prompt (no ADB prompt on Home)
             item {
                 AnimatedVisibility(
-                    visible = !capabilities.canEnforceRealLock && activeSession == null,
+                    visible = protectionStatus !is ProtectionStatus.ProtectionActive &&
+                        protectionStatus !is ProtectionStatus.SessionCompleted,
                     enter = fadeIn() + expandVertically(),
                     exit = fadeOut() + shrinkVertically()
                 ) {
-                    SetupReadinessCallout(onClick = onOpenDeviceOwnerGuide)
+                    ProtectionStatusCard(
+                        status = protectionStatus,
+                        onActionClick = { action ->
+                            if (action == ProtectionRecoveryAction.NONE) {
+                                onOpenDeviceOwnerGuide()
+                            } else {
+                                onProtectionAction(action)
+                            }
+                        }
+                    )
                 }
             }
 
@@ -293,7 +342,7 @@ fun HomeScreen(
                 Text(
                     text = "CHOOSE FOCUS MODE",
                     style = MaterialTheme.typography.labelSmall.copy(letterSpacing = 1.3.sp),
-                    color = ResolveColors.TextSecondary
+                    color = palette.textSecondary
                 )
                 Spacer(modifier = Modifier.height(4.dp))
                 FeatureTipNote(
@@ -302,36 +351,141 @@ fun HomeScreen(
                 )
             }
 
+            // 4 Balanced Rounded Rectangular Feature Cards (Instant, Delayed, Schedule, App Lock)
             item {
-                ModeSelectionCard(
-                    title = "Instant Lock",
-                    description = "Restrict the phone immediately for a chosen duration.",
-                    icon = Icons.Outlined.Lock,
-                    accentBadge = "Immediate",
-                    onClick = onOpenInstantSetup,
-                    testTag = "mode_card_instant"
-                )
+                BoxWithConstraints(modifier = Modifier.fillMaxWidth()) {
+                    val useFourColumnRow = maxWidth >= 640.dp
+                    if (useFourColumnRow) {
+                        Row(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .height(IntrinsicSize.Max),
+                            horizontalArrangement = Arrangement.spacedBy(10.dp)
+                        ) {
+                            ModeFeatureCard(
+                                title = "Instant Lock",
+                                description = "Lock immediately for a chosen period.",
+                                icon = Icons.Outlined.Lock,
+                                accentBadge = "Immediate",
+                                onClick = onOpenInstantSetup,
+                                testTag = "mode_card_instant",
+                                modifier = Modifier
+                                    .weight(1f)
+                                    .fillMaxHeight()
+                            )
+                            ModeFeatureCard(
+                                title = "Delayed Lock",
+                                description = "Free use window, then auto lock.",
+                                icon = ResolveIcons.HourglassTop,
+                                accentBadge = "2-Stage",
+                                onClick = onOpenDelayedSetup,
+                                testTag = "mode_card_delayed",
+                                modifier = Modifier
+                                    .weight(1f)
+                                    .fillMaxHeight()
+                            )
+                            ModeFeatureCard(
+                                title = "Schedule Lock",
+                                description = "Auto restriction on set dates/times.",
+                                icon = ResolveIcons.Event,
+                                accentBadge = "Automated",
+                                onClick = onOpenScheduleSetup,
+                                testTag = "mode_card_schedule",
+                                modifier = Modifier
+                                    .weight(1f)
+                                    .fillMaxHeight()
+                            )
+                            ModeFeatureCard(
+                                title = "App Lock",
+                                description = "Protect specific apps with a code.",
+                                icon = ResolveIcons.Shield,
+                                accentBadge = "App Guard",
+                                onClick = onOpenAppLockSetup,
+                                testTag = "mode_card_applock",
+                                modifier = Modifier
+                                    .weight(1f)
+                                    .fillMaxHeight()
+                            )
+                        }
+                    } else {
+                        Column(
+                            modifier = Modifier.fillMaxWidth(),
+                            verticalArrangement = Arrangement.spacedBy(12.dp)
+                        ) {
+                            Row(
+                                modifier = Modifier
+                                    .fillMaxWidth()
+                                    .height(IntrinsicSize.Max),
+                                horizontalArrangement = Arrangement.spacedBy(12.dp)
+                            ) {
+                                ModeFeatureCard(
+                                    title = "Instant Lock",
+                                    description = "Restrict now for a chosen timer.",
+                                    icon = Icons.Outlined.Lock,
+                                    accentBadge = "Immediate",
+                                    onClick = onOpenInstantSetup,
+                                    testTag = "mode_card_instant",
+                                    modifier = Modifier
+                                        .weight(1f)
+                                        .fillMaxHeight()
+                                )
+                                ModeFeatureCard(
+                                    title = "Delayed Lock",
+                                    description = "Free use first, then auto Lock.",
+                                    icon = ResolveIcons.HourglassTop,
+                                    accentBadge = "2-Stage",
+                                    onClick = onOpenDelayedSetup,
+                                    testTag = "mode_card_delayed",
+                                    modifier = Modifier
+                                        .weight(1f)
+                                        .fillMaxHeight()
+                                )
+                            }
+                            Row(
+                                modifier = Modifier
+                                    .fillMaxWidth()
+                                    .height(IntrinsicSize.Max),
+                                horizontalArrangement = Arrangement.spacedBy(12.dp)
+                            ) {
+                                ModeFeatureCard(
+                                    title = "Schedule Lock",
+                                    description = "Start automatically on schedule.",
+                                    icon = ResolveIcons.Event,
+                                    accentBadge = "Automated",
+                                    onClick = onOpenScheduleSetup,
+                                    testTag = "mode_card_schedule",
+                                    modifier = Modifier
+                                        .weight(1f)
+                                        .fillMaxHeight()
+                                )
+                                ModeFeatureCard(
+                                    title = "App Lock",
+                                    description = "Guard selected apps securely.",
+                                    icon = ResolveIcons.Shield,
+                                    accentBadge = "App Guard",
+                                    onClick = onOpenAppLockSetup,
+                                    testTag = "mode_card_applock",
+                                    modifier = Modifier
+                                        .weight(1f)
+                                        .fillMaxHeight()
+                                )
+                            }
+                        }
+                    }
+                }
             }
 
+            // Compact Progress Overview derived strictly from real local history
             item {
-                ModeSelectionCard(
-                    title = "Delayed Lock",
-                    description = "Use the phone freely first, then automatically enter Lock Mode.",
-                    icon = ResolveIcons.HourglassTop,
-                    accentBadge = "2-Stage",
-                    onClick = onOpenDelayedSetup,
-                    testTag = "mode_card_delayed"
-                )
+                ProgressOverviewCard(records = historyRecords)
             }
 
+            // Compact Today's App Usage Dashboard (real UsageStatsManager data or honest permission notice)
             item {
-                ModeSelectionCard(
-                    title = "Schedule Lock",
-                    description = "Start restriction automatically at a chosen date and time.",
-                    icon = ResolveIcons.Event,
-                    accentBadge = "Automated",
-                    onClick = onOpenScheduleSetup,
-                    testTag = "mode_card_schedule"
+                AppUsageDashboardCard(
+                    summary = dailyAppUsage,
+                    loadAppIcon = loadAppIcon,
+                    onGrantUsageAccess = onGrantUsageAccess
                 )
             }
 
@@ -346,13 +500,382 @@ fun HomeScreen(
 }
 
 @Composable
+private fun ModeFeatureCard(
+    title: String,
+    description: String,
+    icon: ImageVector,
+    accentBadge: String,
+    onClick: () -> Unit,
+    testTag: String,
+    modifier: Modifier = Modifier
+) {
+    val palette = LocalResolveExtendedPalette.current
+    val haptic = LocalHapticFeedback.current
+    val interactionSource = remember { MutableInteractionSource() }
+
+    Column(
+        modifier = modifier
+            .pressScale(interactionSource, pressedScale = 0.97f)
+            .resolveGlassCard(
+                cornerRadius = 22.dp,
+                borderColor = palette.accent.copy(alpha = 0.28f)
+            )
+            .clickable(
+                interactionSource = interactionSource,
+                indication = androidx.compose.material3.ripple()
+            ) {
+                haptic.performHapticFeedback(HapticFeedbackType.TextHandleMove)
+                onClick()
+            }
+            .padding(15.dp)
+            .testTag(testTag),
+        verticalArrangement = Arrangement.SpaceBetween
+    ) {
+        Row(
+            modifier = Modifier.fillMaxWidth(),
+            horizontalArrangement = Arrangement.SpaceBetween,
+            verticalAlignment = Alignment.CenterVertically
+        ) {
+            Box(
+                modifier = Modifier
+                    .size(42.dp)
+                    .clip(RoundedCornerShape(13.dp))
+                    .background(palette.accentSoftContainer)
+                    .border(1.dp, palette.accent.copy(alpha = 0.28f), RoundedCornerShape(13.dp)),
+                contentAlignment = Alignment.Center
+            ) {
+                Icon(
+                    imageVector = icon,
+                    contentDescription = title,
+                    tint = palette.accent,
+                    modifier = Modifier.size(21.dp)
+                )
+            }
+
+            Text(
+                text = accentBadge,
+                style = MaterialTheme.typography.labelSmall.copy(fontSize = 10.sp),
+                color = palette.accent,
+                modifier = Modifier
+                    .clip(CircleShape)
+                    .background(palette.accentSoftContainer)
+                    .border(1.dp, palette.accent.copy(alpha = 0.25f), CircleShape)
+                    .padding(horizontal = 8.dp, vertical = 3.dp)
+            )
+        }
+
+        Spacer(modifier = Modifier.height(12.dp))
+
+        Column(verticalArrangement = Arrangement.spacedBy(3.dp)) {
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.SpaceBetween,
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                Text(
+                    text = title,
+                    style = MaterialTheme.typography.titleMedium.copy(fontWeight = FontWeight.SemiBold),
+                    color = palette.textPrimary,
+                    maxLines = 1,
+                    overflow = TextOverflow.Ellipsis,
+                    modifier = Modifier.weight(1f)
+                )
+                Icon(
+                    imageVector = Icons.AutoMirrored.Outlined.ArrowForward,
+                    contentDescription = "Open $title",
+                    tint = palette.accent,
+                    modifier = Modifier.size(16.dp)
+                )
+            }
+            Text(
+                text = description,
+                style = MaterialTheme.typography.bodySmall,
+                color = palette.textSecondary,
+                maxLines = 2,
+                overflow = TextOverflow.Ellipsis
+            )
+        }
+    }
+}
+
+@Composable
+private fun ProgressOverviewCard(
+    records: List<SessionHistoryRecord>
+) {
+    val palette = LocalResolveExtendedPalette.current
+    val todayStartMs = remember {
+        LocalDate.now().atStartOfDay(ZoneId.systemDefault()).toInstant().toEpochMilli()
+    }
+    val todayRecords = remember(records, todayStartMs) {
+        records.filter { it.endedAtWallMs >= todayStartMs || it.startedAtWallMs >= todayStartMs }
+    }
+    val todayCompleted = remember(todayRecords) {
+        todayRecords.count { it.outcome == SessionOutcome.COMPLETED }
+    }
+    val todayFocusMinutes = remember(todayRecords) {
+        todayRecords.filter { it.outcome == SessionOutcome.COMPLETED }.sumOf { it.lockDurationMinutes }
+    }
+    val completionRatio = remember(todayRecords, todayCompleted) {
+        if (todayRecords.isEmpty()) 0f else (todayCompleted.toFloat() / todayRecords.size.toFloat()).coerceIn(0f, 1f)
+    }
+    val animatedRatio by animateFloatAsState(
+        targetValue = completionRatio,
+        animationSpec = tween(420, easing = FastOutSlowInEasing),
+        label = "home_today_completion_ratio"
+    )
+
+    Column(
+        modifier = Modifier
+            .fillMaxWidth()
+            .resolveGlassCard(
+                cornerRadius = 20.dp,
+                borderColor = palette.accent.copy(alpha = 0.24f)
+            )
+            .padding(16.dp)
+            .testTag("home_progress_overview_card"),
+        verticalArrangement = Arrangement.spacedBy(10.dp)
+    ) {
+        Row(
+            modifier = Modifier.fillMaxWidth(),
+            horizontalArrangement = Arrangement.SpaceBetween,
+            verticalAlignment = Alignment.CenterVertically
+        ) {
+            Text(
+                text = "Today's Focus Progress",
+                style = MaterialTheme.typography.titleMedium,
+                color = palette.textPrimary
+            )
+            Text(
+                text = if (todayFocusMinutes > 0L) {
+                    DurationSelection.fromTotalMinutes(todayFocusMinutes).formattedCompact()
+                } else {
+                    "0m"
+                },
+                style = MaterialTheme.typography.titleSmall.copy(
+                    fontFamily = JetBrainsMonoFamily,
+                    fontWeight = FontWeight.SemiBold
+                ),
+                color = palette.accent
+            )
+        }
+
+        LinearProgressIndicator(
+            progress = { animatedRatio },
+            color = palette.accent,
+            trackColor = palette.background.copy(alpha = 0.85f),
+            strokeCap = StrokeCap.Round,
+            modifier = Modifier
+                .fillMaxWidth()
+                .height(6.dp)
+                .clip(CircleShape)
+        )
+
+        Row(
+            modifier = Modifier.fillMaxWidth(),
+            horizontalArrangement = Arrangement.SpaceBetween
+        ) {
+            Text(
+                text = if (todayRecords.isEmpty()) {
+                    "No focus sessions completed today yet"
+                } else {
+                    "$todayCompleted of ${todayRecords.size} sessions completed today"
+                },
+                style = MaterialTheme.typography.bodySmall,
+                color = palette.textSecondary
+            )
+            Text(
+                text = "All-time: ${records.size}",
+                style = MaterialTheme.typography.labelSmall.copy(fontFamily = JetBrainsMonoFamily),
+                color = palette.textSecondary
+            )
+        }
+    }
+}
+
+@Composable
+private fun AppUsageDashboardCard(
+    summary: DailyAppUsageSummary,
+    loadAppIcon: suspend (String) -> ImageBitmap?,
+    onGrantUsageAccess: () -> Unit
+) {
+    val palette = LocalResolveExtendedPalette.current
+    Column(
+        modifier = Modifier
+            .fillMaxWidth()
+            .resolveGlassCard(cornerRadius = 18.dp)
+            .padding(12.dp)
+            .testTag("home_usage_dashboard_card"),
+        verticalArrangement = Arrangement.spacedBy(6.dp)
+    ) {
+        Row(
+            modifier = Modifier.fillMaxWidth(),
+            horizontalArrangement = Arrangement.SpaceBetween,
+            verticalAlignment = Alignment.CenterVertically
+        ) {
+            Text(
+                text = "Today's Screen Time",
+                style = MaterialTheme.typography.titleSmall.copy(fontWeight = FontWeight.SemiBold),
+                color = palette.textPrimary
+            )
+            if (summary.hasUsagePermission) {
+                Text(
+                    text = formatUsageDuration(summary.totalScreenTimeMs),
+                    style = MaterialTheme.typography.titleSmall.copy(
+                        fontFamily = JetBrainsMonoFamily,
+                        fontWeight = FontWeight.SemiBold
+                    ),
+                    color = palette.accent
+                )
+            }
+        }
+
+        if (!summary.hasUsagePermission) {
+            Text(
+                text = "Usage Access permission is required to view real app screen time.",
+                style = MaterialTheme.typography.bodySmall,
+                color = palette.textSecondary
+            )
+            OutlinedButton(
+                onClick = onGrantUsageAccess,
+                contentPadding = PaddingValues(horizontal = 12.dp, vertical = 6.dp),
+                shape = RoundedCornerShape(10.dp),
+                border = androidx.compose.foundation.BorderStroke(1.dp, palette.accent.copy(alpha = 0.55f)),
+                colors = ButtonDefaults.outlinedButtonColors(contentColor = palette.accent),
+                modifier = Modifier.testTag("home_grant_usage_button")
+            ) {
+                Text("Grant Usage Access", style = MaterialTheme.typography.labelMedium)
+            }
+        } else if (summary.topApps.isEmpty()) {
+            Text(
+                text = "No other app usage recorded today.",
+                style = MaterialTheme.typography.bodySmall,
+                color = palette.textSecondary
+            )
+        } else {
+            val topList = remember(summary.topApps) { summary.topApps.take(4) }
+            val maxMs = remember(topList) {
+                topList.maxOfOrNull { it.foregroundTimeMs }?.coerceAtLeast(1L) ?: 1L
+            }
+            Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
+                topList.forEach { item ->
+                    UsageAppRow(
+                        item = item,
+                        fraction = (item.foregroundTimeMs.toFloat() / maxMs.toFloat()).coerceIn(0.05f, 1f),
+                        loadAppIcon = loadAppIcon
+                    )
+                }
+            }
+        }
+    }
+}
+
+@Composable
+private fun UsageAppRow(
+    item: DailyAppUsageItem,
+    fraction: Float,
+    loadAppIcon: suspend (String) -> ImageBitmap?
+) {
+    val palette = LocalResolveExtendedPalette.current
+    var icon by remember(item.packageName) { mutableStateOf<ImageBitmap?>(null) }
+    LaunchedEffect(item.packageName) {
+        icon = loadAppIcon(item.packageName)
+    }
+    val animatedFraction by animateFloatAsState(
+        targetValue = fraction,
+        animationSpec = tween(420, easing = FastOutSlowInEasing),
+        label = "usage_bar_${item.packageName}"
+    )
+
+    Row(
+        modifier = Modifier
+            .fillMaxWidth()
+            .testTag("home_usage_app_${item.packageName}"),
+        verticalAlignment = Alignment.CenterVertically,
+        horizontalArrangement = Arrangement.spacedBy(8.dp)
+    ) {
+        if (icon != null) {
+            Image(
+                bitmap = icon!!,
+                contentDescription = "${item.appName} icon",
+                modifier = Modifier
+                    .size(22.dp)
+                    .clip(RoundedCornerShape(6.dp))
+            )
+        } else {
+            Box(
+                modifier = Modifier
+                    .size(22.dp)
+                    .clip(RoundedCornerShape(6.dp))
+                    .background(palette.accentSoftContainer),
+                contentAlignment = Alignment.Center
+            ) {
+                Icon(
+                    imageVector = ResolveIcons.Apps,
+                    contentDescription = null,
+                    tint = palette.accent,
+                    modifier = Modifier.size(13.dp)
+                )
+            }
+        }
+
+        Column(
+            modifier = Modifier.weight(1f),
+            verticalArrangement = Arrangement.spacedBy(2.dp)
+        ) {
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.SpaceBetween,
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                Text(
+                    text = item.appName,
+                    style = MaterialTheme.typography.bodySmall,
+                    color = palette.textPrimary,
+                    maxLines = 1,
+                    overflow = TextOverflow.Ellipsis,
+                    modifier = Modifier.weight(1f)
+                )
+                Spacer(Modifier.width(8.dp))
+                Text(
+                    text = formatUsageDuration(item.foregroundTimeMs),
+                    style = MaterialTheme.typography.labelSmall.copy(fontFamily = JetBrainsMonoFamily),
+                    color = palette.accent
+                )
+            }
+            LinearProgressIndicator(
+                progress = { animatedFraction },
+                color = palette.accent,
+                trackColor = palette.background.copy(alpha = 0.8f),
+                strokeCap = StrokeCap.Round,
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .height(3.dp)
+                    .clip(CircleShape)
+            )
+        }
+    }
+}
+
+private fun formatUsageDuration(durationMs: Long): String {
+    val totalMinutes = (durationMs / 60_000L).coerceAtLeast(0L)
+    val h = totalMinutes / 60L
+    val m = totalMinutes % 60L
+    return when {
+        h > 0 && m > 0 -> "${h}h ${m}m"
+        h > 0 -> "${h}h"
+        else -> "${m}m"
+    }
+}
+
+@Composable
 private fun EnforcementStatusPill(
     capabilities: SystemCapabilityStatus,
     onClick: () -> Unit
 ) {
+    val palette = LocalResolveExtendedPalette.current
     val isReady = capabilities.canEnforceRealLock
-    val bgColor = if (isReady) ResolveColors.MintSoftContainer else ResolveColors.AmberContainer
-    val fgColor = if (isReady) ResolveColors.MintAccent else ResolveColors.AmberWarn
+    val bgColor = if (isReady) palette.accentSoftContainer else palette.warnContainer
+    val fgColor = if (isReady) palette.accent else palette.warn
     val label = when (capabilities.activeEnforcementMode) {
         EnforcementMode.DEVICE_OWNER_LOCK_TASK -> "Device Owner"
         EnforcementMode.ACCESSIBILITY_GUARD -> "Guard Active"
@@ -390,6 +913,7 @@ private fun EnforcementStatusPill(
 
 @Composable
 private fun SetupReadinessCallout(onClick: () -> Unit) {
+    val palette = LocalResolveExtendedPalette.current
     val interactionSource = remember { MutableInteractionSource() }
     Row(
         modifier = Modifier
@@ -399,12 +923,12 @@ private fun SetupReadinessCallout(onClick: () -> Unit) {
             .background(
                 Brush.horizontalGradient(
                     colors = listOf(
-                        ResolveColors.AmberContainer.copy(alpha = 0.72f),
-                        ResolveColors.ForestSurface
+                        palette.warnContainer.copy(alpha = 0.78f),
+                        palette.cardBottom
                     )
                 )
             )
-            .border(1.dp, ResolveColors.AmberWarn.copy(alpha = 0.4f), RoundedCornerShape(20.dp))
+            .border(1.dp, palette.warn.copy(alpha = 0.4f), RoundedCornerShape(20.dp))
             .clickable(
                 interactionSource = interactionSource,
                 indication = androidx.compose.material3.ripple(),
@@ -417,13 +941,13 @@ private fun SetupReadinessCallout(onClick: () -> Unit) {
             modifier = Modifier
                 .size(40.dp)
                 .clip(RoundedCornerShape(12.dp))
-                .background(ResolveColors.AmberWarn.copy(alpha = 0.16f)),
+                .background(palette.warn.copy(alpha = 0.16f)),
             contentAlignment = Alignment.Center
         ) {
             Icon(
                 imageVector = ResolveIcons.Tune,
                 contentDescription = null,
-                tint = ResolveColors.AmberWarn,
+                tint = palette.warn,
                 modifier = Modifier.size(20.dp)
             )
         }
@@ -432,18 +956,18 @@ private fun SetupReadinessCallout(onClick: () -> Unit) {
             Text(
                 text = "Enable Accessibility & Permissions",
                 style = MaterialTheme.typography.titleMedium,
-                color = ResolveColors.TextPrimary
+                color = palette.textPrimary
             )
             Text(
                 text = "Tap to open Settings and enable Resolve Focus Guard so locks enforce reliably.",
                 style = MaterialTheme.typography.bodySmall,
-                color = ResolveColors.TextSecondary
+                color = palette.textSecondary
             )
         }
         Icon(
             imageVector = Icons.AutoMirrored.Outlined.ArrowForward,
             contentDescription = "Open Settings",
-            tint = ResolveColors.AmberWarn,
+            tint = palette.warn,
             modifier = Modifier.size(18.dp)
         )
     }
@@ -456,6 +980,7 @@ private fun ActiveSessionBanner(
     onReturnToLockScreen: () -> Unit,
     onDismiss: () -> Unit
 ) {
+    val palette = LocalResolveExtendedPalette.current
     val isWarning = session.state == SessionState.ENFORCEMENT_UNAVAILABLE ||
         session.state == SessionState.ENFORCEMENT_FAILED
 
@@ -466,18 +991,18 @@ private fun ActiveSessionBanner(
             .background(
                 if (isWarning) {
                     Brush.verticalGradient(
-                        listOf(ResolveColors.ErrorContainer.copy(alpha = 0.85f), ResolveColors.ForestSurface)
+                        listOf(palette.errorContainer.copy(alpha = 0.85f), palette.cardBottom)
                     )
                 } else {
                     Brush.verticalGradient(
-                        listOf(ResolveColors.MintSoftContainer.copy(alpha = 0.72f), ResolveColors.ForestSurface)
+                        listOf(palette.accentSoftContainer.copy(alpha = 0.78f), palette.cardBottom)
                     )
                 }
             )
             .border(
                 1.dp,
-                if (isWarning) ResolveColors.ErrorCoral.copy(alpha = 0.55f)
-                else ResolveColors.MintAccent.copy(alpha = 0.50f),
+                if (isWarning) palette.error.copy(alpha = 0.55f)
+                else palette.accent.copy(alpha = 0.50f),
                 RoundedCornerShape(24.dp)
             )
             .padding(20.dp),
@@ -491,11 +1016,11 @@ private fun ActiveSessionBanner(
                     verticalAlignment = Alignment.CenterVertically,
                     horizontalArrangement = Arrangement.spacedBy(8.dp)
                 ) {
-                    PulsingStatusDot(color = ResolveColors.MintAccent, size = 7.dp)
+                    PulsingStatusDot(color = palette.accent, size = 7.dp)
                     Text(
                         text = "DELAYED LOCK — FREE USE WINDOW",
                         style = MaterialTheme.typography.labelSmall.copy(letterSpacing = 1.sp),
-                        color = ResolveColors.MintAccent
+                        color = palette.accent
                     )
                 }
                 Text(
@@ -504,12 +1029,12 @@ private fun ActiveSessionBanner(
                         fontFamily = JetBrainsMonoFamily,
                         fontFeatureSettings = "tnum"
                     ),
-                    color = ResolveColors.TextPrimary
+                    color = palette.textPrimary
                 )
                 LinearProgressIndicator(
                     progress = { freeProgress },
-                    color = ResolveColors.MintAccent,
-                    trackColor = ResolveColors.ForestDeep,
+                    color = palette.accent,
+                    trackColor = palette.background,
                     strokeCap = StrokeCap.Round,
                     modifier = Modifier
                         .fillMaxWidth()
@@ -519,7 +1044,7 @@ private fun ActiveSessionBanner(
                 Text(
                     text = "Phone remains unrestricted until timer hits zero. Lock Duration (${session.lockDurationMinutes}m) starts automatically after transition.",
                     style = MaterialTheme.typography.bodyMedium,
-                    color = ResolveColors.TextSecondary
+                    color = palette.textSecondary
                 )
             }
             SessionState.LOCK_ENFORCEMENT_ACTIVE,
@@ -530,11 +1055,11 @@ private fun ActiveSessionBanner(
                     verticalAlignment = Alignment.CenterVertically,
                     horizontalArrangement = Arrangement.spacedBy(8.dp)
                 ) {
-                    PulsingStatusDot(color = ResolveColors.MintBright, size = 7.dp)
+                    PulsingStatusDot(color = palette.accentStrong, size = 7.dp)
                     Text(
                         text = "LOCK ENFORCEMENT ACTIVE",
                         style = MaterialTheme.typography.labelSmall.copy(letterSpacing = 1.sp),
-                        color = ResolveColors.MintBright
+                        color = palette.accentStrong
                     )
                 }
                 Text(
@@ -543,12 +1068,12 @@ private fun ActiveSessionBanner(
                         fontFamily = JetBrainsMonoFamily,
                         fontFeatureSettings = "tnum"
                     ),
-                    color = ResolveColors.TextPrimary
+                    color = palette.textPrimary
                 )
                 LinearProgressIndicator(
                     progress = { lockProgress },
-                    color = ResolveColors.MintAccent,
-                    trackColor = ResolveColors.ForestDeep,
+                    color = palette.accent,
+                    trackColor = palette.background,
                     strokeCap = StrokeCap.Round,
                     modifier = Modifier
                         .fillMaxWidth()
@@ -571,15 +1096,15 @@ private fun ActiveSessionBanner(
                 Text(
                     text = "ENFORCEMENT UNAVAILABLE",
                     style = MaterialTheme.typography.labelSmall.copy(letterSpacing = 1.sp),
-                    color = ResolveColors.ErrorCoral
+                    color = palette.error
                 )
                 Text(
                     text = session.failureReason ?: "Lock enforcement could not be activated.",
                     style = MaterialTheme.typography.bodyMedium,
-                    color = ResolveColors.TextPrimary
+                    color = palette.textPrimary
                 )
                 TextButton(onClick = onDismiss) {
-                    Text("Dismiss", color = ResolveColors.ErrorCoral)
+                    Text("Dismiss", color = palette.error)
                 }
             }
             SessionState.COMPLETED,
@@ -593,118 +1118,14 @@ private fun ActiveSessionBanner(
                     Text(
                         text = label,
                         style = MaterialTheme.typography.titleMedium,
-                        color = ResolveColors.MintAccent
+                        color = palette.accent
                     )
                     TextButton(onClick = onDismiss) {
-                        Text("Clear", color = ResolveColors.TextSecondary)
+                        Text("Clear", color = palette.textSecondary)
                     }
                 }
             }
             else -> Unit
-        }
-    }
-}
-
-@Composable
-private fun ModeSelectionCard(
-    title: String,
-    description: String,
-    icon: ImageVector,
-    accentBadge: String,
-    onClick: () -> Unit,
-    testTag: String
-) {
-    val haptic = LocalHapticFeedback.current
-    val interactionSource = remember { MutableInteractionSource() }
-
-    Row(
-        modifier = Modifier
-            .fillMaxWidth()
-            .pressScale(interactionSource, pressedScale = 0.975f)
-            .resolveGlassCard(
-                cornerRadius = 24.dp,
-                borderColor = ResolveColors.ForestBorderGlow.copy(alpha = 0.55f)
-            )
-            .clickable(
-                interactionSource = interactionSource,
-                indication = androidx.compose.material3.ripple()
-            ) {
-                haptic.performHapticFeedback(HapticFeedbackType.TextHandleMove)
-                onClick()
-            }
-            .padding(20.dp)
-            .testTag(testTag),
-        verticalAlignment = Alignment.CenterVertically
-    ) {
-        Box(
-            modifier = Modifier
-                .size(54.dp)
-                .clip(RoundedCornerShape(17.dp))
-                .background(
-                    Brush.linearGradient(
-                        colors = listOf(
-                            ResolveColors.MintSoftContainer,
-                            ResolveColors.ForestSurfaceElevated
-                        )
-                    )
-                )
-                .border(1.dp, ResolveColors.MintAccent.copy(alpha = 0.25f), RoundedCornerShape(17.dp)),
-            contentAlignment = Alignment.Center
-        ) {
-            Icon(
-                imageVector = icon,
-                contentDescription = title,
-                tint = ResolveColors.MintAccent,
-                modifier = Modifier.size(26.dp)
-            )
-        }
-
-        Spacer(modifier = Modifier.width(16.dp))
-
-        Column(modifier = Modifier.weight(1f)) {
-            Row(
-                verticalAlignment = Alignment.CenterVertically,
-                horizontalArrangement = Arrangement.spacedBy(8.dp)
-            ) {
-                Text(
-                    text = title,
-                    style = MaterialTheme.typography.titleLarge,
-                    color = ResolveColors.TextPrimary
-                )
-                Text(
-                    text = accentBadge,
-                    style = MaterialTheme.typography.labelSmall,
-                    color = ResolveColors.MintAccent,
-                    modifier = Modifier
-                        .clip(CircleShape)
-                        .background(ResolveColors.MintSoftContainer)
-                        .border(1.dp, ResolveColors.MintAccent.copy(alpha = 0.25f), CircleShape)
-                        .padding(horizontal = 9.dp, vertical = 3.dp)
-                )
-            }
-            Spacer(modifier = Modifier.height(5.dp))
-            Text(
-                text = description,
-                style = MaterialTheme.typography.bodyMedium,
-                color = ResolveColors.TextSecondary
-            )
-        }
-
-        Spacer(modifier = Modifier.width(8.dp))
-
-        Box(
-            modifier = Modifier
-                .size(34.dp)
-                .clip(CircleShape)
-                .background(ResolveColors.ForestDeep.copy(alpha = 0.65f)),
-            contentAlignment = Alignment.Center
-        ) {
-            Icon(
-                imageVector = Icons.AutoMirrored.Outlined.ArrowForward,
-                contentDescription = "Configure $title",
-                tint = ResolveColors.MintAccent,
-                modifier = Modifier.size(18.dp)
-            )
         }
     }
 }

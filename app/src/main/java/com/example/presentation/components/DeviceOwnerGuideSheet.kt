@@ -18,7 +18,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.unit.dp
 import com.example.designsystem.JetBrainsMonoFamily
-import com.example.designsystem.ResolveColors
+import com.example.designsystem.LocalResolveExtendedPalette
 import com.example.domain.model.DeviceOwnerState
 
 @OptIn(ExperimentalMaterial3Api::class)
@@ -27,9 +27,10 @@ fun DeviceOwnerGuideSheet(
     deviceOwnerState: DeviceOwnerState,
     onDismiss: () -> Unit
 ) {
+    val palette = LocalResolveExtendedPalette.current
     ModalBottomSheet(
         onDismissRequest = onDismiss,
-        containerColor = ResolveColors.ForestSecondary
+        containerColor = palette.cardBottom
     ) {
         ProvideSafeTextToolbar {
             Column(
@@ -42,7 +43,7 @@ fun DeviceOwnerGuideSheet(
             Text(
                 text = "Device Management Setup",
                 style = MaterialTheme.typography.headlineMedium,
-                color = ResolveColors.TextPrimary
+                color = palette.textPrimary
             )
             Text(
                 text = when (deviceOwnerState) {
@@ -54,34 +55,34 @@ fun DeviceOwnerGuideSheet(
                         "Status: Not Provisioned. Android requires Device Owner authority (not a normal permission toggle) to lock the device to selected apps."
                 },
                 style = MaterialTheme.typography.bodyLarge,
-                color = ResolveColors.TextSecondary
+                color = palette.textSecondary
             )
 
             Column(
                 modifier = Modifier
                     .fillMaxWidth()
                     .clip(RoundedCornerShape(14.dp))
-                    .background(ResolveColors.ForestSurface)
-                    .border(1.dp, ResolveColors.ForestOutline, RoundedCornerShape(14.dp))
+                    .background(palette.background.copy(alpha = 0.7f))
+                    .border(1.dp, palette.cardBorder, RoundedCornerShape(14.dp))
                     .padding(14.dp),
                 verticalArrangement = Arrangement.spacedBy(6.dp)
             ) {
                 Text(
                     text = "Provision via ADB (personal device)",
                     style = MaterialTheme.typography.labelLarge,
-                    color = ResolveColors.MintAccent
+                    color = palette.accent
                 )
                 Text(
                     text = "adb shell dpm set-device-owner com.resolve.focus/com.example.devicepolicy.ResolveDeviceAdminReceiver",
                     style = MaterialTheme.typography.bodyMedium.copy(fontFamily = JetBrainsMonoFamily),
-                    color = ResolveColors.TextPrimary
+                    color = palette.textPrimary
                 )
             }
 
             Text(
                 text = "Note: Android only permits setting a Device Owner when no user accounts are temporarily present on the device (or during fresh setup). Package ID change from any previous app requires provisioning this package separately.",
                 style = MaterialTheme.typography.bodyMedium,
-                color = ResolveColors.TextSecondary
+                color = palette.textSecondary
             )
             Spacer(Modifier.height(4.dp))
             }

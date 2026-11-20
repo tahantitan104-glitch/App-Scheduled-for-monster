@@ -29,7 +29,6 @@ import androidx.compose.material3.FloatingActionButton
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
-import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Switch
 import androidx.compose.material3.SwitchDefaults
 import androidx.compose.material3.Text
@@ -41,7 +40,7 @@ import androidx.compose.ui.draw.clip
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.unit.dp
 import com.example.designsystem.JetBrainsMonoFamily
-import com.example.designsystem.ResolveColors
+import com.example.designsystem.LocalResolveExtendedPalette
 import com.example.domain.model.DurationSelection
 import com.example.domain.model.LockSchedule
 import com.example.domain.model.ScheduleType
@@ -63,100 +62,100 @@ fun ScheduleScreen(
     onDeleteSchedule: (Long) -> Unit,
     modifier: Modifier = Modifier
 ) {
-    Scaffold(
-        modifier = modifier.fillMaxSize(),
-        containerColor = ResolveColors.ForestDeep,
-        floatingActionButton = {
-            FloatingActionButton(
-                onClick = onAddSchedule,
-                containerColor = ResolveColors.MintAccent,
-                contentColor = ResolveColors.ForestDeep,
-                shape = CircleShape,
-                modifier = Modifier.testTag("schedule_add_fab")
-            ) {
-                Icon(Icons.Outlined.Add, contentDescription = "Create schedule")
-            }
-        }
-    ) { innerPadding ->
-        Box(
-            modifier = Modifier
-                .fillMaxSize()
-                .padding(innerPadding),
-            contentAlignment = Alignment.TopCenter
-        ) {
-            LazyColumn(
-                modifier = Modifier
-                    .widthIn(max = 620.dp)
-                    .fillMaxSize(),
-                contentPadding = PaddingValues(horizontal = 20.dp, vertical = 20.dp),
-                verticalArrangement = Arrangement.spacedBy(12.dp)
-            ) {
-                item {
-                    Text(
-                        text = "Schedules",
-                        style = MaterialTheme.typography.headlineLarge,
-                        color = ResolveColors.TextPrimary
-                    )
-                    Spacer(Modifier.height(4.dp))
-                    Text(
-                        text = "Automatic restriction start times in local timezone.",
-                        style = MaterialTheme.typography.bodyMedium,
-                        color = ResolveColors.TextSecondary
-                    )
-                    Spacer(Modifier.height(6.dp))
-                    FeatureTipNote(
-                        text = "Tip: Tap any schedule to edit; overlaps are checked automatically.",
-                        icon = ResolveIcons.Schedule
-                    )
-                }
+    val palette = LocalResolveExtendedPalette.current
 
-                if (schedules.isEmpty()) {
-                    item {
-                        Column(
+    Box(
+        modifier = modifier
+            .fillMaxSize()
+            .background(palette.background)
+            .testTag("schedule_screen"),
+        contentAlignment = Alignment.TopCenter
+    ) {
+        LazyColumn(
+            modifier = Modifier
+                .widthIn(max = 620.dp)
+                .fillMaxSize(),
+            contentPadding = PaddingValues(start = 20.dp, end = 20.dp, top = 12.dp, bottom = 92.dp),
+            verticalArrangement = Arrangement.spacedBy(12.dp)
+        ) {
+            item {
+                Text(
+                    text = "Schedules",
+                    style = MaterialTheme.typography.headlineMedium,
+                    color = palette.textPrimary
+                )
+                Spacer(Modifier.height(4.dp))
+                Text(
+                    text = "Automatic restriction start times in local timezone.",
+                    style = MaterialTheme.typography.bodyMedium,
+                    color = palette.textSecondary
+                )
+                Spacer(Modifier.height(6.dp))
+                FeatureTipNote(
+                    text = "Tip: Tap any schedule to edit; overlaps are checked automatically.",
+                    icon = ResolveIcons.Schedule
+                )
+            }
+
+            if (schedules.isEmpty()) {
+                item {
+                    Column(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .resolveGlassCard(cornerRadius = 24.dp)
+                            .padding(horizontal = 24.dp, vertical = 42.dp),
+                        horizontalAlignment = Alignment.CenterHorizontally,
+                        verticalArrangement = Arrangement.spacedBy(12.dp)
+                    ) {
+                        Box(
                             modifier = Modifier
-                                .fillMaxWidth()
-                                .resolveGlassCard(cornerRadius = 24.dp)
-                                .padding(horizontal = 24.dp, vertical = 42.dp),
-                            horizontalAlignment = Alignment.CenterHorizontally,
-                            verticalArrangement = Arrangement.spacedBy(12.dp)
+                                .size(64.dp)
+                                .clip(CircleShape)
+                                .background(palette.accentSoftContainer),
+                            contentAlignment = Alignment.Center
                         ) {
-                            Box(
-                                modifier = Modifier
-                                    .size(64.dp)
-                                    .clip(CircleShape)
-                                    .background(ResolveColors.MintSoftContainer),
-                                contentAlignment = Alignment.Center
-                            ) {
-                                Icon(
-                                    imageVector = ResolveIcons.EventBusy,
-                                    contentDescription = null,
-                                    tint = ResolveColors.MintAccent,
-                                    modifier = Modifier.size(30.dp)
-                                )
-                            }
-                            Text(
-                                text = "No schedules yet",
-                                style = MaterialTheme.typography.titleLarge,
-                                color = ResolveColors.TextPrimary
-                            )
-                            Text(
-                                text = "Tap + to configure an automated One-Time, Daily, or Weekly Lock.",
-                                style = MaterialTheme.typography.bodyMedium,
-                                color = ResolveColors.TextSecondary
+                            Icon(
+                                imageVector = ResolveIcons.EventBusy,
+                                contentDescription = null,
+                                tint = palette.accent,
+                                modifier = Modifier.size(30.dp)
                             )
                         }
-                    }
-                } else {
-                    items(schedules, key = { it.id }) { schedule ->
-                        ScheduleCard(
-                            schedule = schedule,
-                            onEdit = { onEditSchedule(schedule) },
-                            onToggle = { enabled -> onToggleSchedule(schedule, enabled) },
-                            onDelete = { onDeleteSchedule(schedule.id) }
+                        Text(
+                            text = "No schedules yet",
+                            style = MaterialTheme.typography.titleLarge,
+                            color = palette.textPrimary
+                        )
+                        Text(
+                            text = "Tap + to configure an automated One-Time, Daily, or Weekly Lock.",
+                            style = MaterialTheme.typography.bodyMedium,
+                            color = palette.textSecondary
                         )
                     }
                 }
+            } else {
+                items(schedules, key = { it.id }) { schedule ->
+                    ScheduleCard(
+                        schedule = schedule,
+                        onEdit = { onEditSchedule(schedule) },
+                        onToggle = { enabled -> onToggleSchedule(schedule, enabled) },
+                        onDelete = { onDeleteSchedule(schedule.id) }
+                    )
+                }
             }
+        }
+
+        FloatingActionButton(
+            onClick = onAddSchedule,
+            containerColor = palette.accent,
+            contentColor = palette.onAccent,
+            shape = CircleShape,
+            modifier = Modifier
+                .align(Alignment.BottomEnd)
+                .padding(20.dp)
+                .testTag("schedule_add_fab")
+        ) {
+            Icon(Icons.Outlined.Add, contentDescription = "Create schedule")
         }
     }
 }
@@ -168,6 +167,7 @@ private fun ScheduleCard(
     onToggle: (Boolean) -> Unit,
     onDelete: () -> Unit
 ) {
+    val palette = LocalResolveExtendedPalette.current
     val interactionSource = remember { MutableInteractionSource() }
     val durationLabel = DurationSelection.fromTotalMinutes(schedule.lockDurationMinutes).formattedCompact()
     val cadenceLabel = when (schedule.type) {
@@ -186,9 +186,9 @@ private fun ScheduleCard(
             .resolveGlassCard(
                 cornerRadius = 22.dp,
                 borderColor = if (schedule.isEnabled) {
-                    ResolveColors.MintAccent.copy(alpha = 0.32f)
+                    palette.accent.copy(alpha = 0.36f)
                 } else {
-                    ResolveColors.ForestOutline
+                    palette.cardBorder
                 }
             )
             .clickable(
@@ -214,15 +214,15 @@ private fun ScheduleCard(
                         .size(40.dp)
                         .clip(RoundedCornerShape(12.dp))
                         .background(
-                            if (schedule.isEnabled) ResolveColors.MintSoftContainer
-                            else ResolveColors.ForestSecondary
+                            if (schedule.isEnabled) palette.accentSoftContainer
+                            else palette.background.copy(alpha = 0.65f)
                         ),
                     contentAlignment = Alignment.Center
                 ) {
                     Icon(
                         imageVector = ResolveIcons.EventAvailable,
                         contentDescription = null,
-                        tint = if (schedule.isEnabled) ResolveColors.MintAccent else ResolveColors.TextDisabled,
+                        tint = if (schedule.isEnabled) palette.accent else palette.textMuted,
                         modifier = Modifier.size(20.dp)
                     )
                 }
@@ -231,7 +231,7 @@ private fun ScheduleCard(
                     Text(
                         text = schedule.name,
                         style = MaterialTheme.typography.titleLarge,
-                        color = ResolveColors.TextPrimary
+                        color = palette.textPrimary
                     )
                     Text(
                         text = "%02d:%02d • $durationLabel • $cadenceLabel".format(
@@ -239,7 +239,7 @@ private fun ScheduleCard(
                             schedule.startMinute
                         ),
                         style = MaterialTheme.typography.bodyMedium.copy(fontFamily = JetBrainsMonoFamily),
-                        color = if (schedule.isEnabled) ResolveColors.MintAccent else ResolveColors.TextSecondary
+                        color = if (schedule.isEnabled) palette.accent else palette.textSecondary
                     )
                 }
             }
@@ -248,8 +248,8 @@ private fun ScheduleCard(
                 checked = schedule.isEnabled,
                 onCheckedChange = onToggle,
                 colors = SwitchDefaults.colors(
-                    checkedThumbColor = ResolveColors.ForestDeep,
-                    checkedTrackColor = ResolveColors.MintAccent
+                    checkedThumbColor = palette.onAccent,
+                    checkedTrackColor = palette.accent
                 )
             )
         }
@@ -264,7 +264,7 @@ private fun ScheduleCard(
                     "Next: ${ScheduleCalculator.formatTriggerTimestamp(it)}"
                 } ?: "Paused",
                 style = MaterialTheme.typography.bodyMedium,
-                color = ResolveColors.TextSecondary
+                color = palette.textSecondary
             )
 
             Row {
@@ -272,14 +272,14 @@ private fun ScheduleCard(
                     Icon(
                         imageVector = Icons.Outlined.Edit,
                         contentDescription = "Edit schedule",
-                        tint = ResolveColors.TextSecondary
+                        tint = palette.textSecondary
                     )
                 }
                 IconButton(onClick = onDelete) {
                     Icon(
                         imageVector = Icons.Outlined.Delete,
                         contentDescription = "Delete schedule",
-                        tint = ResolveColors.ErrorCoral
+                        tint = palette.error
                     )
                 }
             }

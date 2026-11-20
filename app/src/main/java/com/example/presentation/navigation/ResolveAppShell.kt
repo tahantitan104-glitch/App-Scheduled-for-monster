@@ -1,5 +1,6 @@
 package com.example.presentation.navigation
 
+import androidx.activity.compose.BackHandler
 import androidx.compose.animation.AnimatedContent
 import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.animation.animateColorAsState
@@ -33,9 +34,7 @@ import androidx.compose.foundation.layout.widthIn
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Home
-import androidx.compose.material.icons.filled.Settings
 import androidx.compose.material.icons.outlined.Home
-import androidx.compose.material.icons.outlined.Settings
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.NavigationRail
@@ -77,16 +76,26 @@ import androidx.navigation.compose.composable
 import androidx.navigation.compose.currentBackStackEntryAsState
 import androidx.navigation.compose.rememberNavController
 import androidx.navigation.navArgument
+import com.example.designsystem.LocalResolveExtendedPalette
 import com.example.designsystem.ResolveColors
 import com.example.domain.model.DurationSelection
+import com.example.domain.model.FlipClockPage
+import com.example.domain.model.LockMode
 import com.example.domain.startup.StartupStage
+import com.example.flipclock.FlipClockActivity
+import com.example.platform.ForceDarkCapabilityHelper
 import com.example.presentation.ResolveViewModel
 import com.example.presentation.UiEvent
+import com.example.presentation.about.AboutResolveScreen
+import com.example.presentation.analysis.DeviceAnalysisScreen
+import com.example.presentation.applock.AppLockSetupScreen
 import com.example.presentation.components.DeviceOwnerGuideSheet
 import com.example.presentation.components.ResolveIcons
-import com.example.presentation.history.HistoryScreen
 import com.example.presentation.home.HomeScreen
-import com.example.presentation.schedule.ScheduleScreen
+import com.example.presentation.insights.InsightsScreen
+import com.example.presentation.modes.ModesScreen
+import com.example.presentation.modes.rgbColorInversion
+import com.example.presentation.more.MoreScreen
 import com.example.presentation.settings.SettingsScreen
 import com.example.presentation.setup.DelayedLockSetupScreen
 import com.example.presentation.setup.InstantLockSetupScreen
@@ -97,12 +106,19 @@ import com.example.presentation.startup.RequiredSetupScreen
 
 object ResolveRoutes {
     const val HOME = "home"
-    const val SCHEDULE = "schedule"
-    const val HISTORY = "history"
+    const val INSIGHTS = "insights"
+    const val MODES = "modes"
+    const val MORE = "more"
     const val SETTINGS = "settings"
+    const val DEVICE_ANALYSIS = "device_analysis?focusSection={focusSection}"
+    const val ABOUT_RESOLVE = "about_resolve"
     const val INSTANT_SETUP = "instant_setup"
     const val DELAYED_SETUP = "delayed_setup"
+    const val APP_LOCK_SETUP = "app_lock_setup"
     const val SCHEDULE_SETUP = "schedule_setup?scheduleId={scheduleId}"
+
+    fun deviceAnalysis(focusSection: String? = null): String =
+        if (!focusSection.isNullOrBlank()) "device_analysis?focusSection=$focusSection" else "device_analysis"
 
     fun scheduleSetup(scheduleId: Long? = null): String =
         if (scheduleId != null) "schedule_setup?scheduleId=$scheduleId" else "schedule_setup"
@@ -117,13 +133,14 @@ private data class TopLevelTab(
 
 private val TOP_LEVEL_TABS = listOf(
     TopLevelTab(ResolveRoutes.HOME, "Home", Icons.Filled.Home, Icons.Outlined.Home),
-    TopLevelTab(ResolveRoutes.SCHEDULE, "Schedule", ResolveIcons.Event, ResolveIcons.Event),
-    TopLevelTab(ResolveRoutes.HISTORY, "History", ResolveIcons.History, ResolveIcons.History),
-    TopLevelTab(ResolveRoutes.SETTINGS, "Settings", Icons.Filled.Settings, Icons.Outlined.Settings)
+    TopLevelTab(ResolveRoutes.INSIGHTS, "Insights", ResolveIcons.History, ResolveIcons.History),
+    TopLevelTab(ResolveRoutes.MODES, "Modes", ResolveIcons.Vision, ResolveIcons.Vision),
+    TopLevelTab(ResolveRoutes.MORE, "More", ResolveIcons.MoreHoriz, ResolveIcons.MoreHoriz)
 )
 
 @Composable
 fun ResolveAppShell(viewModel: ResolveViewModel) {
+    val palette = LocalResolveExtendedPalette.current
     val navController = rememberNavController()
     val snackbarHostState = remember { SnackbarHostState() }
     val backStackEntry by navController.currentBackStackEntryAsState()
@@ -132,6 +149,7 @@ fun ResolveAppShell(viewModel: ResolveViewModel) {
     val activeSession by viewModel.activeSession.collectAsStateWithLifecycle()
     val remainingMillis by viewModel.remainingMillis.collectAsStateWithLifecycle()
     val capabilities by viewModel.capabilities.collectAsStateWithLifecycle()
+    val protectionStatus by viewModel.protectionStatus.collectAsStateWithLifecycle()
     val schedules by viewModel.schedules.collectAsStateWithLifecycle()
     val history by viewModel.history.collectAsStateWithLifecycle()
     val allowedPackages by viewModel.savedAllowedPackages.collectAsStateWithLifecycle()
@@ -143,6 +161,7 @@ fun ResolveAppShell(viewModel: ResolveViewModel) {
     val delayedFreeDuration by viewModel.delayedFreeUseDuration.collectAsStateWithLifecycle()
     val delayedLockDuration by viewModel.delayedLockDuration.collectAsStateWithLifecycle()
     val scheduleDuration by viewModel.scheduleLockDuration.collectAsStateWithLifecycle()
+    val delayedPresets by viewModel.delayedPresets.collectAsStateWithLifecycle()
     val phoneAccessEnabled by viewModel.phoneAccessEnabled.collectAsStateWithLifecycle()
     val mascotPreferences by viewModel.mascotPreferences.collectAsStateWithLifecycle()
     val startupStage by viewModel.startupStage.collectAsStateWithLifecycle()
@@ -150,6 +169,28 @@ fun ResolveAppShell(viewModel: ResolveViewModel) {
     val syncPromoDismissed by viewModel.syncPromoDismissed.collectAsStateWithLifecycle()
     val syncInstantLockToDevices by viewModel.syncInstantLockToDevices.collectAsStateWithLifecycle()
     val syncDelayedLockToDevices by viewModel.syncDelayedLockToDevices.collectAsStateWithLifecycle()
+
+    val appLockEnabled by viewModel.appLockEnabled.collectAsStateWithLifecycle()
+    val hasAppLockCredential by viewModel.hasAppLockCredential.collectAsStateWithLifecycle()
+    val appLockMethod by viewModel.appLockMethod.collectAsStateWithLifecycle()
+    val appLockPinLength by viewModel.appLockPinLength.collectAsStateWithLifecycle()
+    val appLockPackages by viewModel.appLockPackages.collectAsStateWithLifecycle()
+    val appLockManagementUnlocked by viewModel.appLockManagementUnlocked.collectAsStateWithLifecycle()
+
+    val dailyAppUsage by viewModel.dailyAppUsage.collectAsStateWithLifecycle()
+    val instantProfile by viewModel.instantProfile.collectAsStateWithLifecycle()
+    val delayedProfile by viewModel.delayedProfile.collectAsStateWithLifecycle()
+    val scheduledProfile by viewModel.scheduledProfile.collectAsStateWithLifecycle()
+    val darkModeAppPrefs by viewModel.darkModeAppPrefs.collectAsStateWithLifecycle()
+    val colorInversionAppPrefs by viewModel.colorInversionAppPrefs.collectAsStateWithLifecycle()
+    val forceDarkReport by viewModel.forceDarkReport.collectAsStateWithLifecycle()
+    val notificationControlConfig by viewModel.notificationControlConfig.collectAsStateWithLifecycle()
+    val notificationProtectionState by viewModel.notificationProtectionState.collectAsStateWithLifecycle()
+    val deviceAnalysisReport by viewModel.deviceAnalysisReport.collectAsStateWithLifecycle()
+    val landscapeTiltMode by viewModel.landscapeTiltMode.collectAsStateWithLifecycle()
+    val inAppColorInversionEnabled by viewModel.inAppColorInversionEnabled.collectAsStateWithLifecycle()
+    val colorInversionConsentGranted by viewModel.colorInversionConsentGranted.collectAsStateWithLifecycle()
+    val priorOsColorInversionState by viewModel.priorOsColorInversionState.collectAsStateWithLifecycle()
 
     var showDeviceOwnerGuide by remember { mutableStateOf(false) }
     val haptic = LocalHapticFeedback.current
@@ -181,6 +222,12 @@ fun ResolveAppShell(viewModel: ResolveViewModel) {
     val popBackSafely: () -> Unit = {
         runCatching {
             navController.popBackStack()
+        }
+    }
+
+    LaunchedEffect(currentRoute) {
+        if (currentRoute != null && currentRoute != ResolveRoutes.APP_LOCK_SETUP) {
+            viewModel.revokeAppLockManagementAccess()
         }
     }
 
@@ -250,293 +297,521 @@ fun ResolveAppShell(viewModel: ResolveViewModel) {
                     )
                     SnackbarHost(
                         hostState = snackbarHostState,
-                        modifier = Modifier.align(androidx.compose.ui.Alignment.BottomCenter)
+                        modifier = Modifier.align(Alignment.BottomCenter)
                     )
                 }
             }
 
             StartupStage.HOME -> {
-                BoxWithConstraints(modifier = Modifier.fillMaxSize()) {
-                    val useNavigationRail = maxWidth >= 600.dp
+                BoxWithConstraints(
+                    modifier = Modifier
+                        .fillMaxSize()
+                        .rgbColorInversion(enabled = inAppColorInversionEnabled)
+                ) {
+                    val useNavigationRail = maxWidth >= 600.dp || maxWidth > maxHeight
 
                     Scaffold(
-                        containerColor = ResolveColors.ForestDeep,
+                        containerColor = palette.background,
                         snackbarHost = { SnackbarHost(hostState = snackbarHostState) },
-            bottomBar = {
-                AnimatedVisibility(
-                    visible = isTopLevelDestination && !useNavigationRail,
-                    enter = fadeIn(tween(220)) + slideInVertically(tween(220)) { it / 2 },
-                    exit = fadeOut(tween(180)) + slideOutVertically(tween(180)) { it / 2 }
-                ) {
-                    FloatingCapsuleNavDock(
-                        tabs = TOP_LEVEL_TABS,
-                        currentRoute = currentRoute,
-                        reducedMotion = reducedMotion,
-                        onSelectTab = { route ->
-                            haptic.performHapticFeedback(HapticFeedbackType.TextHandleMove)
-                            navigateToTab(route)
-                        }
-                    )
-                }
-            }
-        ) { innerPadding ->
-            Row(
-                modifier = Modifier
-                    .fillMaxSize()
-                    .padding(innerPadding)
-            ) {
-                if (isTopLevelDestination && useNavigationRail) {
-                    NavigationRail(containerColor = ResolveColors.ForestSecondary) {
-                        TOP_LEVEL_TABS.forEach { tab ->
-                            val selected = currentRoute == tab.route
-                            NavigationRailItem(
-                                selected = selected,
-                                onClick = {
-                                    haptic.performHapticFeedback(HapticFeedbackType.TextHandleMove)
-                                    navigateToTab(tab.route)
-                                },
-                                icon = {
-                                    Icon(
-                                        imageVector = if (selected) tab.selectedIcon else tab.unselectedIcon,
-                                        contentDescription = tab.label
-                                    )
-                                },
-                                label = { Text(tab.label) },
-                                colors = NavigationRailItemDefaults.colors(
-                                    selectedIconColor = ResolveColors.MintAccent,
-                                    selectedTextColor = ResolveColors.MintAccent,
-                                    indicatorColor = ResolveColors.MintSoftContainer,
-                                    unselectedIconColor = ResolveColors.TextSecondary,
-                                    unselectedTextColor = ResolveColors.TextSecondary
+                        bottomBar = {
+                            AnimatedVisibility(
+                                visible = isTopLevelDestination && !useNavigationRail,
+                                enter = fadeIn(tween(220)) + slideInVertically(tween(220)) { it / 2 },
+                                exit = fadeOut(tween(180)) + slideOutVertically(tween(180)) { it / 2 }
+                            ) {
+                                FloatingCapsuleNavDock(
+                                    tabs = TOP_LEVEL_TABS,
+                                    currentRoute = currentRoute,
+                                    reducedMotion = reducedMotion,
+                                    onSelectTab = { route ->
+                                        haptic.performHapticFeedback(HapticFeedbackType.TextHandleMove)
+                                        navigateToTab(route)
+                                    }
                                 )
-                            )
-                        }
-                    }
-                }
-
-                NavHost(
-                    navController = navController,
-                    startDestination = ResolveRoutes.HOME,
-                    enterTransition = {
-                        val isSubScreen = targetState.destination.route?.contains("setup") == true
-                        when {
-                            reducedMotion -> fadeIn(tween(120))
-                            isSubScreen -> slideInHorizontally(
-                                animationSpec = tween(260, easing = FastOutSlowInEasing)
-                            ) { it / 4 } + fadeIn(tween(240))
-                            else -> fadeIn(tween(230, easing = FastOutSlowInEasing)) +
-                                scaleIn(
-                                    initialScale = 0.975f,
-                                    animationSpec = tween(230, easing = FastOutSlowInEasing)
-                                )
-                        }
-                    },
-                    exitTransition = {
-                        if (reducedMotion) {
-                            fadeOut(tween(90))
-                        } else {
-                            fadeOut(tween(170, easing = FastOutSlowInEasing))
-                        }
-                    },
-                    popEnterTransition = {
-                        if (reducedMotion) {
-                            fadeIn(tween(120))
-                        } else {
-                            fadeIn(tween(230, easing = FastOutSlowInEasing))
-                        }
-                    },
-                    popExitTransition = {
-                        when {
-                            reducedMotion -> fadeOut(tween(90))
-                            else -> slideOutHorizontally(
-                                animationSpec = tween(240, easing = FastOutSlowInEasing)
-                            ) { it / 4 } + fadeOut(tween(190))
-                        }
-                    },
-                    modifier = Modifier.fillMaxSize()
-                ) {
-                    composable(ResolveRoutes.HOME) {
-                        HomeScreen(
-                            activeSession = activeSession,
-                            remainingMillis = remainingMillis,
-                            capabilities = capabilities,
-                            mascotType = mascotPreferences.selectedMascot,
-                            bunnyPeekEntranceSeen = mascotPreferences.bunnyPeekEntranceSeen,
-                            onBunnyPeekEntranceSeen = { viewModel.markBunnyPeekEntranceSeen() },
-                            reducedMotion = mascotPreferences.reducedMotionEnabled,
-                            accountSyncState = accountSyncState,
-                            syncPromoDismissed = syncPromoDismissed,
-                            onConnectGoogleAccount = { viewModel.signInWithGoogle(context) },
-                            onDismissSyncPromo = { viewModel.dismissSyncPromoBanner() },
-                            onOpenAccountSettings = { navigateToTab(ResolveRoutes.SETTINGS) },
-                            onOpenInstantSetup = { navigateSafely(ResolveRoutes.INSTANT_SETUP) },
-                            onOpenDelayedSetup = { navigateSafely(ResolveRoutes.DELAYED_SETUP) },
-                            onOpenScheduleSetup = { navigateSafely(ResolveRoutes.scheduleSetup()) },
-                            onOpenDeviceOwnerGuide = {
-                                if (!capabilities.canEnforceRealLock) {
-                                    navigateToTab(ResolveRoutes.SETTINGS)
-                                } else {
-                                    showDeviceOwnerGuide = true
-                                }
-                            },
-                            onReturnToLockScreen = { viewModel.openLockScreenIfLocked() },
-                            onDismissTerminalSession = { viewModel.dismissTerminalSession() }
-                        )
-                    }
-
-                    composable(ResolveRoutes.SCHEDULE) {
-                        ScheduleScreen(
-                            schedules = schedules,
-                            onAddSchedule = { navigateSafely(ResolveRoutes.scheduleSetup()) },
-                            onEditSchedule = { schedule ->
-                                viewModel.updateScheduleLockDuration(
-                                    DurationSelection.fromTotalMinutes(schedule.lockDurationMinutes)
-                                )
-                                navigateSafely(ResolveRoutes.scheduleSetup(schedule.id))
-                            },
-                            onToggleSchedule = { schedule, enabled ->
-                                viewModel.toggleScheduleEnabled(schedule, enabled)
-                            },
-                            onDeleteSchedule = { id -> viewModel.deleteSchedule(id) }
-                        )
-                    }
-
-                    composable(ResolveRoutes.HISTORY) {
-                        HistoryScreen(records = history)
-                    }
-
-                    composable(ResolveRoutes.SETTINGS) {
-                        SettingsScreen(
-                            capabilities = capabilities,
-                            hasRecoveryCode = hasRecoveryCode,
-                            recoveryCodeLength = recoveryCodeLength,
-                            generateRandomCode = { viewModel.generateRandomRecoveryCode(it) },
-                            onSaveRecoveryCode = { viewModel.saveRecoveryCode(it) },
-                            onRefreshCapabilities = { viewModel.refreshCapabilities() },
-                            onOpenAccessibilitySettings = { viewModel.openAccessibilitySettings() },
-                            onOpenOverlaySettings = { viewModel.openOverlaySettings() },
-                            onOpenUsageAccessSettings = { viewModel.openUsageAccessSettings() },
-                            onOpenBatteryOptimizationSettings = { viewModel.openBatteryOptimizationSettings() },
-                            onOpenDeviceOwnerGuide = { showDeviceOwnerGuide = true },
-                            onOpenExactAlarmSettings = { viewModel.openExactAlarmSettings() },
-                            onOpenNotificationSettings = { viewModel.openNotificationSettings() },
-                            mascotPreferences = mascotPreferences,
-                            onSelectMascot = { viewModel.selectMascot(it) },
-                            onToggleReducedMotion = { viewModel.setReducedMotion(it) },
-                            onToggleFocusMessagesEnabled = { viewModel.setFocusMessagesEnabled(it) },
-                            onSelectFocusMessageFrequency = { viewModel.setFocusMessageFrequency(it) },
-                            onAddFocusMessage = { viewModel.addFocusMessage(it) },
-                            onEditFocusMessage = { id, text -> viewModel.editFocusMessage(id, text) },
-                            onDeleteFocusMessage = { viewModel.deleteFocusMessage(it) },
-                            onRestoreDefaultFocusMessages = { viewModel.restoreDefaultFocusMessages() },
-                            onToggleLockReminderEnabled = { viewModel.setLockReminderEnabled(it) },
-                            onSaveLockReminderText = { viewModel.setLockReminderText(it) },
-                            onSelectLockReminderStyle = { viewModel.setLockReminderStyle(it) },
-                            accountSyncState = accountSyncState,
-                            onSignInGoogle = { viewModel.signInWithGoogle(context) },
-                            onSignOutGoogle = { viewModel.signOutGoogleAccount() },
-                            onToggleDeviceSync = { viewModel.setDeviceSyncEnabled(it) },
-                            onUpdateProfilePhoto = { viewModel.updateProfilePhoto(it) },
-                            onClearProfilePhoto = { viewModel.clearProfilePhoto() }
-                        )
-                    }
-
-                    composable(ResolveRoutes.INSTANT_SETUP) {
-                        InstantLockSetupScreen(
-                            duration = instantDuration,
-                            allowedPackages = allowedPackages,
-                            installedApps = installedApps,
-                            phoneAccessEnabled = phoneAccessEnabled,
-                            hasRecoveryCode = hasRecoveryCode,
-                            recoveryCodeLength = recoveryCodeLength,
-                            loadIcon = { viewModel.loadAppIcon(it) },
-                            generateRandomCode = { viewModel.generateRandomRecoveryCode(it) },
-                            onHoursChanged = { viewModel.setInstantHours(it) },
-                            onMinutesChanged = { viewModel.setInstantMinutes(it) },
-                            onDurationReplaced = { viewModel.updateInstantDuration(it) },
-                            onSaveAllowedPackages = { viewModel.saveAllowedAppsSelection(it) },
-                            onPhoneAccessChanged = { viewModel.setPhoneAccessEnabled(it) },
-                            onSaveRecoveryCode = { viewModel.saveRecoveryCode(it) },
-                            onStartInstantLock = { viewModel.startInstantLock() },
-                            onBack = popBackSafely,
-                            isAccountSignedIn = accountSyncState.isSignedIn,
-                            syncAcrossDevices = syncInstantLockToDevices,
-                            onSyncAcrossDevicesChanged = { viewModel.setSyncInstantLockToDevices(it) }
-                        )
-                    }
-
-                    composable(ResolveRoutes.DELAYED_SETUP) {
-                        DelayedLockSetupScreen(
-                            freeUseDuration = delayedFreeDuration,
-                            lockDuration = delayedLockDuration,
-                            allowedPackages = allowedPackages,
-                            installedApps = installedApps,
-                            phoneAccessEnabled = phoneAccessEnabled,
-                            hasRecoveryCode = hasRecoveryCode,
-                            recoveryCodeLength = recoveryCodeLength,
-                            loadIcon = { viewModel.loadAppIcon(it) },
-                            generateRandomCode = { viewModel.generateRandomRecoveryCode(it) },
-                            onFreeUseHoursChanged = { viewModel.setDelayedFreeUseHours(it) },
-                            onFreeUseMinutesChanged = { viewModel.setDelayedFreeUseMinutes(it) },
-                            onFreeUseReplaced = { viewModel.updateDelayedFreeUse(it) },
-                            onLockHoursChanged = { viewModel.setDelayedLockHours(it) },
-                            onLockMinutesChanged = { viewModel.setDelayedLockMinutes(it) },
-                            onLockReplaced = { viewModel.updateDelayedLock(it) },
-                            onSaveAllowedPackages = { viewModel.saveAllowedAppsSelection(it) },
-                            onPhoneAccessChanged = { viewModel.setPhoneAccessEnabled(it) },
-                            onSaveRecoveryCode = { viewModel.saveRecoveryCode(it) },
-                            onStartDelayedLock = { viewModel.startDelayedLock() },
-                            onBack = popBackSafely,
-                            isAccountSignedIn = accountSyncState.isSignedIn,
-                            syncAcrossDevices = syncDelayedLockToDevices,
-                            onSyncAcrossDevicesChanged = { viewModel.setSyncDelayedLockToDevices(it) }
-                        )
-                    }
-
-                    composable(
-                        route = ResolveRoutes.SCHEDULE_SETUP,
-                        arguments = listOf(
-                            navArgument("scheduleId") {
-                                type = NavType.LongType
-                                defaultValue = -1L
                             }
-                        )
-                    ) { entry ->
-                        val scheduleId = entry.arguments?.getLong("scheduleId") ?: -1L
-                        val existing = schedules.firstOrNull { it.id == scheduleId }
-                        ScheduleLockSetupScreen(
-                            existingSchedule = existing,
-                            duration = scheduleDuration,
-                            defaultAllowedPackages = allowedPackages,
-                            installedApps = installedApps,
-                            phoneAccessEnabled = phoneAccessEnabled,
-                            loadIcon = { viewModel.loadAppIcon(it) },
-                            onHoursChanged = { viewModel.setScheduleLockHours(it) },
-                            onMinutesChanged = { viewModel.setScheduleLockMinutes(it) },
-                            onDurationReplaced = { viewModel.updateScheduleLockDuration(it) },
-                            onSaveAllowedPackages = { viewModel.saveAllowedAppsSelection(it) },
-                            onSaveSchedule = { id, name, type, date, days, hour, minute, mins, pkgs, phone ->
-                                viewModel.saveSchedule(
-                                    editingId = id,
-                                    name = name,
-                                    type = type,
-                                    oneTimeDate = date,
-                                    selectedDays = days,
-                                    startHour = hour,
-                                    startMinute = minute,
-                                    durationMinutes = mins,
-                                    allowedPackages = pkgs,
-                                    phoneAccessEnabled = phone
-                                )
-                            },
-                            onBack = popBackSafely
-                        )
+                        }
+                    ) { innerPadding ->
+                        Row(
+                            modifier = Modifier
+                                .fillMaxSize()
+                                .padding(innerPadding)
+                        ) {
+                            if (isTopLevelDestination && useNavigationRail) {
+                                NavigationRail(containerColor = palette.cardBottom) {
+                                    TOP_LEVEL_TABS.forEach { tab ->
+                                        val selected = currentRoute == tab.route
+                                        NavigationRailItem(
+                                            selected = selected,
+                                            onClick = {
+                                                haptic.performHapticFeedback(HapticFeedbackType.TextHandleMove)
+                                                navigateToTab(tab.route)
+                                            },
+                                            icon = {
+                                                Icon(
+                                                    imageVector = if (selected) tab.selectedIcon else tab.unselectedIcon,
+                                                    contentDescription = tab.label
+                                                )
+                                            },
+                                            label = { Text(tab.label) },
+                                            colors = NavigationRailItemDefaults.colors(
+                                                selectedIconColor = palette.accent,
+                                                selectedTextColor = palette.accent,
+                                                indicatorColor = palette.accentSoftContainer,
+                                                unselectedIconColor = palette.textSecondary,
+                                                unselectedTextColor = palette.textSecondary
+                                            )
+                                        )
+                                    }
+                                }
+                            }
+
+                            NavHost(
+                                navController = navController,
+                                startDestination = ResolveRoutes.HOME,
+                                enterTransition = {
+                                    val route = targetState.destination.route.orEmpty()
+                                    val isSubScreen = route.contains("setup") ||
+                                        route == ResolveRoutes.SETTINGS ||
+                                        route.startsWith("device_analysis") ||
+                                        route == ResolveRoutes.ABOUT_RESOLVE
+                                    when {
+                                        reducedMotion -> fadeIn(tween(120))
+                                        isSubScreen -> slideInHorizontally(
+                                            animationSpec = tween(260, easing = FastOutSlowInEasing)
+                                        ) { it / 4 } + fadeIn(tween(240))
+                                        else -> fadeIn(tween(230, easing = FastOutSlowInEasing)) +
+                                            scaleIn(
+                                                initialScale = 0.975f,
+                                                animationSpec = tween(230, easing = FastOutSlowInEasing)
+                                            )
+                                    }
+                                },
+                                exitTransition = {
+                                    if (reducedMotion) {
+                                        fadeOut(tween(90))
+                                    } else {
+                                        fadeOut(tween(170, easing = FastOutSlowInEasing))
+                                    }
+                                },
+                                popEnterTransition = {
+                                    if (reducedMotion) {
+                                        fadeIn(tween(120))
+                                    } else {
+                                        fadeIn(tween(230, easing = FastOutSlowInEasing))
+                                    }
+                                },
+                                popExitTransition = {
+                                    when {
+                                        reducedMotion -> fadeOut(tween(90))
+                                        else -> slideOutHorizontally(
+                                            animationSpec = tween(240, easing = FastOutSlowInEasing)
+                                        ) { it / 4 } + fadeOut(tween(190))
+                                    }
+                                },
+                                modifier = Modifier.fillMaxSize()
+                            ) {
+                                composable(ResolveRoutes.HOME) {
+                                    HomeScreen(
+                                        activeSession = activeSession,
+                                        remainingMillis = remainingMillis,
+                                        capabilities = capabilities,
+                                        onOpenInstantSetup = { navigateSafely(ResolveRoutes.INSTANT_SETUP) },
+                                        onOpenDelayedSetup = { navigateSafely(ResolveRoutes.DELAYED_SETUP) },
+                                        onOpenScheduleSetup = { navigateSafely(ResolveRoutes.scheduleSetup()) },
+                                        onOpenDeviceOwnerGuide = {
+                                            if (!capabilities.canEnforceRealLock) {
+                                                navigateSafely(ResolveRoutes.SETTINGS)
+                                            } else {
+                                                showDeviceOwnerGuide = true
+                                            }
+                                        },
+                                        onReturnToLockScreen = { viewModel.openLockScreenIfLocked() },
+                                        onDismissTerminalSession = { viewModel.dismissTerminalSession() },
+                                        onOpenAppLockSetup = { navigateSafely(ResolveRoutes.APP_LOCK_SETUP) },
+                                        historyRecords = history,
+                                        dailyAppUsage = dailyAppUsage,
+                                        loadAppIcon = { viewModel.loadAppIcon(it) },
+                                        onGrantUsageAccess = { viewModel.openUsageAccessSettings() },
+                                        mascotType = mascotPreferences.selectedMascot,
+                                        bunnyPeekEntranceSeen = mascotPreferences.bunnyPeekEntranceSeen,
+                                        onBunnyPeekEntranceSeen = { viewModel.markBunnyPeekEntranceSeen() },
+                                        reducedMotion = mascotPreferences.reducedMotionEnabled,
+                                        accountSyncState = accountSyncState,
+                                        syncPromoDismissed = syncPromoDismissed,
+                                        onConnectGoogleAccount = { viewModel.signInWithGoogle(context) },
+                                        onDismissSyncPromo = { viewModel.dismissSyncPromoBanner() },
+                                        onOpenAccountSettings = { navigateSafely(ResolveRoutes.SETTINGS) },
+                                        protectionStatus = protectionStatus,
+                                        onProtectionAction = { viewModel.executeProtectionAction(it) }
+                                    )
+                                }
+
+                                composable(ResolveRoutes.INSIGHTS) {
+                                    InsightsScreen(
+                                        records = history,
+                                        schedules = schedules,
+                                        dailyAppUsage = dailyAppUsage,
+                                        onGrantUsageAccess = { viewModel.openUsageAccessSettings() },
+                                        onAddSchedule = { navigateSafely(ResolveRoutes.scheduleSetup()) },
+                                        onEditSchedule = { schedule ->
+                                            viewModel.updateScheduleLockDuration(
+                                                DurationSelection.fromTotalMinutes(schedule.lockDurationMinutes)
+                                            )
+                                            navigateSafely(ResolveRoutes.scheduleSetup(schedule.id))
+                                        },
+                                        onToggleSchedule = { schedule, enabled ->
+                                            viewModel.toggleScheduleEnabled(schedule, enabled)
+                                        },
+                                        onDeleteSchedule = { id -> viewModel.deleteSchedule(id) }
+                                    )
+                                }
+
+                                composable(ResolveRoutes.MODES) {
+                                    ModesScreen(
+                                        report = forceDarkReport,
+                                        installedApps = installedApps,
+                                        darkModeAppPrefs = darkModeAppPrefs,
+                                        colorInversionAppPrefs = colorInversionAppPrefs,
+                                        loadAppIcon = { viewModel.loadAppIcon(it) },
+                                        onEnterFlipClock = {
+                                            context.startActivity(
+                                                FlipClockActivity.createIntent(
+                                                    context = context,
+                                                    restrictedLock = false,
+                                                    initialPage = FlipClockPage.CLOCK
+                                                )
+                                            )
+                                        },
+                                        onAttemptAppDarkMode = { pkg, enable ->
+                                            viewModel.attemptAppDarkMode(pkg, enable)
+                                        },
+                                        onAttemptAppColorInversion = { pkg, enable ->
+                                            viewModel.attemptAppColorInversion(pkg, enable)
+                                        },
+                                        onOpenDisplaySettings = {
+                                            viewModel.openDisplayDarkSettings()
+                                        },
+                                        onOpenAccessibilitySettings = {
+                                            viewModel.grantColorInversionConsentAndOpenAccessibility()
+                                        },
+                                        onResetAllModes = { viewModel.resetAllModes() },
+                                        inAppColorInversionEnabled = inAppColorInversionEnabled,
+                                        colorInversionConsentGranted = colorInversionConsentGranted,
+                                        priorOsColorInversionState = priorOsColorInversionState,
+                                        onToggleInAppColorInversion = { viewModel.setInAppColorInversionEnabled(it) },
+                                        onGrantConsentAndOpenAccessibility = {
+                                            viewModel.grantColorInversionConsentAndOpenAccessibility()
+                                        }
+                                    )
+                                }
+
+                                composable(ResolveRoutes.MORE) {
+                                    MoreScreen(
+                                        capabilities = capabilities,
+                                        protectionStatus = protectionStatus,
+                                        deviceAnalysisReport = deviceAnalysisReport,
+                                        hasRecoveryCode = hasRecoveryCode,
+                                        recoveryCodeLength = recoveryCodeLength,
+                                        landscapeTiltMode = landscapeTiltMode,
+                                        notificationConfig = notificationControlConfig,
+                                        notificationProtectionState = notificationProtectionState,
+                                        mascotPreferences = mascotPreferences,
+                                        accountSyncState = accountSyncState,
+                                        generateRandomCode = { viewModel.generateRandomRecoveryCode(it) },
+                                        onSaveRecoveryCode = { viewModel.saveRecoveryCode(it) },
+                                        onToggleLandscapeTiltMode = { viewModel.setLandscapeTiltMode(it) },
+                                        onRefreshCapabilities = { viewModel.refreshCapabilities() },
+                                        onProtectionAction = { viewModel.executeProtectionAction(it) },
+                                        onOpenDeviceAnalysis = { focusSection ->
+                                            navigateSafely(ResolveRoutes.deviceAnalysis(focusSection))
+                                        },
+                                        onOpenAccessibilitySettings = { viewModel.openAccessibilitySettings() },
+                                        onOpenOverlaySettings = { viewModel.openOverlaySettings() },
+                                        onOpenUsageAccessSettings = { viewModel.openUsageAccessSettings() },
+                                        onOpenBatteryOptimizationSettings = { viewModel.openBatteryOptimizationSettings() },
+                                        onOpenExactAlarmSettings = { viewModel.openExactAlarmSettings() },
+                                        onOpenNotificationSettings = { viewModel.openNotificationSettings() },
+                                        onOpenNotificationPolicySettings = { viewModel.openNotificationPolicySettings() },
+                                        onToggleNotificationControlEnabled = { viewModel.setNotificationControlEnabled(it) },
+                                        onToggleNotificationControlAutoActivate = { viewModel.setNotificationControlAutoActivate(it) },
+                                        onToggleNotificationControlAllowCalls = { viewModel.setNotificationControlAllowCalls(it) },
+                                        onToggleNotificationControlAllowAlarms = { viewModel.setNotificationControlAllowAlarms(it) },
+                                        onSelectMascot = { viewModel.selectMascot(it) },
+                                        onToggleReducedMotion = { viewModel.setReducedMotion(it) },
+                                        onToggleFocusMessagesEnabled = { viewModel.setFocusMessagesEnabled(it) },
+                                        onSelectFocusMessageFrequency = { viewModel.setFocusMessageFrequency(it) },
+                                        onAddFocusMessage = { viewModel.addFocusMessage(it) },
+                                        onEditFocusMessage = { id, text -> viewModel.editFocusMessage(id, text) },
+                                        onDeleteFocusMessage = { viewModel.deleteFocusMessage(it) },
+                                        onRestoreDefaultFocusMessages = { viewModel.restoreDefaultFocusMessages() },
+                                        onToggleLockReminderEnabled = { viewModel.setLockReminderEnabled(it) },
+                                        onSaveLockReminderText = { viewModel.setLockReminderText(it) },
+                                        onSelectLockReminderStyle = { viewModel.setLockReminderStyle(it) },
+                                        onSignInGoogle = { viewModel.signInWithGoogle(context) },
+                                        onSignOutGoogle = { viewModel.signOutGoogleAccount() },
+                                        onToggleDeviceSync = { viewModel.setDeviceSyncEnabled(it) },
+                                        onUpdateProfileName = { viewModel.updateProfileName(it) },
+                                        onUpdateProfilePhoto = { viewModel.updateProfilePhoto(it) },
+                                        onClearProfilePhoto = { viewModel.clearProfilePhoto() },
+                                        onUnlinkDevice = { viewModel.unlinkDevice(it) }
+                                    )
+                                }
+
+                                composable(ResolveRoutes.SETTINGS) {
+                                    SettingsScreen(
+                                        capabilities = capabilities,
+                                        hasRecoveryCode = hasRecoveryCode,
+                                        recoveryCodeLength = recoveryCodeLength,
+                                        generateRandomCode = { viewModel.generateRandomRecoveryCode(it) },
+                                        onSaveRecoveryCode = { viewModel.saveRecoveryCode(it) },
+                                        onRefreshCapabilities = { viewModel.refreshCapabilities() },
+                                        onOpenAccessibilitySettings = { viewModel.openAccessibilitySettings() },
+                                        onOpenOverlaySettings = { viewModel.openOverlaySettings() },
+                                        onOpenUsageAccessSettings = { viewModel.openUsageAccessSettings() },
+                                        onOpenBatteryOptimizationSettings = { viewModel.openBatteryOptimizationSettings() },
+                                        onOpenDeviceOwnerGuide = { showDeviceOwnerGuide = true },
+                                        onOpenExactAlarmSettings = { viewModel.openExactAlarmSettings() },
+                                        onOpenNotificationSettings = { viewModel.openNotificationSettings() },
+                                        mascotPreferences = mascotPreferences,
+                                        onSelectMascot = { viewModel.selectMascot(it) },
+                                        onToggleReducedMotion = { viewModel.setReducedMotion(it) },
+                                        onToggleFocusMessagesEnabled = { viewModel.setFocusMessagesEnabled(it) },
+                                        onSelectFocusMessageFrequency = { viewModel.setFocusMessageFrequency(it) },
+                                        onAddFocusMessage = { viewModel.addFocusMessage(it) },
+                                        onEditFocusMessage = { id, text -> viewModel.editFocusMessage(id, text) },
+                                        onDeleteFocusMessage = { viewModel.deleteFocusMessage(it) },
+                                        onRestoreDefaultFocusMessages = { viewModel.restoreDefaultFocusMessages() },
+                                        onToggleLockReminderEnabled = { viewModel.setLockReminderEnabled(it) },
+                                        onSaveLockReminderText = { viewModel.setLockReminderText(it) },
+                                        onSelectLockReminderStyle = { viewModel.setLockReminderStyle(it) },
+                                        accountSyncState = accountSyncState,
+                                        onSignInGoogle = { viewModel.signInWithGoogle(context) },
+                                        onSignOutGoogle = { viewModel.signOutGoogleAccount() },
+                                        onToggleDeviceSync = { viewModel.setDeviceSyncEnabled(it) },
+                                        onUpdateProfilePhoto = { viewModel.updateProfilePhoto(it) },
+                                        onClearProfilePhoto = { viewModel.clearProfilePhoto() },
+                                        onUnlinkDevice = { viewModel.unlinkDevice(it) },
+                                        protectionStatus = protectionStatus,
+                                        onProtectionAction = { viewModel.executeProtectionAction(it) },
+                                        notificationControlConfig = notificationControlConfig,
+                                        notificationProtectionState = notificationProtectionState,
+                                        onToggleNotificationControlEnabled = { viewModel.setNotificationControlEnabled(it) },
+                                        onToggleNotificationControlAutoActivate = { viewModel.setNotificationControlAutoActivate(it) },
+                                        onToggleNotificationControlAllowCalls = { viewModel.setNotificationControlAllowCalls(it) },
+                                        onToggleNotificationControlAllowAlarms = { viewModel.setNotificationControlAllowAlarms(it) },
+                                        onOpenNotificationPolicySettings = { viewModel.openNotificationPolicySettings() },
+                                        onOpenModes = { navigateToTab(ResolveRoutes.MODES) },
+                                        onOpenAppLock = { navigateSafely(ResolveRoutes.APP_LOCK_SETUP) },
+                                        onOpenDeviceAnalysis = { navigateSafely(ResolveRoutes.deviceAnalysis()) },
+                                        onOpenAboutResolve = { navigateSafely(ResolveRoutes.ABOUT_RESOLVE) },
+                                        onBack = popBackSafely
+                                    )
+                                }
+
+                                composable(
+                                    route = ResolveRoutes.DEVICE_ANALYSIS,
+                                    arguments = listOf(
+                                        navArgument("focusSection") {
+                                            type = NavType.StringType
+                                            defaultValue = ""
+                                        }
+                                    )
+                                ) { entry ->
+                                    val focusSection = entry.arguments?.getString("focusSection")
+                                        ?.takeIf { it.isNotBlank() }
+                                        ?: "summary"
+                                    DeviceAnalysisScreen(
+                                        report = deviceAnalysisReport,
+                                        focusSection = focusSection,
+                                        onRunAnalysis = { viewModel.runDeviceAnalysis() },
+                                        onRefreshCapabilities = { viewModel.refreshCapabilities() },
+                                        onExecuteAction = { viewModel.executeProtectionAction(it) },
+                                        onOpenDeviceOwnerGuide = { showDeviceOwnerGuide = true },
+                                        onBack = popBackSafely
+                                    )
+                                }
+
+                                composable(ResolveRoutes.ABOUT_RESOLVE) {
+                                    AboutResolveScreen(
+                                        reducedMotion = reducedMotion,
+                                        onBack = popBackSafely
+                                    )
+                                }
+
+                                composable(ResolveRoutes.INSTANT_SETUP) {
+                                    val instantAllowed = instantProfile.allowedPackages.ifEmpty { allowedPackages }
+                                    InstantLockSetupScreen(
+                                        duration = instantDuration,
+                                        allowedPackages = instantAllowed,
+                                        installedApps = installedApps,
+                                        phoneAccessEnabled = phoneAccessEnabled,
+                                        hasRecoveryCode = hasRecoveryCode,
+                                        recoveryCodeLength = recoveryCodeLength,
+                                        loadIcon = { viewModel.loadAppIcon(it) },
+                                        generateRandomCode = { viewModel.generateRandomRecoveryCode(it) },
+                                        onHoursChanged = { viewModel.setInstantHours(it) },
+                                        onMinutesChanged = { viewModel.setInstantMinutes(it) },
+                                        onDurationReplaced = { viewModel.updateInstantDuration(it) },
+                                        onSaveAllowedPackages = {
+                                            viewModel.saveProfileAllowedApps(LockMode.INSTANT, it)
+                                        },
+                                        onPhoneAccessChanged = { viewModel.setPhoneAccessEnabled(it) },
+                                        onSaveRecoveryCode = { viewModel.saveRecoveryCode(it) },
+                                        onStartInstantLock = { viewModel.startInstantLock() },
+                                        onBack = popBackSafely,
+                                        isAccountSignedIn = accountSyncState.isSignedIn,
+                                        syncAcrossDevices = syncInstantLockToDevices,
+                                        onSyncAcrossDevicesChanged = { viewModel.setSyncInstantLockToDevices(it) },
+                                        isStrictMode = instantProfile.strictMode,
+                                        allowSelectedApps = instantProfile.allowSelectedApps,
+                                        showFlipClockShortcut = instantProfile.showFlipClockShortcut,
+                                        onStrictModeChanged = {
+                                            viewModel.setProfileStrictMode(LockMode.INSTANT, it)
+                                        },
+                                        onAllowSelectedAppsChanged = {
+                                            viewModel.setProfileAllowSelectedApps(LockMode.INSTANT, it)
+                                        },
+                                        onShowFlipClockShortcutChanged = {
+                                            viewModel.setProfileFlipClockShortcut(LockMode.INSTANT, it)
+                                        }
+                                    )
+                                }
+
+                                composable(ResolveRoutes.DELAYED_SETUP) {
+                                    val delayedAllowed = delayedProfile.allowedPackages.ifEmpty { allowedPackages }
+                                    DelayedLockSetupScreen(
+                                        freeUseDuration = delayedFreeDuration,
+                                        lockDuration = delayedLockDuration,
+                                        allowedPackages = delayedAllowed,
+                                        installedApps = installedApps,
+                                        phoneAccessEnabled = phoneAccessEnabled,
+                                        hasRecoveryCode = hasRecoveryCode,
+                                        recoveryCodeLength = recoveryCodeLength,
+                                        loadIcon = { viewModel.loadAppIcon(it) },
+                                        generateRandomCode = { viewModel.generateRandomRecoveryCode(it) },
+                                        onFreeUseHoursChanged = { viewModel.setDelayedFreeUseHours(it) },
+                                        onFreeUseMinutesChanged = { viewModel.setDelayedFreeUseMinutes(it) },
+                                        onFreeUseReplaced = { viewModel.updateDelayedFreeUse(it) },
+                                        onLockHoursChanged = { viewModel.setDelayedLockHours(it) },
+                                        onLockMinutesChanged = { viewModel.setDelayedLockMinutes(it) },
+                                        onLockReplaced = { viewModel.updateDelayedLock(it) },
+                                        onSaveAllowedPackages = {
+                                            viewModel.saveProfileAllowedApps(LockMode.DELAYED, it)
+                                        },
+                                        onPhoneAccessChanged = { viewModel.setPhoneAccessEnabled(it) },
+                                        onSaveRecoveryCode = { viewModel.saveRecoveryCode(it) },
+                                        onStartDelayedLock = { viewModel.startDelayedLock() },
+                                        onBack = popBackSafely,
+                                        isAccountSignedIn = accountSyncState.isSignedIn,
+                                        syncAcrossDevices = syncDelayedLockToDevices,
+                                        onSyncAcrossDevicesChanged = { viewModel.setSyncDelayedLockToDevices(it) },
+                                        presets = delayedPresets,
+                                        onSavePreset = { id, name, free, lock ->
+                                            viewModel.saveDelayedPreset(id, name, free, lock)
+                                        },
+                                        onDeletePreset = { id -> viewModel.deleteDelayedPreset(id) },
+                                        isStrictMode = delayedProfile.strictMode,
+                                        allowSelectedApps = delayedProfile.allowSelectedApps,
+                                        showFlipClockShortcut = delayedProfile.showFlipClockShortcut,
+                                        onStrictModeChanged = {
+                                            viewModel.setProfileStrictMode(LockMode.DELAYED, it)
+                                        },
+                                        onAllowSelectedAppsChanged = {
+                                            viewModel.setProfileAllowSelectedApps(LockMode.DELAYED, it)
+                                        },
+                                        onShowFlipClockShortcutChanged = {
+                                            viewModel.setProfileFlipClockShortcut(LockMode.DELAYED, it)
+                                        }
+                                    )
+                                }
+
+                                composable(
+                                    route = ResolveRoutes.SCHEDULE_SETUP,
+                                    arguments = listOf(
+                                        navArgument("scheduleId") {
+                                            type = NavType.LongType
+                                            defaultValue = -1L
+                                        }
+                                    )
+                                ) { entry ->
+                                    val scheduleId = entry.arguments?.getLong("scheduleId") ?: -1L
+                                    val existing = schedules.firstOrNull { it.id == scheduleId }
+                                    val scheduledAllowed = scheduledProfile.allowedPackages.ifEmpty { allowedPackages }
+                                    ScheduleLockSetupScreen(
+                                        existingSchedule = existing,
+                                        duration = scheduleDuration,
+                                        defaultAllowedPackages = scheduledAllowed,
+                                        installedApps = installedApps,
+                                        phoneAccessEnabled = phoneAccessEnabled,
+                                        loadIcon = { viewModel.loadAppIcon(it) },
+                                        onHoursChanged = { viewModel.setScheduleLockHours(it) },
+                                        onMinutesChanged = { viewModel.setScheduleLockMinutes(it) },
+                                        onDurationReplaced = { viewModel.updateScheduleLockDuration(it) },
+                                        onSaveAllowedPackages = {
+                                            viewModel.saveProfileAllowedApps(LockMode.SCHEDULED, it)
+                                        },
+                                        onSaveSchedule = { id, name, type, date, days, hour, minute, mins, pkgs, phone, syncDevices, strictMode, allowSelected, flipShortcut ->
+                                            viewModel.saveSchedule(
+                                                editingId = id,
+                                                name = name,
+                                                type = type,
+                                                oneTimeDate = date,
+                                                selectedDays = days,
+                                                startHour = hour,
+                                                startMinute = minute,
+                                                durationMinutes = mins,
+                                                allowedPackages = pkgs,
+                                                phoneAccessEnabled = phone,
+                                                syncAcrossDevices = syncDevices,
+                                                isStrictMode = strictMode,
+                                                allowSelectedApps = allowSelected,
+                                                showFlipClockShortcut = flipShortcut
+                                            )
+                                        },
+                                        onBack = popBackSafely,
+                                        isAccountSignedIn = accountSyncState.isSignedIn,
+                                        defaultStrictMode = scheduledProfile.strictMode,
+                                        defaultAllowSelectedApps = scheduledProfile.allowSelectedApps,
+                                        defaultShowFlipClockShortcut = scheduledProfile.showFlipClockShortcut
+                                    )
+                                }
+
+                                composable(ResolveRoutes.APP_LOCK_SETUP) {
+                                    BackHandler {
+                                        viewModel.revokeAppLockManagementAccess()
+                                        popBackSafely()
+                                    }
+                                    AppLockSetupScreen(
+                                        appLockEnabled = appLockEnabled,
+                                        hasCredential = hasAppLockCredential,
+                                        configuredMethod = appLockMethod,
+                                        configuredPinLength = appLockPinLength,
+                                        protectedPackages = appLockPackages,
+                                        installedApps = installedApps,
+                                        managementUnlocked = appLockManagementUnlocked,
+                                        capabilities = capabilities,
+                                        loadIcon = { viewModel.loadAppIcon(it) },
+                                        onVerifyManagementAccess = { input ->
+                                            viewModel.verifyAppLockForManagement(input)
+                                        },
+                                        onToggleAppLockEnabled = { viewModel.setAppLockEnabled(it) },
+                                        onSaveCredential = { method, pinLen, secret ->
+                                            viewModel.saveAppLockConfig(method, pinLen, secret)
+                                        },
+                                        onSaveProtectedPackages = { viewModel.saveAppLockProtectedPackages(it) },
+                                        onOpenAccessibilitySettings = { viewModel.openAccessibilitySettings() },
+                                        onOpenDeviceOwnerGuide = { showDeviceOwnerGuide = true },
+                                        onBack = {
+                                            viewModel.revokeAppLockManagementAccess()
+                                            popBackSafely()
+                                        }
+                                    )
+                                }
+                            }
+                        }
                     }
                 }
             }
-        }
-    }
-    }
         }
     }
 
@@ -555,6 +830,7 @@ private fun FloatingCapsuleNavDock(
     reducedMotion: Boolean,
     onSelectTab: (String) -> Unit
 ) {
+    val palette = LocalResolveExtendedPalette.current
     Box(
         modifier = Modifier
             .fillMaxWidth()
@@ -569,24 +845,25 @@ private fun FloatingCapsuleNavDock(
                 .shadow(
                     elevation = 14.dp,
                     shape = RoundedCornerShape(28.dp),
-                    ambientColor = ResolveColors.MintAccent.copy(alpha = 0.16f),
-                    spotColor = Color.Black.copy(alpha = 0.45f)
+                    ambientColor = palette.accent.copy(alpha = 0.16f),
+                    spotColor = Color.Black.copy(alpha = if (palette.isDark) 0.45f else 0.18f)
                 )
                 .clip(RoundedCornerShape(28.dp))
                 .background(
                     Brush.verticalGradient(
                         colors = listOf(
-                            ResolveColors.ForestSurfaceElevated.copy(alpha = 0.96f),
-                            ResolveColors.ForestSecondary.copy(alpha = 0.96f)
+                            palette.cardTop.copy(alpha = 0.96f),
+                            palette.cardBottom.copy(alpha = 0.96f)
                         )
                     )
                 )
                 .border(
                     1.dp,
-                    ResolveColors.MintAccent.copy(alpha = 0.20f),
+                    palette.accent.copy(alpha = 0.22f),
                     RoundedCornerShape(28.dp)
                 )
-                .padding(horizontal = 6.dp, vertical = 6.dp),
+                .padding(horizontal = 6.dp, vertical = 6.dp)
+                .testTag("bottom_nav_dock"),
             horizontalArrangement = Arrangement.spacedBy(4.dp),
             verticalAlignment = Alignment.CenterVertically
         ) {
@@ -594,7 +871,7 @@ private fun FloatingCapsuleNavDock(
                 val selected = currentRoute == tab.route
                 val pillColor by animateColorAsState(
                     targetValue = if (selected) {
-                        ResolveColors.MintSoftContainer.copy(alpha = 0.92f)
+                        palette.accentSoftContainer.copy(alpha = 0.94f)
                     } else {
                         Color.Transparent
                     },
@@ -602,7 +879,7 @@ private fun FloatingCapsuleNavDock(
                     label = "nav_pill_color_${tab.route}"
                 )
                 val contentColor by animateColorAsState(
-                    targetValue = if (selected) ResolveColors.MintAccent else ResolveColors.TextSecondary,
+                    targetValue = if (selected) palette.accent else palette.textSecondary,
                     animationSpec = tween(durationMillis = if (reducedMotion) 90 else 200),
                     label = "nav_content_color_${tab.route}"
                 )
@@ -624,7 +901,7 @@ private fun FloatingCapsuleNavDock(
                         .border(
                             width = if (selected) 1.dp else 0.dp,
                             color = if (selected) {
-                                ResolveColors.MintAccent.copy(alpha = 0.28f)
+                                palette.accent.copy(alpha = 0.28f)
                             } else {
                                 Color.Transparent
                             },

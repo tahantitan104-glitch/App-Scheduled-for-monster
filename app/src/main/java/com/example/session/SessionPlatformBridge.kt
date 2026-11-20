@@ -5,4 +5,7 @@ interface SessionPlatformBridge {
     fun stopMonitorService()
     fun launchLockScreen()
     fun notifyLockStateChanged()
+    fun isForegroundServiceBlocked(): Boolean = false
+    fun scheduleRecoveryJobIfNeeded() {}
+    fun cancelRecoveryJob() {}
 }

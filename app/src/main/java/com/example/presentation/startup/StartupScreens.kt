@@ -65,11 +65,11 @@ import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 
 /**
- * Standard Animated Brand Intro (~0.65s):
- * Stage 1: Clean Deep Forest Green (#10251F) canvas, no spinners
- * Stage 2: Smooth Focus Ring reveal -> final Central Mint Dot & subtle glow
- * Stage 3: Clean spaced "RESOLVE" brand name reveal
- * Stage 4: Smooth handoff callback to Home / First-Time Welcome / Setup
+ * Minimal Brand Intro (0.5–0.8s, ~600ms total):
+ * Stage 1: Clean Deep Forest Green (#10251F) canvas seamlessly matching Theme.Resolve.Starting
+ * Stage 2: Smooth pure-flat Focus Ring reveal + crisp Center Dot entrance
+ * Stage 3: Brief "RESOLVE" wordmark fade-in
+ * Stage 4: Fast, non-blocking handoff to Home / First-Time Welcome / Required Setup
  */
 @Composable
 fun BrandIntroScreen(
@@ -78,34 +78,27 @@ fun BrandIntroScreen(
     modifier: Modifier = Modifier
 ) {
     val ringProgress = remember { Animatable(if (reducedMotion) 1f else 0f) }
-    val ringAlpha = remember { Animatable(if (reducedMotion) 1f else 0.15f) }
+    val ringAlpha = remember { Animatable(if (reducedMotion) 1f else 0.25f) }
     val dotAlpha = remember { Animatable(if (reducedMotion) 1f else 0f) }
-    val glowAlpha = remember { Animatable(if (reducedMotion) 1f else 0f) }
     val brandAlpha = remember { Animatable(if (reducedMotion) 1f else 0f) }
     val latestOnIntroCompleted by rememberUpdatedState(onIntroCompleted)
 
     LaunchedEffect(reducedMotion) {
         if (reducedMotion) {
-            delay(320L)
+            delay(220L)
         } else {
-            // Stage 1 -> Stage 2: ring sweep & opacity reveal (~280ms)
-            delay(60L)
+            // Subtle Focus Ring sweep + central dot reveal + concise wordmark fade (~600ms total)
             launch {
-                ringAlpha.animateTo(1f, tween(durationMillis = 220, easing = EaseOutCubic))
+                ringAlpha.animateTo(1f, tween(durationMillis = 200, easing = EaseOutCubic))
             }
             ringProgress.animateTo(1f, tween(durationMillis = 280, easing = EaseOutCubic))
 
-            // Central dot & restrained glow enter as final symbol detail + RESOLVE wordmark
             launch {
-                glowAlpha.animateTo(1f, tween(durationMillis = 200, easing = EaseOutCubic))
+                dotAlpha.animateTo(1f, tween(durationMillis = 150, easing = EaseOutCubic))
             }
-            launch {
-                dotAlpha.animateTo(1f, tween(durationMillis = 180, easing = EaseOutCubic))
-            }
-            delay(90L)
-            brandAlpha.animateTo(1f, tween(durationMillis = 200, easing = EaseOutCubic))
-            // Calm hold before fading cleanly into next screen (~680ms total)
-            delay(70L)
+            delay(60L)
+            brandAlpha.animateTo(1f, tween(durationMillis = 180, easing = EaseOutCubic))
+            delay(80L)
         }
         latestOnIntroCompleted()
     }
@@ -128,10 +121,10 @@ fun BrandIntroScreen(
                 ringProgress = ringProgress.value,
                 ringAlpha = ringAlpha.value,
                 dotAlpha = dotAlpha.value,
-                glowAlpha = glowAlpha.value,
+                glowAlpha = 0f,
                 testTagName = "brand_intro_focus_symbol"
             )
-            Spacer(modifier = Modifier.height(24.dp))
+            Spacer(modifier = Modifier.height(22.dp))
             Text(
                 text = "RESOLVE",
                 style = MaterialTheme.typography.headlineLarge.copy(

@@ -42,6 +42,7 @@ import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.text.input.PasswordVisualTransformation
 import androidx.compose.ui.unit.dp
 import com.example.designsystem.JetBrainsMonoFamily
+import com.example.designsystem.LocalResolveExtendedPalette
 import com.example.designsystem.ResolveColors
 import com.example.domain.model.RecoveryVerificationResult
 import com.example.security.RecoveryCodeManager
@@ -52,6 +53,7 @@ fun RecoveryCodeSetupDialog(
     onDismiss: () -> Unit,
     onSaveCode: (String) -> Unit
 ) {
+    val palette = LocalResolveExtendedPalette.current
     var selectedLength by remember { mutableIntStateOf(RecoveryCodeManager.DEFAULT_LENGTH) }
     var codeInput by remember { mutableStateOf(generateRandomCode(RecoveryCodeManager.DEFAULT_LENGTH)) }
     var confirmInput by remember { mutableStateOf("") }
@@ -60,12 +62,12 @@ fun RecoveryCodeSetupDialog(
 
     AlertDialog(
         onDismissRequest = onDismiss,
-        containerColor = ResolveColors.ForestSurface,
+        containerColor = palette.cardBottom,
         title = {
             Text(
                 text = "Configure Recovery Code",
                 style = MaterialTheme.typography.titleLarge,
-                color = ResolveColors.TextPrimary
+                color = palette.textPrimary
             )
         },
         text = {
@@ -78,7 +80,7 @@ fun RecoveryCodeSetupDialog(
                     Text(
                         text = "Only a salted cryptographic verifier is stored. Write this code down before confirming—it cannot be viewed again.",
                         style = MaterialTheme.typography.bodyMedium,
-                        color = ResolveColors.TextSecondary
+                        color = palette.textSecondary
                     )
 
                     Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
@@ -104,14 +106,14 @@ fun RecoveryCodeSetupDialog(
                         modifier = Modifier
                             .fillMaxWidth()
                             .clip(RoundedCornerShape(14.dp))
-                            .background(ResolveColors.ForestSecondary)
-                            .border(1.dp, ResolveColors.ForestOutline, RoundedCornerShape(14.dp))
+                            .background(palette.background.copy(alpha = 0.72f))
+                            .border(1.dp, palette.cardBorder, RoundedCornerShape(14.dp))
                             .padding(12.dp)
                     ) {
                         Text(
                             text = RecoveryCodeManager.formatGrouped(codeInput.ifBlank { "0".repeat(selectedLength) }),
                             style = MaterialTheme.typography.titleMedium.copy(fontFamily = JetBrainsMonoFamily),
-                            color = ResolveColors.MintAccent
+                            color = palette.accent
                         )
                     }
 
@@ -174,7 +176,7 @@ fun RecoveryCodeSetupDialog(
                         Text(
                             text = "I have recorded this recovery code safely.",
                             style = MaterialTheme.typography.bodyMedium,
-                            color = ResolveColors.TextPrimary
+                            color = palette.textPrimary
                         )
                     }
 
@@ -182,7 +184,7 @@ fun RecoveryCodeSetupDialog(
                         Text(
                             text = error!!,
                             style = MaterialTheme.typography.bodyMedium,
-                            color = ResolveColors.ErrorCoral
+                            color = palette.error
                         )
                     }
                 }
@@ -208,8 +210,8 @@ fun RecoveryCodeSetupDialog(
                     }
                 },
                 colors = ButtonDefaults.buttonColors(
-                    containerColor = ResolveColors.MintAccent,
-                    contentColor = ResolveColors.ForestDeep
+                    containerColor = palette.accent,
+                    contentColor = palette.onAccent
                 ),
                 modifier = Modifier.testTag("recovery_setup_save_button")
             ) {
@@ -226,7 +228,7 @@ fun RecoveryCodeSetupDialog(
                     onDismiss()
                 }
             ) {
-                Text("Cancel", color = ResolveColors.TextSecondary)
+                Text("Cancel", color = palette.textSecondary)
             }
         }
     )

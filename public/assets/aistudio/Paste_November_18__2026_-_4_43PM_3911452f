@@ -1,0 +1,1660 @@
+RESOLVE — FINAL MASTER IMPLEMENTATION PROMPT
+
+Complete UI/UX Refinement, Navigation Restructure, Notification Control, Session Recovery, Device Intelligence & App Modes
+
+PROJECT CONTEXT
+
+We are continuing development of the existing RESOLVE application using Google AI Studio.
+
+RESOLVE is an offline-first Digital Discipline, Focus Session and App Access Control application.
+
+The objective of this implementation phase is to refine the existing application, improve its functionality, reorganize its architecture, fix existing UI/UX problems, and integrate the new system-level capabilities.
+
+This is a comprehensive incremental upgrade, NOT a complete application rebuild.
+
+CRITICAL INSTRUCTION: Inspect the entire existing project and understand its current architecture before modifying anything.
+
+Review the existing components, navigation, session controller, application state, native Android integrations, permission management, device usage tracking, theme management, Accessibility Service, background services, and persistent storage.
+
+Use the existing codebase as the foundation.
+
+Do not replace working functionality simply to make implementation easier.
+
+Do not create duplicate implementations of existing features.
+
+Preserve RESOLVE's established identity, visual language, offline-first architecture, and current functionality.
+
+---
+
+MODULE 01 — HOME SCREEN REFINEMENT
+
+1. Remove RESOLVE from Its Own Screen Time
+
+There is an issue in the Home Screen's Screen Time section.
+
+RESOLVE currently displays its own application usage duration inside its own Screen Time list.
+
+This is unnecessary and must be corrected.
+
+Required behavior:
+
+- Never display RESOLVE's own screen time in the Home Screen usage list.
+- Exclude RESOLVE's own package from the displayed application usage records.
+- Exclude RESOLVE from any total or aggregate calculated for this app-usage section.
+- Continue displaying screen time for other applications.
+- Maintain accurate usage calculations for all other eligible applications.
+- Do not remove or interfere with the existing Usage Access functionality.
+
+Use the actual application package identifier obtained from the application's configuration or native Android context.
+
+Do not hardcode an assumed package name.
+
+Use the existing Android UsageStatsManager integration wherever possible.
+
+Filter the application's own package before constructing the UI data model.
+
+Do not merely hide the RESOLVE row visually while retaining it in the displayed total.
+
+If there is no other application usage to display, provide a clean empty state such as:
+
+"No other app usage recorded today."
+
+Do not display fabricated usage information.
+
+2. Reduce Screen Time Component Size
+
+The current Screen Time component takes up too much vertical space.
+
+Refine the component to make it smaller, cleaner, and more compact.
+
+Adjust:
+
+- Application icon size.
+- Application name font size.
+- Screen time text size.
+- Vertical spacing between rows.
+- Card padding.
+- Progress-bar height.
+- Header spacing.
+- Overall card height.
+
+Each app's usage should remain easy to understand.
+
+Progress Bar Requirements:
+
+Keep the existing horizontal usage indicator under each application.
+
+It should visually communicate how much time was spent in that application relative to other applications in the same displayed period.
+
+Use a consistent scaling method.
+
+Keep the bar relatively thin and compact.
+
+Do not remove the visual indicator.
+
+Do not make the entire component so small that text becomes difficult to read.
+
+The final result should feel like a compact daily application-usage summary rather than a large dashboard card.
+
+Preserve the existing Home Screen layout outside this component.
+
+---
+
+MODULE 02 — COMPLETE NAVIGATION RESTRUCTURE
+
+1. New Bottom Navigation
+
+Replace the current four-item navigation:
+
+- Home
+- Schedule
+- Insights
+- Settings
+
+With the following structure:
+
+1. Home
+
+Contains the existing primary focus dashboard.
+
+2. Insights
+
+Contains both existing History functionality and all Schedule functionality.
+
+3. Modes
+
+A dedicated area for Dark Mode and Color Inversion controls.
+
+4. More
+
+Contains Settings, Device Analysis & Compatibility, About RESOLVE, and other relevant application information.
+
+The proposed navigation is:
+
+HOME | INSIGHTS | MODES | MORE
+
+Use clear labels and recognizable icons.
+
+The selected navigation item should have a subtle, consistent active state.
+
+Maintain the existing visual design language.
+
+Do not add a fifth navigation item.
+
+2. Move Schedule into Insights
+
+Remove Schedule as an independent Bottom Navigation destination.
+
+Move the complete existing Schedule screen and its functionality inside Insights.
+
+Inside Insights, create two clearly separated navigation options:
+
+- History
+- Schedule
+
+Use a segmented control, compact tab bar, or another design consistent with the current application.
+
+History
+
+Preserve all existing History functionality.
+
+Schedule
+
+Preserve all existing Schedule Lock functionality, including:
+
+- Existing scheduled sessions.
+- Schedule creation.
+- Schedule editing.
+- Schedule deletion.
+- Date and time selection.
+- Existing recurrence options, if implemented.
+- Scheduled session status.
+- Existing scheduling behavior.
+
+Do not recreate the scheduling engine.
+
+Move the current implementation into the new navigation structure while preserving its underlying data and functionality.
+
+The Schedule Lock card on Home may remain as a convenient shortcut to create or manage a schedule.
+
+Ensure all existing internal navigation links are updated.
+
+No schedule data should be lost during the transition.
+
+---
+
+MODULE 03 — MODES: DARK MODE & COLOR INVERSION
+
+Create a new primary navigation section named:
+
+Modes
+
+This section will contain two independent controls:
+
+1. Dark Mode
+2. Color Inversion
+
+The two systems must remain completely separate in terms of UI, state management, preferences, and actual functionality.
+
+1. Dark Mode
+
+Create a dedicated Dark Mode section.
+
+The intention is to manage dark appearance independently wherever the Android platform and individual applications genuinely support it.
+
+Requirements:
+
+- Identify applications for which a genuine supported per-app Dark Mode mechanism exists.
+- Display only applications for which RESOLVE can actually perform the requested operation.
+- Show the application's icon and name.
+- Provide an independent Dark Mode control for each supported application.
+- Save each application's preference independently.
+- Restore the saved preference when RESOLVE is reopened.
+- Verify that the requested change was actually applied.
+
+Do not assume that all Android applications support external Dark Mode control.
+
+Do not implement a fake Dark Mode switch.
+
+Do not use an unsupported hidden API or pretend that changing RESOLVE's own theme changes the theme of other applications.
+
+IMPORTANT TECHNICAL CONSTRAINT:
+
+Android's public "UiModeManager.setApplicationNightMode()" controls the application that calls it. It does not provide a general API for an ordinary third-party application to change the Night Mode of arbitrary installed applications.
+
+Therefore:
+
+- Inspect the existing implementation.
+- Identify any legitimate device-specific or officially supported per-app control mechanism.
+- Use only mechanisms that are genuinely supported and authorized.
+- Do not misrepresent system-wide Dark Mode as per-app Dark Mode.
+
+If an application cannot be controlled independently, do not include it in the supported selectable list.
+
+If an unavailable or previously supported item is selected and its operation fails, display a brief, clear message:
+
+"Dark Mode is not supported for this app on this device."
+
+The application must never report success unless the state was actually changed and verified.
+
+2. Color Inversion
+
+Create an entirely separate Color Inversion section inside Modes.
+
+This must not share its state with Dark Mode.
+
+Requirements:
+
+- Analyze whether genuine per-app Color Inversion is supported.
+- Display only applications for which a legitimate per-app implementation is available.
+- Maintain independent preferences for each supported application.
+- Verify whether the selected change actually takes effect.
+- Handle unsupported operations without pretending success.
+
+IMPORTANT:
+
+Android's standard Accessibility Color Inversion setting is a device-wide display setting, not a general per-app inversion API.
+
+Do not silently change the entire device's display colors while presenting the action as an individual application's Color Inversion.
+
+Do not modify secure system settings through unauthorized methods.
+
+If per-app inversion is unavailable on the current device:
+
+- Do not create fake per-app switches.
+- Do not list unsupported applications as controllable.
+- Display a concise explanation that per-app inversion is unavailable.
+- If an attempted operation fails, show:
+
+"Color Inversion is not supported for this app on this device."
+
+If a manufacturer provides a legitimate, supported per-app display-control capability, inspect and use it only when its operation can be verified.
+
+3. Independent State Management
+
+This requirement is particularly important.
+
+Dark Mode and Color Inversion must have separate state and preference storage.
+
+Conceptually maintain separate mappings:
+
+- "darkModePreferences[packageName]"
+- "colorInversionPreferences[packageName]"
+
+Do not connect one preference to the other.
+
+Examples:
+
+- Enabling Dark Mode must NOT automatically enable Color Inversion.
+- Disabling Dark Mode must NOT disable Color Inversion.
+- Enabling Color Inversion must NOT automatically change Dark Mode.
+- Changing one application must NOT change the preferences of another application.
+
+A selected Dark Mode preference must not trigger any inversion operation.
+
+A selected Color Inversion preference must not trigger any Dark Mode operation.
+
+Keep these controls completely independent.
+
+4. RESOLVE's Own Theme
+
+If RESOLVE already has its own Light/Dark theme preference, relocate that theme control from Settings to Modes.
+
+Clearly separate it from external application controls.
+
+The application theme options may include:
+
+- Light
+- Dark
+- System Default
+
+Ensure that changing RESOLVE's own theme only affects RESOLVE.
+
+Preserve its visual identity in both Light and Dark themes.
+
+5. Modes UI Structure
+
+Use a clean structure:
+
+MODES
+
+- RESOLVE Appearance
+- App Dark Mode
+- App Color Inversion
+
+Each section should be visually distinct.
+
+Use a small compatibility indicator where needed.
+
+Do not combine both modes into one switch.
+
+Do not present unsupported functionality as available.
+
+---
+
+MODULE 04 — SETTINGS REORGANIZATION
+
+The current Settings screen contains multiple sections, some of which are unnecessarily large or difficult to navigate.
+
+Reorganize Settings into a more structured and professional configuration interface.
+
+Preserve the existing settings and their underlying functions.
+
+Do not arbitrarily remove useful functionality.
+
+1. Recommended Settings Structure
+
+Organize the existing settings into logical categories:
+
+A. Account & Multi-Device Sync
+
+- Optional Google Account Connection.
+- Multi-Device Sync.
+- Existing synchronization preferences.
+- This Phone Only / Linked Devices options, where implemented.
+
+Preserve the existing offline-first behavior.
+
+Account connection must remain optional unless the existing feature specifically requires it.
+
+B. Protection & Permissions
+
+Place required system permissions near the top of Settings.
+
+Accessibility Service should remain the first unresolved permission.
+
+Preserve its existing explanatory text and appropriate setup action.
+
+C. App Access & Restrictions
+
+- App Whitelist.
+- Allowed Applications.
+- Phone Call Allowance.
+- Existing App Lock configuration.
+- Any related access-control options already implemented.
+
+D. Focus & Notification Behavior
+
+- Notification Control Enable/Disable.
+- Automatic DND During Focus Sessions.
+- Notification Exceptions.
+- Relevant Session Behavior.
+- Any existing focus-related preferences.
+
+E. Session & Recovery
+
+- Existing Recovery Code Configuration.
+- Existing session recovery information.
+- Relevant session protection settings.
+
+F. Appearance & Companion
+
+- Mascot Companion Selection.
+- Existing mascot options.
+- Lock Screen appearance.
+- Existing animation preferences.
+
+Do not keep the new Dark Mode controls in Settings. They belong in Modes.
+
+G. Device & Compatibility
+
+Provide access to Device Analysis & Compatibility, preferably through the dedicated More destination.
+
+Do not duplicate the entire analysis interface inside Settings.
+
+H. About & Application Information
+
+Preserve the About information but provide a cleaner entry point.
+
+Avoid excessive nested cards or unnecessary configuration sections.
+
+2. Permission Visibility Rules
+
+This is a strict requirement.
+
+The current Settings screen contains a Permissions Setup card with an expandable option resembling:
+
+"Show already-granted permissions & Device Management"
+
+Remove this expansion option completely.
+
+Do not allow the user to reopen or expand a list of permissions that have already been granted.
+
+Required behavior:
+
+- Show only permissions that are currently missing, disabled, or require user action.
+- Keep Accessibility Service at the top of the unresolved permission list.
+- After a permission is granted and verified, immediately remove its individual card from the visible setup list.
+- Do not display an expandable "Show granted permissions" option.
+- Do not provide a hidden list or secondary reveal button for granted permissions.
+- Do not keep already-granted permission cards visible merely as informational items.
+
+If all required permissions are available, replace the setup cards with a small completion message:
+
+"All required system access is ready."
+
+Internal permission monitoring must continue even while granted items are hidden.
+
+If the user later disables a previously granted permission, that specific permission must reappear as an Action Required item.
+
+This is necessary for the Permission Recovery System.
+
+Do not confuse hiding a granted permission from the UI with stopping internal verification.
+
+3. Permission Status Accuracy
+
+Use actual Android permission and service-state checks.
+
+Do not assume that a previously granted permission is still available.
+
+For Accessibility, distinguish between:
+
+- Accessibility Enabled
+- Service Connected
+- Temporarily Disconnected
+- Disabled by User or System
+
+Only report full functionality when the required service is actually available.
+
+---
+
+MODULE 05 — ABOUT RESOLVE: COMPLETE CONTENT & DESIGN REFINEMENT
+
+The current About section is visually poor.
+
+The existing description contains unnecessary technical formatting, crowded text, and wording that does not provide meaningful information to users.
+
+Replace the current About RESOLVE content with a properly structured, readable, useful explanation.
+
+Do not use technical terminal-style formatting such as:
+
+"SYS // RESOLVE_OVERVIEW"
+
+Do not use awkward or grammatically incorrect taglines.
+
+Keep the content human-readable and professionally written.
+
+1. About Section Header
+
+Maintain:
+
+RESOLVE
+
+Developed by Tahan Official
+
+Preserve the actual application version.
+
+Improve the layout so the logo, app name, developer credit, and version are visually separated.
+
+Do not allow text to overlap.
+
+The "About RESOLVE" control must have sufficient spacing and a clear visual hierarchy.
+
+2. About RESOLVE — Suggested Application Copy
+
+Use the following as the foundation for the rewritten About section.
+
+Only describe functionality that is genuinely implemented. Do not claim unimplemented features as available.
+
+About RESOLVE
+
+"RESOLVE is a personal focus and app-access control tool designed to help you reduce digital distractions and protect your dedicated time.
+
+It gives you control over when distracting applications are accessible and allows you to keep essential tools available during a Focus Session.
+
+With flexible session modes, application restrictions, scheduling, and optional notification control, RESOLVE helps create a more intentional phone-usage experience.
+
+RESOLVE is designed with an offline-first approach. Its core local functionality should remain available without requiring an account. Optional multi-device synchronization can be used when connected."
+
+What RESOLVE Offers
+
+Focus Sessions
+
+Create focused periods with Instant Lock, Delayed Lock, or Scheduled Lock.
+
+Application Control
+
+Select the applications you want to keep available and restrict access to distracting applications according to your configuration.
+
+Scheduled Focus
+
+Create and manage scheduled sessions so that restrictions begin at the selected date and time.
+
+Notification Control
+
+Where Android permissions allow, reduce unnecessary notification interruptions during active Focus Sessions.
+
+Emergency Recovery
+
+Use the existing Recovery Code system according to its configured verification process.
+
+Optional Multi-Device Sync
+
+Connect supported devices when synchronization is desired. Local-only use remains available.
+
+Only retain the features that are actually implemented and verified.
+
+3. How RESOLVE Works
+
+Create a separate section explaining the application's major functions.
+
+Use short, meaningful explanations.
+
+Suggested structure:
+
+Instant Lock
+
+Starts the selected restrictions immediately for the chosen duration.
+
+Delayed Lock
+
+Allows normal phone use for a configured initial period before the restrictions automatically begin.
+
+Schedule Lock
+
+Starts the configured restrictions automatically at a selected date and time.
+
+App Lock
+
+Applies the existing application-restriction configuration to selected applications.
+
+Allowed Apps
+
+Keeps essential applications accessible while the other configured applications remain restricted.
+
+Phone Calls
+
+Allows the phone-call functionality according to the existing configured rules.
+
+Notification Control
+
+Uses the available Android notification-policy capabilities to reduce notification interruptions during active sessions.
+
+Recovery Code
+
+Provides the existing authorized recovery process for ending a restricted session when necessary.
+
+Do not invent new functionality.
+
+4. How to Use RESOLVE Effectively
+
+Add a separate, practical guide explaining how users can benefit from RESOLVE.
+
+Suggested copy:
+
+Getting the Best from RESOLVE
+
+Step 1 — Prepare Your Essential Apps
+
+Before starting a session, select only the applications you genuinely need during that period.
+
+Keep essential communication and productivity tools available according to your preferences.
+
+Step 2 — Choose the Right Focus Mode
+
+Use Instant Lock when you are ready to begin immediately.
+
+Use Delayed Lock when you need a short preparation period before restrictions begin.
+
+Use Schedule Lock when you want a Focus Session to start at a predetermined time.
+
+Step 3 — Set Up Your Allowed Apps
+
+Avoid adding unnecessary applications to your allowed list.
+
+A smaller, carefully selected list helps reduce distractions.
+
+Step 4 — Enable Notification Protection
+
+Enable Focus Notification Control if you want RESOLVE to manage notification interruptions during supported sessions.
+
+Grant Notification Policy Access when required.
+
+Step 5 — Start Your Session
+
+Begin your Focus Session and allow RESOLVE to apply its configured restrictions.
+
+Pay attention to the Protection Status if a required permission becomes unavailable.
+
+Step 6 — Keep Recovery Information Safe
+
+Configure the Recovery Code if the existing recovery functionality is available.
+
+Keep the code in a secure place.
+
+Practical Tips
+
+- Begin with manageable Focus Sessions.
+- Prepare essential apps before starting.
+- Use recurring schedules for consistent study or work periods.
+- Keep only necessary exceptions.
+- Avoid changing session settings unnecessarily.
+- Resolve permission warnings when they appear.
+
+The guide should be useful without becoming excessively lengthy or technical.
+
+5. About Section Layout
+
+Use clearly separated subsections:
+
+1. About RESOLVE
+2. What RESOLVE Offers
+3. How RESOLVE Works
+4. How to Use RESOLVE Effectively
+5. Practical Tips
+6. Developer Information
+
+Use readable fonts, comfortable line height, proper text spacing, and consistent headings.
+
+Do not put all content inside a single large terminal-style box.
+
+Use expandable sections if necessary to keep the page organized.
+
+---
+
+MODULE 06 — RESOLVE RUNNER LOGO ANIMATION
+
+The current RESOLVE logo animation inside the About area is incorrect.
+
+The existing animation appears to show a character inside an unnecessary additional polygon or pentagon shape.
+
+The running motion also looks unnatural, as if an object or piece of paper is rotating rather than a character actually running.
+
+We need to correct the entire animation.
+
+1. Preserve the Existing Logo Container
+
+Use the existing rounded-square logo container.
+
+The animation must remain entirely inside that existing four-corner rounded box.
+
+Do not add another pentagon, shield, polygon, or additional internal frame around the running character.
+
+Do not change the outer container unnecessarily.
+
+2. Running Character Design
+
+Create a clean, attractive, minimalist runner illustration.
+
+The character should have a consistent side-profile appearance.
+
+Requirements:
+
+- The character should face one fixed direction.
+- Use a recognizable human running silhouette or the established RESOLVE runner illustration.
+- Show a natural running posture.
+- Animate arms and legs in a believable alternating cycle.
+- Add a very subtle body movement.
+- Maintain consistent character proportions.
+- Keep the character visually centered inside the logo container.
+
+The character must not repeatedly turn left and right.
+
+Do not rotate the entire character or the logo.
+
+Do not make it look like a floating sheet of paper.
+
+3. Running Animation Behavior
+
+The character should appear to be continuously running on a fixed horizontal path.
+
+Add one subtle ground line near the bottom of the existing rounded-square container.
+
+The character should remain around the center of the container while the running motion is animated.
+
+Use a camera-follow visual concept:
+
+- The character remains centered.
+- The running cycle continues.
+- The character does not travel out of the container.
+- The character does not continuously move from the left side to the right side.
+- The ground line remains aligned beneath the runner.
+- Do not create unnecessary movement outside the existing frame.
+
+The motion should feel smooth, natural, and continuous.
+
+4. Animation Quality
+
+Use an appropriate implementation for the existing technology stack.
+
+Possible approaches include:
+
+- SVG vector animation.
+- CSS keyframe animation.
+- Lottie, if already supported by the project.
+- An existing native animation system.
+
+Prefer a lightweight solution.
+
+Requirements:
+
+- Smooth looping.
+- Consistent frame timing.
+- Natural arm and leg movement.
+- No sudden position jumps.
+- No accidental horizontal flips.
+- No unwanted object rotation.
+- No clipping outside the rounded-square boundary.
+- No additional nested geometric shapes.
+
+Respect reduced-motion settings where appropriate.
+
+The final result must look like a character genuinely running in place, viewed from the side.
+
+---
+
+MODULE 07 — FOCUS SESSION NOTIFICATION CONTROL SYSTEM
+
+Implement a complete session-based Notification Control System.
+
+The primary objective is to reduce unnecessary notification interruptions during active Focus Sessions.
+
+Integrate the implementation with the existing Session Lifecycle.
+
+Do not create a separate or competing session controller.
+
+1. Session Start
+
+When an active Focus Session begins:
+
+- Check whether Notification Control is enabled.
+- Verify Notification Policy Access.
+- Inspect the existing DND state.
+- Identify whether DND was already enabled before RESOLVE activated its policy.
+- Activate the configured notification policy where supported.
+- Keep configured essential notification exceptions where the Android API permits them.
+- Update the notification-protection status.
+
+If the required permission is missing, allow the Focus Session to continue normally.
+
+Display an accurate warning that notification protection is unavailable.
+
+2. During the Session
+
+While the session remains active:
+
+- Maintain the configured notification policy.
+- Avoid unnecessary repeated state changes.
+- Check for relevant permission changes when the app resumes or system state changes are detected.
+- Handle manual user DND changes intelligently.
+- Avoid reporting successful notification protection when the operation has failed.
+
+The primary goal is to reduce notification sounds, vibrations, and interruption alerts.
+
+Do not claim that DND deletes, removes, or permanently hides other applications' notifications.
+
+Do not interfere with essential Android functionality.
+
+3. Session Completion
+
+When a session ends:
+
+- Deactivate RESOLVE's notification-control policy.
+- Restore the previous state when appropriate.
+- Preserve pre-existing DND settings.
+- Avoid overriding a newer manual preference made by the user.
+- Clean up RESOLVE-managed temporary policy state.
+
+If DND was already enabled before the Focus Session, do not disable it afterward.
+
+Use session-specific state tracking to avoid conflicting operations.
+
+4. Android Compatibility
+
+Use supported Android NotificationManager APIs.
+
+Check:
+
+"isNotificationPolicyAccessGranted()"
+
+Use the appropriate Android behavior for the actual OS version and target SDK.
+
+Account for modern Android versions where "setInterruptionFilter()" and "AutomaticZenRule" behavior differ.
+
+In particular, implement correct Android 15+ behavior for apps targeting the relevant SDK versions.
+
+Do not use outdated assumptions about global DND control.
+
+5. Notification Settings
+
+Add a compact setting:
+
+Focus Notification Control
+
+Include:
+
+- Enable Notification Control.
+- Automatically Activate During Focus Sessions.
+- Notification Protection Status.
+- Manage DND Permission.
+- Supported Notification Exceptions.
+
+Show only meaningful configuration options.
+
+Do not repeatedly request permission after it has already been granted.
+
+---
+
+MODULE 08 — INTELLIGENT SESSION RECOVERY SYSTEM
+
+This module must improve the reliability of RESOLVE's active-session handling.
+
+The purpose is to preserve and restore valid session state after ordinary Android lifecycle interruptions.
+
+Handle:
+
+- Device Restart.
+- Application Process Termination.
+- Background Service Interruption.
+- Application Crash.
+- Battery Optimization Restrictions.
+- Accessibility Service Disconnection.
+- Required Permission Revocation.
+- Application Update.
+
+IMPORTANT:
+
+This is a recovery and reliability system, not an attempt to prevent the device owner from restarting or managing their phone.
+
+Never interfere with Android's emergency functions, system Settings, or essential controls.
+
+1. Persistent Session State
+
+Persist the necessary session information.
+
+Suggested fields:
+
+- Session ID.
+- Session Mode.
+- Session Start Time.
+- Session End Time.
+- Original Duration.
+- Current Session Status.
+- Allowed Applications.
+- Notification Control State.
+- Relevant Permission State.
+- Recovery Metadata.
+
+Reuse the existing persistent storage architecture.
+
+Avoid duplicate session databases or competing state managers.
+
+Do not depend exclusively on in-memory variables or countdown timers.
+
+2. Accurate Time Restoration
+
+Do not restart the original session duration after process recreation or reboot.
+
+Calculate the actual remaining time from the persisted session deadline.
+
+Where appropriate, use monotonic time for same-boot calculations and a carefully validated cross-reboot timestamp strategy.
+
+Handle potential wall-clock changes.
+
+If the session deadline has already passed, mark the session as completed.
+
+Never restart an expired session automatically.
+
+3. Device Restart Recovery
+
+Use Android's supported lifecycle mechanisms.
+
+Where applicable:
+
+- Handle BOOT_COMPLETED.
+- Handle relevant package replacement events.
+- Validate saved session data.
+- Verify that the session is still active.
+- Calculate remaining duration.
+- Reconcile Notification Control.
+- Check required permissions.
+- Restore supported application state.
+
+Use BroadcastReceiver, WorkManager, or other suitable Android components based on the actual operation.
+
+Do not assume that every Foreground Service can be launched from a Boot Receiver.
+
+Respect current Android background-execution restrictions.
+
+If Android does not permit immediate restoration of a component, preserve the session data and provide a clear recovery action when RESOLVE is opened.
+
+4. Background Service Reliability
+
+Inspect the existing background monitoring and enforcement implementation.
+
+Handle:
+
+- Unexpected service termination.
+- Process recreation.
+- Service disconnection.
+- Duplicate service prevention.
+- Duplicate timer prevention.
+- Recovery-work scheduling.
+- Session state reconciliation.
+
+Use Foreground Services only when their functionality genuinely requires them and the correct Android service types and permissions are declared.
+
+Use WorkManager for appropriate persistent, deferrable recovery operations.
+
+Do not use repeated restart loops or unnecessary background polling.
+
+Do not consume excessive battery.
+
+A service being unavailable must be reflected accurately in Protection Status.
+
+5. Recovery Scenarios
+
+Explicitly test:
+
+Scenario A — Phone Restart
+
+A valid session exists, and the device restarts.
+
+RESOLVE should validate the session and restore supported functionality without restarting the original duration.
+
+Scenario B — Process Termination
+
+Android terminates the RESOLVE process.
+
+Persisted session information must remain available for later reconstruction.
+
+Scenario C — Background Service Interruption
+
+A required service becomes unavailable.
+
+RESOLVE must identify the interruption, preserve session state, and report limited protection accurately.
+
+Scenario D — Expired Session
+
+The saved session has expired.
+
+RESOLVE must complete the session and perform appropriate cleanup.
+
+Scenario E — Application Update
+
+The application is updated during an active session.
+
+Preserve valid session data and reconcile existing services and schedules without creating duplicates.
+
+---
+
+MODULE 09 — PERMISSION & ACCESSIBILITY HEALTH MANAGEMENT
+
+This is a high-priority reliability feature.
+
+RESOLVE depends on specific Android permissions and system services.
+
+The application must monitor their actual state and help users restore required permissions when they become unavailable.
+
+Accessibility Service reliability must receive particular attention because previous implementation attempts showed enablement and reactivation issues.
+
+1. Inspect Existing Accessibility Implementation
+
+Before changing it, inspect:
+
+- Existing Accessibility Service class.
+- AndroidManifest.xml.
+- Service declaration.
+- BIND_ACCESSIBILITY_SERVICE.
+- Accessibility metadata XML.
+- Required capabilities.
+- Event configuration.
+- Package identification.
+- Component name.
+- Service lifecycle.
+- Existing permission-checking implementation.
+
+Identify the precise cause of the previous Accessibility issue.
+
+Do not create a second Accessibility Service unnecessarily.
+
+Repair the existing implementation wherever appropriate.
+
+2. Accessibility State Verification
+
+Distinguish between:
+
+1. Accessibility enabled in Android Settings.
+2. Accessibility Service connected successfully.
+3. Accessibility temporarily disconnected.
+4. Accessibility disabled by the user or system.
+
+Do not treat these states as equivalent.
+
+Use appropriate Android APIs and actual lifecycle callbacks.
+
+The system must not report Accessibility as fully operational merely because a previous permission check succeeded.
+
+3. When Accessibility Is Disabled
+
+If the service becomes disabled:
+
+- Preserve the active session.
+- Update the Protection Status.
+- Identify which functions are affected.
+- Explain that protection may be limited.
+- Provide an Enable Accessibility action.
+- Open the appropriate Android Accessibility Settings screen.
+- Recheck the state when the user returns.
+- Verify actual service connection.
+- Resume dependent functionality only after verification.
+
+Example:
+
+"Accessibility Service is disabled. Some app protection features may be unavailable until you enable it again."
+
+Button:
+
+"Enable Accessibility"
+
+Do not claim that RESOLVE can silently re-enable an Accessibility Service.
+
+The user must explicitly enable it through Android Settings.
+
+4. Other Permission Recovery
+
+Apply equivalent handling to necessary special permissions, including:
+
+- Usage Access.
+- Display Over Other Apps.
+- Notification Policy Access.
+- Notification Permission.
+- Alarms & Reminders, if genuinely required.
+- Other existing required permissions.
+
+For each missing permission:
+
+1. Identify it.
+2. Identify the affected functionality.
+3. Explain the issue.
+4. Provide an appropriate Fix Now action.
+5. Open the correct system Settings screen.
+6. Recheck the actual state after returning.
+
+Do not request unrelated or unnecessary permissions.
+
+5. Battery Optimization
+
+Check relevant battery optimization restrictions.
+
+Use appropriate Android APIs to detect available battery-restriction information.
+
+Where restrictions affect existing RESOLVE functionality:
+
+- Explain the issue.
+- Provide suitable device-specific guidance.
+- Open relevant Settings where possible.
+- Recheck after returning.
+
+Do not request unrestricted battery access unnecessarily.
+
+Do not promise uninterrupted background execution on every Android device.
+
+---
+
+MODULE 10 — UNIFIED PROTECTION STATUS & RECOVERY EXPERIENCE
+
+Connect Notification Control, Session Recovery, Accessibility, and Permission Health into one coherent internal status system.
+
+This is NOT a statistics dashboard.
+
+Its purpose is to show whether RESOLVE's protection components are working.
+
+Use meaningful states:
+
+Protection Active
+
+Required components are available and working.
+
+Protection Limited
+
+A session is active, but one or more components are unavailable.
+
+Action Required
+
+A required permission or configuration needs attention.
+
+Recovering
+
+RESOLVE is verifying or restoring supported components.
+
+Session Completed
+
+The saved session has expired.
+
+When something fails, display:
+
+- What happened.
+- What functionality is affected.
+- What the user should do.
+- One appropriate recovery action.
+
+Do not falsely report success.
+
+Do not show redundant warnings.
+
+---
+
+MODULE 11 — DEVICE ANALYSIS & COMPATIBILITY CENTER
+
+Replace the current Device Management & Setup experience.
+
+The existing screen primarily displays:
+
+- Device Owner Not Provisioned.
+- A technical explanation.
+- An ADB provisioning command.
+
+This is not useful enough for ordinary RESOLVE users.
+
+Transform it into a genuine:
+
+Device Analysis & Compatibility Center
+
+1. Remove the Current ADB-Focused Interface
+
+Remove the ADB provisioning command from the main user-facing interface.
+
+Do not require Device Owner authority for ordinary RESOLVE operation.
+
+Device Owner is an advanced Android management capability, not a normal permission toggle.
+
+Do not recommend factory reset or Device Owner provisioning to ordinary users.
+
+Before modifying the existing implementation, verify the actual application ID and Device Admin Receiver class.
+
+Do not assume placeholder package names are correct.
+
+2. Device Information
+
+Automatically retrieve available information:
+
+- Device Manufacturer.
+- Device Model.
+- Device Name, when accessible.
+- Android Version.
+- Android API Level.
+- Build Number.
+- CPU Architecture.
+- Available RAM, where reliably accessible.
+- RESOLVE Application Version.
+
+Use actual Android information.
+
+Never use hardcoded sample data.
+
+If a field cannot be retrieved, show:
+
+"Not Available"
+
+Do not retrieve unnecessary sensitive device identifiers such as IMEI or serial numbers.
+
+3. System Compatibility Analysis
+
+Inspect the actual state of:
+
+- Accessibility Service.
+- Usage Access.
+- Display Over Other Apps.
+- Notification Policy Access.
+- Notification Permission.
+- Battery Optimization.
+- Relevant Background Execution Conditions.
+- Alarms & Reminders, where genuinely required.
+
+Only include capabilities relevant to the actual application implementation.
+
+For each item display:
+
+- Feature Name.
+- Current Status.
+- Why It Is Needed.
+- Relevant Recovery Action.
+
+Possible statuses:
+
+- Active.
+- Action Required.
+- Unavailable.
+- Not Required.
+- Not Verified.
+
+Do not confuse granted permission with successful service operation.
+
+4. Device Security Analysis
+
+Implement a limited, transparent device configuration assessment.
+
+Where supported, inspect:
+
+- Screen Lock Configuration.
+- Device Encryption Status.
+- Android Security Patch Level.
+- Device Administrator Status.
+- Device Owner Status.
+- Relevant Device Management Capabilities.
+
+Root Detection may be included as an optional heuristic, but it must not be presented as definitive.
+
+Do not claim the device is fully secure based on a few checks.
+
+Do not label unavailable information as insecure.
+
+Use:
+
+"Not Verified"
+
+when the actual state cannot be established.
+
+This section is a configuration overview, not a complete security audit.
+
+5. RESOLVE Setup & Repair
+
+Identify missing permissions or configuration issues.
+
+Examples:
+
+- Accessibility Service Disabled.
+- Usage Access Missing.
+- Notification Policy Access Missing.
+- Required Overlay Access Missing.
+- Background Restriction Detected.
+
+Provide a relevant Fix Now action.
+
+When the user returns from Android Settings:
+
+- Recheck the permission.
+- Verify the actual service state.
+- Update the interface.
+- Confirm successful restoration only after verification.
+
+6. Device Management
+
+Show:
+
+- Device Owner Status.
+- Device Administrator Status.
+- Lock Task Mode Capability, where applicable.
+- Managed Device Status.
+
+If Device Owner is not necessary for standard functionality, clearly display:
+
+"Not Required for Standard RESOLVE Operation"
+
+Keep advanced provisioning information separate from ordinary setup.
+
+7. Compatibility Result
+
+Calculate the overall RESOLVE compatibility based on real functional requirements.
+
+Possible results:
+
+READY
+
+All required components for supported functionality are available.
+
+ACTION REQUIRED
+
+One or more necessary permissions require attention.
+
+LIMITED COMPATIBILITY
+
+Some capabilities are unavailable because of device or Android restrictions.
+
+ANALYSIS INCOMPLETE
+
+Some checks could not be completed reliably.
+
+An optional Device Owner capability must never cause ordinary compatibility to fail.
+
+Do not use arbitrary percentages or fabricated security scores.
+
+8. Device Analysis Interface
+
+Arrange the page into:
+
+1. Device Overview.
+2. System Compatibility.
+3. Device Security.
+4. RESOLVE Setup & Repair.
+5. Device Management.
+
+Use compact cards, clear status indicators, readable descriptions, and relevant actions.
+
+Include a functional:
+
+"Run Device Analysis"
+
+button.
+
+This button must execute real device checks and update the displayed information.
+
+Do not implement a UI-only placeholder.
+
+Avoid excessive continuous scanning.
+
+Perform analysis when requested and when relevant application or permission lifecycle events occur.
+
+---
+
+MODULE 12 — GENERAL SETTINGS, DATA & ARCHITECTURE REQUIREMENTS
+
+1. Single Source of Truth
+
+The following systems must remain coordinated:
+
+- Session Lifecycle.
+- Notification Control.
+- Permission Health.
+- Accessibility State.
+- Session Recovery.
+- Device Compatibility.
+- App Access Configuration.
+- Dark Mode Preferences.
+- Color Inversion Preferences.
+
+Avoid conflicting sources of truth.
+
+Do not introduce duplicate session controllers or permission managers.
+
+2. Persistence
+
+Use the existing persistence architecture.
+
+Preserve:
+
+- Focus Session Data.
+- Schedule Data.
+- App Whitelist.
+- Recovery Code.
+- Notification Preferences.
+- Device-specific Configuration.
+- Per-App Mode Preferences.
+- Existing Multi-Device Sync Preferences.
+
+Respect the existing local-first design.
+
+Do not introduce unnecessary cloud dependencies.
+
+Keep personal usage data and notification contents private.
+
+3. Privacy
+
+Do not collect notification contents.
+
+Do not request Notification Listener access merely to silence notification alerts when DND is sufficient.
+
+Do not upload device analysis results unnecessarily.
+
+Do not transmit application usage records to remote services without an explicit existing feature and user consent.
+
+Keep device analysis local wherever possible.
+
+4. UI Quality
+
+Across all modified screens:
+
+- Maintain consistent spacing.
+- Prevent text overlap.
+- Use readable typography.
+- Avoid excessively large cards.
+- Keep buttons appropriately sized.
+- Use consistent icon dimensions.
+- Maintain proper contrast.
+- Use clear error messages.
+- Provide proper empty states.
+- Ensure scrolling and navigation remain functional.
+
+Do not introduce unnecessary decorative elements.
+
+---
+
+MODULE 13 — ANDROID VERSION COMPATIBILITY
+
+The application targets Android 9 and above.
+
+Before implementing native functionality, inspect the existing compile SDK, target SDK, framework, native bridge, and device support.
+
+Account for relevant version-specific differences, especially:
+
+- Android 9 and later service behavior.
+- Android 10 and later overlay and background behavior.
+- Android 12 and later background execution restrictions.
+- Android 13 notification permission.
+- Android 14 Foreground Service requirements.
+- Android 15+ Foreground Service and notification-policy behavior.
+- Newer Android versions and their applicable system restrictions.
+
+Use supported APIs and version checks.
+
+Do not use deprecated methods without a clear compatibility reason.
+
+Do not assume every OEM provides identical battery-management behavior.
+
+Respect Android's restrictions around:
+
+- Accessibility Services.
+- Special App Access.
+- Notification Policy Access.
+- Foreground Services.
+- Boot Receivers.
+- Background execution.
+- Device Owner provisioning.
+
+Do not create a workaround that silently bypasses user-controlled system settings.
+
+If immediate service restoration is prohibited, preserve the active session and provide a clear recovery path instead.
+
+---
+
+MODULE 14 — IMPLEMENTATION & REGRESSION TESTING
+
+Do not consider this implementation complete merely because the application compiles.
+
+Test every modified feature.
+
+A. Home Screen Tests
+
+1. Verify RESOLVE does not appear in its own Screen Time list.
+2. Verify RESOLVE time is excluded from the usage total.
+3. Verify other application usage remains accurate.
+4. Verify compact card sizing.
+5. Verify usage bars remain visible and correctly scaled.
+
+B. Navigation Tests
+
+1. Verify Home opens correctly.
+2. Verify Insights opens correctly.
+3. Verify History is accessible inside Insights.
+4. Verify Schedule is accessible inside Insights.
+5. Verify existing Schedule functionality works.
+6. Verify Modes opens correctly.
+7. Verify More opens correctly.
+8. Verify Settings and About can be reached through More.
+9. Verify no previous navigation route becomes inaccessible.
+
+C. Modes Tests
+
+1. Verify Dark Mode and Color Inversion are separate.
+2. Verify changing Dark Mode never activates Color Inversion.
+3. Verify changing Color Inversion never changes Dark Mode.
+4. Verify preferences remain independent across applications.
+5. Verify unsupported applications are not shown as controllable.
+6. Verify failed operations display an accurate message.
+7. Verify RESOLVE's own theme affects only RESOLVE.
+8. Verify unsupported system-wide capabilities are not falsely presented as per-app controls.
+
+D. Settings Tests
+
+1. Verify Accessibility appears first among unresolved permissions.
+2. Grant Accessibility.
+3. Verify its card disappears.
+4. Verify no expansion option reveals granted permissions.
+5. Grant all other required permissions.
+6. Verify only unresolved items remain visible.
+7. Disable Accessibility afterward.
+8. Verify the required recovery item reappears.
+9. Verify other existing settings remain functional.
+
+E. Notification Tests
+
+1. Start a Focus Session with Notification Control enabled.
+2. Verify DND activation when permitted.
+3. Verify notification interruptions are reduced.
+4. Verify supported exceptions.
+5. Start a session with pre-existing DND enabled.
+6. Verify pre-existing DND remains active after the session.
+7. Manually change DND during an active session.
+8. Verify RESOLVE does not overwrite a newer user preference.
+9. Deny Notification Policy Access.
+10. Verify the session continues with an accurate warning.
+11. End the session and verify appropriate cleanup.
+
+F. Session Recovery Tests
+
+1. Restart the device during a session.
+2. Open RESOLVE after restarting.
+3. Verify the correct remaining duration.
+4. Verify no countdown reset.
+5. Test process recreation.
+6. Test background service interruption.
+7. Test application update.
+8. Test a session expiring during interruption.
+9. Verify no duplicate service or recovery job.
+
+G. Accessibility & Permission Tests
+
+1. Enable Accessibility.
+2. Confirm service connection.
+3. Disable Accessibility manually.
+4. Verify Protection Status changes.
+5. Use Enable Accessibility.
+6. Re-enable through Android Settings.
+7. Return to RESOLVE.
+8. Verify actual reconnection.
+9. Repeat equivalent checks for other important permissions.
+10. Verify recovery actions work without duplicate prompts.
+
+H. Device Analysis Tests
+
+1. Verify manufacturer detection.
+2. Verify device model.
+3. Verify Android version and API level.
+4. Verify Accessibility status.
+5. Verify Usage Access.
+6. Verify Notification Policy Access.
+7. Verify Battery Optimization state.
+8. Verify device security information where available.
+9. Verify Device Owner is correctly classified as optional for standard operation.
+10. Verify analysis status is calculated from real checks.
+
+I. About & Animation Tests
+
+1. Verify the new About description is readable.
+2. Verify the new How to Use section.
+3. Verify no text overlaps.
+4. Verify Developer Credit.
+5. Verify application version.
+6. Verify the runner remains centered.
+7. Verify smooth running animation.
+8. Verify no unnecessary polygon or shield surrounds the runner.
+9. Verify the character does not rotate or flip.
+10. Verify the animation remains inside the original rounded-square container.
+
+Test across the minimum supported Android version and a recent Android version where possible.
+
+---
+
+FINAL EXECUTION INSTRUCTIONS
+
+This implementation must be approached carefully.
+
+Before modifying the code:
+
+PHASE 1 — PROJECT AUDIT
+
+Inspect the complete existing project.
+
+Identify the existing architecture, implementation files, navigation structure, session manager, device integrations, theme manager, usage tracker, and permission handling.
+
+PHASE 2 — CHANGE PLAN
+
+Create an internal implementation plan.
+
+Identify which components need modification and which should remain untouched.
+
+Do not rewrite functioning modules unnecessarily.
+
+PHASE 3 — IMPLEMENTATION
+
+Implement the changes in logically separated modules.
+
+Preserve existing data and functionality.
+
+Do not introduce fake or placeholder functionality.
+
+PHASE 4 — INTEGRATION
+
+Verify that Navigation, Settings, Modes, Session Control, Device Analysis, Notification Control, and Recovery work together.
+
+PHASE 5 — TESTING
+
+Run the available automated and manual tests.
+
+Resolve errors and regressions before reporting completion.
+
+If some functionality cannot be implemented because of Android restrictions or missing native capabilities, explain the limitation clearly and provide the safest supported alternative.
+
+Do not silently omit requested functionality.
+
+Do not claim success for unimplemented features.
+
+STRICT PRESERVATION RULE
+
+Do not break or remove any existing working functionality, including:
+
+- Instant Lock.
+- Delayed Lock.
+- Scheduled Lock.
+- App Whitelist.
+- Phone Call Allowance.
+- Recovery Code.
+- Existing Mascot Companion System.
+- Existing Lock Screen.
+- Existing session management.
+- Existing offline-first behavior.
+- Existing optional Multi-Device Sync.
+- Existing History and Schedule records.
+
+Keep all existing user data intact.
+
+Do not introduce unrelated features.
+
+Do not redesign the entire application.
+
+---
+
+FINAL OBJECTIVE
+
+Transform RESOLVE into a more polished, reliable, and intelligently organized Digital Focus Control application.
+
+The final application should have:
+
+- A cleaner and more compact Home Screen.
+- Accurate Screen Time without RESOLVE counting itself.
+- A four-section Bottom Navigation.
+- Combined History and Schedule inside Insights.
+- An independent Modes area for Dark Mode and Color Inversion.
+- A well-organized Settings section.
+- No unnecessary display of already-granted permissions.
+- A professionally written About RESOLVE section.
+- A natural and attractive centered running-character animation.
+- Session-based Notification Control.
+- Intelligent Session Recovery.
+- Reliable Accessibility and Permission Recovery.
+- A genuine Device Analysis & Compatibility Center.
+
+Most importantly, prioritize actual functionality, reliability, clarity, and a consistent user experience over simply adding more UI elements.
+
+The final result should feel like one coherent, professionally engineered RESOLVE application—not a collection of separately implemented features.

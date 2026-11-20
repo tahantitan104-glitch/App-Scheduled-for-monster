@@ -95,6 +95,9 @@ class ResolveSessionService : Service() {
                     delay(850L)
                     runCatching {
                         val session = engine.activeSession.value ?: return@runCatching
+                        if (session.isEnforcementPhase) {
+                            container.notificationControlManager.reconcileDuringActiveSession(session.sessionId)
+                        }
                         if (session.state != SessionState.LOCK_ENFORCEMENT_ACTIVE) return@runCatching
                         if (session.enforcementMode != EnforcementMode.ACCESSIBILITY_GUARD) return@runCatching
 
@@ -209,21 +212,76 @@ class ResolveSessionService : Service() {
     companion object {
         private const val CHANNEL_ID = "resolve_session_channel"
         private const val NOTIFICATION_ID = 7001
+        private const val RECOVERY_NOTIFICATION_ID = 7002
 
-        fun start(context: Context) {
+        fun start(context: Context): Boolean {
             val intent = Intent(context, ResolveSessionService::class.java)
-            runCatching {
+            return try {
                 if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
                     context.startForegroundService(intent)
                 } else {
                     context.startService(intent)
                 }
+                true
+            } catch (_: Throwable) {
+                // On Android 12+ background start (e.g. boot/update), post a direct recovery alert instead of crashing.
+                postRecoveryNotification(context)
+                false
             }
         }
 
         fun stop(context: Context) {
             val intent = Intent(context, ResolveSessionService::class.java)
             runCatching { context.stopService(intent) }
+            runCatching {
+                val nm = context.getSystemService(Context.NOTIFICATION_SERVICE) as? NotificationManager
+                nm?.cancel(RECOVERY_NOTIFICATION_ID)
+            }
+        }
+
+        private fun postRecoveryNotification(context: Context) {
+            runCatching {
+                val nm = context.getSystemService(Context.NOTIFICATION_SERVICE) as? NotificationManager ?: return
+                if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O &&
+                    nm.getNotificationChannel(CHANNEL_ID) == null
+                ) {
+                    val channel = NotificationChannel(
+                        CHANNEL_ID,
+                        context.getString(R.string.notification_channel_session_name),
+                        NotificationManager.IMPORTANCE_HIGH
+                    ).apply {
+                        description = context.getString(R.string.notification_channel_session_desc)
+                    }
+                    nm.createNotificationChannel(channel)
+                }
+                val immutableFlag = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.M) {
+                    PendingIntent.FLAG_IMMUTABLE
+                } else {
+                    0
+                }
+                val resumeIntent = Intent(
+                    context,
+                    com.example.presentation.lockscreen.LockScreenActivity::class.java
+                ).apply {
+                    addFlags(Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_CLEAR_TOP)
+                }
+                val pendingIntent = PendingIntent.getActivity(
+                    context,
+                    RECOVERY_NOTIFICATION_ID,
+                    resumeIntent,
+                    PendingIntent.FLAG_UPDATE_CURRENT or immutableFlag
+                )
+                val notification = NotificationCompat.Builder(context, CHANNEL_ID)
+                    .setSmallIcon(R.drawable.ic_notification_resolve)
+                    .setColor(0xFF75E0B5.toInt())
+                    .setContentTitle("Focus Session Restored")
+                    .setContentText("Tap to resume Resolve Lock Screen protection.")
+                    .setAutoCancel(true)
+                    .setContentIntent(pendingIntent)
+                    .setCategory(NotificationCompat.CATEGORY_REMINDER)
+                    .build()
+                nm.notify(RECOVERY_NOTIFICATION_ID, notification)
+            }
         }
     }
 }

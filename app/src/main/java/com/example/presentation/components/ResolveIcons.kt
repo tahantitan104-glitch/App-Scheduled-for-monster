@@ -687,6 +687,322 @@ object ResolveIcons {
         }
     }
 
+    val MoreHoriz: ImageVector by lazy {
+        materialVector("ResolveMoreHoriz") {
+            path(fill = SolidColor(Color.Black)) {
+                moveTo(6f, 10f)
+                curveToRelative(-1.1f, 0f, -2f, 0.9f, -2f, 2f)
+                reflectiveCurveToRelative(0.9f, 2f, 2f, 2f)
+                reflectiveCurveToRelative(2f, -0.9f, 2f, -2f)
+                reflectiveCurveToRelative(-0.9f, -2f, -2f, -2f)
+                close()
+                moveTo(18f, 10f)
+                curveToRelative(-1.1f, 0f, -2f, 0.9f, -2f, 2f)
+                reflectiveCurveToRelative(0.9f, 2f, 2f, 2f)
+                reflectiveCurveToRelative(2f, -0.9f, 2f, -2f)
+                reflectiveCurveToRelative(-0.9f, -2f, -2f, -2f)
+                close()
+                moveTo(12f, 10f)
+                curveToRelative(-1.1f, 0f, -2f, 0.9f, -2f, 2f)
+                reflectiveCurveToRelative(0.9f, 2f, 2f, 2f)
+                reflectiveCurveToRelative(2f, -0.9f, 2f, -2f)
+                reflectiveCurveToRelative(-0.9f, -2f, -2f, -2f)
+                close()
+            }
+        }
+    }
+
+    val DarkMode: ImageVector by lazy {
+        materialVector("ResolveDarkMode") {
+            path(fill = SolidColor(Color.Black)) {
+                moveTo(12f, 3f)
+                curveToRelative(-4.97f, 0f, -9f, 4.03f, -9f, 9f)
+                reflectiveCurveToRelative(4.03f, 9f, 9f, 9f)
+                reflectiveCurveToRelative(9f, -4.03f, 9f, -9f)
+                curveToRelative(0f, -0.46f, -0.04f, -0.92f, -0.1f, -1.36f)
+                curveToRelative(-0.98f, 1.37f, -2.58f, 2.26f, -4.4f, 2.26f)
+                curveToRelative(-2.98f, 0f, -5.4f, -2.42f, -5.4f, -5.4f)
+                curveToRelative(0f, -1.81f, 0.89f, -3.42f, 2.26f, -4.4f)
+                curveToRelative(-0.44f, -0.06f, -0.9f, -0.1f, -1.36f, -0.1f)
+                close()
+            }
+        }
+    }
+
+    val Vision: ImageVector by lazy {
+        materialVector("ResolveVision") {
+            path(fill = SolidColor(Color.Black)) {
+                moveTo(12f, 4.5f)
+                curveTo(7f, 4.5f, 2.73f, 7.61f, 1f, 12f)
+                curveToRelative(1.73f, 4.39f, 6f, 7.5f, 11f, 7.5f)
+                reflectiveCurveToRelative(9.27f, -3.11f, 11f, -7.5f)
+                curveToRelative(-1.73f, -4.39f, -6f, -7.5f, -11f, -7.5f)
+                close()
+                moveTo(12f, 17f)
+                curveToRelative(-2.76f, 0f, -5f, -2.24f, -5f, -5f)
+                reflectiveCurveToRelative(2.24f, -5f, 5f, -5f)
+                reflectiveCurveToRelative(5f, 2.24f, 5f, 5f)
+                reflectiveCurveToRelative(-2.24f, 5f, -5f, 5f)
+                close()
+                moveTo(12f, 9f)
+                curveToRelative(-1.66f, 0f, -3f, 1.34f, -3f, 3f)
+                reflectiveCurveToRelative(1.34f, 3f, 3f, 3f)
+                reflectiveCurveToRelative(3f, -1.34f, 3f, -3f)
+                reflectiveCurveToRelative(-1.34f, -3f, -3f, -3f)
+                close()
+            }
+        }
+    }
+
+    val FlipClock: ImageVector by lazy {
+        materialVector("ResolveFlipClock") {
+            path(fill = SolidColor(Color.Black)) {
+                moveTo(4f, 5f)
+                horizontalLineToRelative(6.5f)
+                curveToRelative(0.83f, 0f, 1.5f, 0.67f, 1.5f, 1.5f)
+                verticalLineToRelative(11f)
+                curveToRelative(0f, 0.83f, -0.67f, 1.5f, -1.5f, 1.5f)
+                horizontalLineTo(4f)
+                curveToRelative(-1.1f, 0f, -2f, -0.9f, -2f, -2f)
+                verticalLineTo(7f)
+                curveToRelative(0f, -1.1f, 0.9f, -2f, 2f, -2f)
+                close()
+                moveTo(4f, 11.2f)
+                horizontalLineToRelative(6f)
+                verticalLineTo(7f)
+                horizontalLineTo(4f)
+                verticalLineToRelative(4.2f)
+                close()
+                moveTo(4f, 17f)
+                horizontalLineToRelative(6f)
+                verticalLineToRelative(-4.2f)
+                horizontalLineTo(4f)
+                verticalLineTo(17f)
+                close()
+                moveTo(13.5f, 5f)
+                horizontalLineTo(20f)
+                curveToRelative(1.1f, 0f, 2f, 0.9f, 2f, 2f)
+                verticalLineToRelative(10f)
+                curveToRelative(0f, 1.1f, -0.9f, 2f, -2f, 2f)
+                horizontalLineToRelative(-6.5f)
+                curveToRelative(-0.83f, 0f, -1.5f, -0.67f, -1.5f, -1.5f)
+                verticalLineToRelative(-11f)
+                curveToRelative(0f, -0.83f, 0.67f, -1.5f, 1.5f, -1.5f)
+                close()
+                moveTo(14f, 11.2f)
+                horizontalLineToRelative(6f)
+                verticalLineTo(7f)
+                horizontalLineToRelative(-6f)
+                verticalLineToRelative(4.2f)
+                close()
+                moveTo(14f, 17f)
+                horizontalLineToRelative(6f)
+                verticalLineToRelative(-4.2f)
+                horizontalLineToRelative(-6f)
+                verticalLineTo(17f)
+                close()
+            }
+        }
+    }
+
+    val Stopwatch: ImageVector by lazy {
+        materialVector("ResolveStopwatch") {
+            path(fill = SolidColor(Color.Black)) {
+                moveTo(15f, 1f)
+                horizontalLineTo(9f)
+                verticalLineToRelative(2f)
+                horizontalLineToRelative(6f)
+                verticalLineTo(1f)
+                close()
+                moveTo(11f, 14f)
+                horizontalLineToRelative(2f)
+                verticalLineTo(8f)
+                horizontalLineToRelative(-2f)
+                verticalLineToRelative(6f)
+                close()
+                moveTo(19.03f, 7.39f)
+                lineToRelative(1.42f, -1.42f)
+                curveToRelative(-0.43f, -0.51f, -0.9f, -0.99f, -1.41f, -1.41f)
+                lineToRelative(-1.42f, 1.42f)
+                curveTo(16.07f, 4.74f, 14.12f, 4f, 12f, 4f)
+                curveToRelative(-4.97f, 0f, -9f, 4.03f, -9f, 9f)
+                reflectiveCurveToRelative(4.02f, 9f, 9f, 9f)
+                reflectiveCurveToRelative(9f, -4.03f, 9f, -9f)
+                curveToRelative(0f, -2.12f, -0.74f, -4.07f, -1.97f, -5.61f)
+                close()
+                moveTo(12f, 20f)
+                curveToRelative(-3.87f, 0f, -7f, -3.13f, -7f, -7f)
+                reflectiveCurveToRelative(3.13f, -7f, 7f, -7f)
+                reflectiveCurveToRelative(7f, 3.13f, 7f, 7f)
+                reflectiveCurveToRelative(-3.13f, 7f, -7f, 7f)
+                close()
+            }
+        }
+    }
+
+    val BrightnessHigh: ImageVector by lazy {
+        materialVector("ResolveBrightnessHigh") {
+            path(fill = SolidColor(Color.Black)) {
+                moveTo(20f, 8.69f)
+                verticalLineTo(4f)
+                horizontalLineToRelative(-4.69f)
+                lineTo(12f, 0.69f)
+                lineTo(8.69f, 4f)
+                horizontalLineTo(4f)
+                verticalLineToRelative(4.69f)
+                lineTo(0.69f, 12f)
+                lineTo(4f, 15.31f)
+                verticalLineTo(20f)
+                horizontalLineToRelative(4.69f)
+                lineTo(12f, 23.31f)
+                lineTo(15.31f, 20f)
+                horizontalLineTo(20f)
+                verticalLineToRelative(-4.69f)
+                lineTo(23.31f, 12f)
+                lineTo(20f, 8.69f)
+                close()
+                moveTo(12f, 18f)
+                curveToRelative(-3.31f, 0f, -6f, -2.69f, -6f, -6f)
+                reflectiveCurveToRelative(2.69f, -6f, 6f, -6f)
+                reflectiveCurveToRelative(6f, 2.69f, 6f, 6f)
+                reflectiveCurveToRelative(-2.69f, 6f, -6f, 6f)
+                close()
+                moveTo(12f, 8f)
+                curveToRelative(-2.21f, 0f, -4f, 1.79f, -4f, 4f)
+                reflectiveCurveToRelative(1.79f, 4f, 4f, 4f)
+                reflectiveCurveToRelative(4f, -1.79f, 4f, -4f)
+                reflectiveCurveToRelative(-1.79f, -4f, -4f, -4f)
+                close()
+            }
+        }
+    }
+
+    val Restart: ImageVector by lazy {
+        materialVector("ResolveRestart") {
+            path(fill = SolidColor(Color.Black)) {
+                moveTo(12f, 5f)
+                verticalLineTo(1f)
+                lineTo(7f, 6f)
+                lineToRelative(5f, 5f)
+                verticalLineTo(7f)
+                curveToRelative(3.31f, 0f, 6f, 2.69f, 6f, 6f)
+                reflectiveCurveToRelative(-2.69f, 6f, -6f, 6f)
+                reflectiveCurveToRelative(-6f, -2.69f, -6f, -6f)
+                horizontalLineTo(4f)
+                curveToRelative(0f, 4.42f, 3.58f, 8f, 8f, 8f)
+                reflectiveCurveToRelative(8f, -3.58f, 8f, -8f)
+                reflectiveCurveToRelative(-3.58f, -8f, -8f, -8f)
+                close()
+            }
+        }
+    }
+
+    val Pause: ImageVector by lazy {
+        materialVector("ResolvePause") {
+            path(fill = SolidColor(Color.Black)) {
+                moveTo(6f, 19f)
+                horizontalLineToRelative(4f)
+                verticalLineTo(5f)
+                horizontalLineTo(6f)
+                verticalLineToRelative(14f)
+                close()
+                moveTo(14f, 5f)
+                verticalLineToRelative(14f)
+                horizontalLineToRelative(4f)
+                verticalLineTo(5f)
+                horizontalLineToRelative(-4f)
+                close()
+            }
+        }
+    }
+
+    val Edit: ImageVector by lazy {
+        materialVector("ResolveEdit") {
+            path(fill = SolidColor(Color.Black)) {
+                moveTo(3f, 17.25f)
+                verticalLineTo(21f)
+                horizontalLineToRelative(3.75f)
+                lineTo(17.81f, 9.94f)
+                lineToRelative(-3.75f, -3.75f)
+                lineTo(3f, 17.25f)
+                close()
+                moveTo(20.71f, 7.04f)
+                curveToRelative(0.39f, -0.39f, 0.39f, -1.02f, 0f, -1.41f)
+                lineToRelative(-2.34f, -2.34f)
+                curveToRelative(-0.39f, -0.39f, -1.02f, -0.39f, -1.41f, 0f)
+                lineToRelative(-1.83f, 1.83f)
+                lineToRelative(3.75f, 3.75f)
+                lineToRelative(1.83f, -1.83f)
+                close()
+            }
+        }
+    }
+
+    val InvertColors: ImageVector by lazy {
+        materialVector("ResolveInvertColors") {
+            path(fill = SolidColor(Color.Black)) {
+                moveTo(12f, 4.81f)
+                verticalLineTo(19f)
+                curveToRelative(-3.31f, 0f, -6f, -2.63f, -6f, -5.87f)
+                curveToRelative(0f, -1.56f, 0.62f, -3.03f, 1.75f, -4.14f)
+                lineTo(12f, 4.81f)
+                moveTo(17.66f, 7.93f)
+                lineTo(12f, 2.27f)
+                lineTo(6.34f, 7.93f)
+                curveToRelative(-3.12f, 3.12f, -3.12f, 8.19f, 0f, 11.31f)
+                curveTo(7.9f, 20.8f, 9.95f, 21.58f, 12f, 21.58f)
+                reflectiveCurveToRelative(4.1f, -0.78f, 5.66f, -2.34f)
+                curveToRelative(3.12f, -3.12f, 3.12f, -8.19f, 0f, -11.31f)
+                close()
+            }
+        }
+    }
+
+    val ScreenRotation: ImageVector by lazy {
+        materialVector("ResolveScreenRotation") {
+            path(fill = SolidColor(Color.Black)) {
+                moveTo(16.48f, 2.52f)
+                curveToRelative(3.27f, 1.55f, 5.61f, 4.72f, 5.97f, 8.48f)
+                horizontalLineToRelative(1.5f)
+                curveTo(23.44f, 4.84f, 18.29f, 0f, 12f, 0f)
+                lineToRelative(-0.66f, 0.03f)
+                lineToRelative(3.81f, 3.81f)
+                lineToRelative(1.33f, -1.32f)
+                close()
+                moveTo(10.23f, 1.75f)
+                curveToRelative(-0.59f, -0.59f, -1.54f, -0.59f, -2.12f, 0f)
+                lineTo(1.75f, 8.11f)
+                curveToRelative(-0.59f, 0.59f, -0.59f, 1.54f, 0f, 2.12f)
+                lineToRelative(12.02f, 12.02f)
+                curveToRelative(0.59f, 0.59f, 1.54f, 0.59f, 2.12f, 0f)
+                lineToRelative(6.36f, -6.36f)
+                curveToRelative(0.59f, -0.59f, 0.59f, -1.54f, 0f, -2.12f)
+                lineTo(10.23f, 1.75f)
+                close()
+                moveTo(14.83f, 21.19f)
+                lineTo(2.81f, 9.17f)
+                lineToRelative(6.36f, -6.36f)
+                lineToRelative(12.02f, 12.02f)
+                lineToRelative(-6.36f, 6.36f)
+                close()
+            }
+        }
+    }
+
+    val ExpandLess: ImageVector by lazy {
+        materialVector("ResolveExpandLess") {
+            path(fill = SolidColor(Color.Black)) {
+                moveTo(12f, 8f)
+                lineToRelative(-6f, 6f)
+                lineToRelative(1.41f, 1.41f)
+                lineTo(12f, 10.83f)
+                lineToRelative(4.59f, 4.58f)
+                lineTo(18f, 14f)
+                close()
+            }
+        }
+    }
+
     private inline fun materialVector(
         name: String,
         block: ImageVector.Builder.() -> Unit

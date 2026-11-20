@@ -183,7 +183,7 @@ class ResolveRobolectricTest {
     }
 
     @Test
-    fun `reboot during active lock restarts full lock duration per policy`() = runTest {
+    fun `reboot during active lock preserves original deadline and resumes remaining duration cleanly`() = runTest {
         recoveryManager.saveRecoveryCode("1234567890123456")
         fakePolicy.deviceOwner = true
         engine.initialize()
@@ -191,6 +191,7 @@ class ResolveRobolectricTest {
         engine.startInstantLock(30L, emptyList(), phoneAccessEnabled = true)
         val dummyActivity = Robolectric.buildActivity(Activity::class.java).create().get()
         engine.confirmLockTaskEntered(dummyActivity)
+        val initialExpireWall = engine.activeSession.value!!.lockExpirationWallMs!!
 
         // Simulate 15 minutes elapsed, then device reboot (elapsed resets)
         fakeClock.advanceWallOnly(15L * 60_000L)
@@ -199,10 +200,11 @@ class ResolveRobolectricTest {
 
         assertEquals(SessionState.LOCK_TRANSITION_PENDING, engine.activeSession.value?.state)
         engine.confirmLockTaskEntered(dummyActivity)
-        val restarted = engine.activeSession.value!!
+        val resumed = engine.activeSession.value!!
+        assertEquals(initialExpireWall, resumed.lockExpirationWallMs)
         assertEquals(
-            fakeClock.elapsedRealtimeMs() + 30L * 60_000L,
-            restarted.lockExpirationElapsedMs
+            fakeClock.elapsedRealtimeMs() + 15L * 60_000L,
+            resumed.lockExpirationElapsedMs
         )
     }
 
@@ -278,6 +280,8 @@ class ResolveRobolectricTest {
             }
         }
         composeRule.waitForIdle()
+        composeRule.onNodeWithTag("settings_list")
+            .performScrollToNode(hasTestTag("settings_accessibility_action"))
         composeRule.onNodeWithText("Accessibility Service").assertIsDisplayed()
         composeRule.onNodeWithTag("settings_list")
             .performScrollToNode(hasTestTag("settings_developer_credit"))

@@ -2,6 +2,7 @@ package com.example.presentation.components
 
 import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
+import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
@@ -20,6 +21,7 @@ import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.outlined.CheckCircle
+import androidx.compose.material.icons.outlined.Info
 import androidx.compose.material.icons.outlined.Search
 import androidx.compose.material3.Button
 import androidx.compose.material3.ButtonDefaults
@@ -44,7 +46,7 @@ import androidx.compose.ui.graphics.ImageBitmap
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
-import com.example.designsystem.ResolveColors
+import com.example.designsystem.LocalResolveExtendedPalette
 import com.example.domain.model.InstalledAppInfo
 
 @OptIn(ExperimentalMaterial3Api::class)
@@ -56,10 +58,26 @@ fun AllowedAppsPickerSheet(
     onDismiss: () -> Unit,
     onSaveSelection: (Set<String>) -> Unit
 ) {
+    val palette = LocalResolveExtendedPalette.current
     val sheetState = rememberModalBottomSheetState(skipPartiallyExpanded = true)
     var searchQuery by remember { mutableStateOf("") }
     var selectedPackages by remember(initialSelectedPackages) {
         mutableStateOf(initialSelectedPackages)
+    }
+
+    val installedPkgSet = remember(installedApps) {
+        installedApps.mapTo(HashSet(installedApps.size)) { it.packageName }
+    }
+    val missingSelectedPackages = remember(initialSelectedPackages, selectedPackages, installedPkgSet) {
+        (initialSelectedPackages + selectedPackages)
+            .filter { !installedPkgSet.contains(it) }
+            .sorted()
+    }
+
+    val filteredMissing = remember(missingSelectedPackages, searchQuery) {
+        val q = searchQuery.trim()
+        if (q.isEmpty()) missingSelectedPackages
+        else missingSelectedPackages.filter { it.contains(q, ignoreCase = true) }
     }
 
     val filteredApps = remember(installedApps, searchQuery) {
@@ -74,7 +92,7 @@ fun AllowedAppsPickerSheet(
     ModalBottomSheet(
         onDismissRequest = onDismiss,
         sheetState = sheetState,
-        containerColor = ResolveColors.ForestSecondary
+        containerColor = palette.cardBottom
     ) {
         ProvideSafeTextToolbar {
             CleanupTextInteractionsOnDispose()
@@ -97,12 +115,12 @@ fun AllowedAppsPickerSheet(
                         Text(
                             text = "Allowed Applications",
                             style = MaterialTheme.typography.headlineMedium,
-                            color = ResolveColors.TextPrimary
+                            color = palette.textPrimary
                         )
                         Text(
                             text = "${selectedPackages.size} selected during Lock Mode",
                             style = MaterialTheme.typography.bodyMedium,
-                            color = ResolveColors.TextSecondary
+                            color = palette.textSecondary
                         )
                     }
                     if (selectedPackages.isNotEmpty()) {
@@ -110,8 +128,35 @@ fun AllowedAppsPickerSheet(
                             onClick = { selectedPackages = emptySet() },
                             modifier = Modifier.testTag("clear_allowed_apps_button")
                         ) {
-                            Text("Clear", color = ResolveColors.SageAccent)
+                            Text("Clear", color = palette.accent)
                         }
+                    }
+                }
+
+                if (missingSelectedPackages.isNotEmpty()) {
+                    Spacer(modifier = Modifier.height(8.dp))
+                    Row(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .clip(RoundedCornerShape(12.dp))
+                            .background(palette.warnContainer)
+                            .border(1.dp, palette.warn.copy(alpha = 0.45f), RoundedCornerShape(12.dp))
+                            .padding(horizontal = 12.dp, vertical = 8.dp)
+                            .testTag("missing_allowed_apps_warning_banner"),
+                        verticalAlignment = Alignment.CenterVertically,
+                        horizontalArrangement = Arrangement.spacedBy(8.dp)
+                    ) {
+                        Icon(
+                            imageVector = Icons.Outlined.Info,
+                            contentDescription = null,
+                            tint = palette.warn,
+                            modifier = Modifier.size(18.dp)
+                        )
+                        Text(
+                            text = "${missingSelectedPackages.size} synced package(s) are not installed on this device.",
+                            style = MaterialTheme.typography.labelMedium,
+                            color = palette.warn
+                        )
                     }
                 }
 
@@ -136,7 +181,7 @@ fun AllowedAppsPickerSheet(
 
                 Spacer(modifier = Modifier.height(12.dp))
 
-                if (filteredApps.isEmpty()) {
+                if (filteredApps.isEmpty() && filteredMissing.isEmpty()) {
                     Box(
                         modifier = Modifier
                             .fillMaxWidth()
@@ -147,7 +192,7 @@ fun AllowedAppsPickerSheet(
                             text = if (installedApps.isEmpty()) "No launchable apps discovered."
                             else "No apps match \"$searchQuery\".",
                             style = MaterialTheme.typography.bodyMedium,
-                            color = ResolveColors.TextSecondary
+                            color = palette.textSecondary
                         )
                     }
                 } else {
@@ -157,6 +202,21 @@ fun AllowedAppsPickerSheet(
                             .heightIn(max = 380.dp),
                         verticalArrangement = Arrangement.spacedBy(8.dp)
                     ) {
+                        items(filteredMissing, key = { "missing_$it" }) { pkg ->
+                            val isSelected = selectedPackages.contains(pkg)
+                            MissingAppPickerRow(
+                                packageName = pkg,
+                                isSelected = isSelected,
+                                onToggle = {
+                                    selectedPackages = if (isSelected) {
+                                        selectedPackages - pkg
+                                    } else {
+                                        selectedPackages + pkg
+                                    }
+                                }
+                            )
+                        }
+
                         items(filteredApps, key = { it.packageName }) { app ->
                             val isSelected = selectedPackages.contains(app.packageName)
                             AppPickerRow(
@@ -183,8 +243,8 @@ fun AllowedAppsPickerSheet(
                         onSaveSelection(selectedPackages)
                     },
                     colors = ButtonDefaults.buttonColors(
-                        containerColor = ResolveColors.MintAccent,
-                        contentColor = ResolveColors.ForestDeep
+                        containerColor = palette.accent,
+                        contentColor = palette.onAccent
                     ),
                     shape = RoundedCornerShape(16.dp),
                     modifier = Modifier
@@ -203,12 +263,77 @@ fun AllowedAppsPickerSheet(
 }
 
 @Composable
+private fun MissingAppPickerRow(
+    packageName: String,
+    isSelected: Boolean,
+    onToggle: () -> Unit
+) {
+    val palette = LocalResolveExtendedPalette.current
+    Row(
+        modifier = Modifier
+            .fillMaxWidth()
+            .clip(RoundedCornerShape(16.dp))
+            .background(
+                if (isSelected) palette.warnContainer.copy(alpha = 0.65f)
+                else palette.background.copy(alpha = 0.65f)
+            )
+            .border(1.dp, palette.warn.copy(alpha = 0.4f), RoundedCornerShape(16.dp))
+            .clickable(onClick = onToggle)
+            .padding(horizontal = 14.dp, vertical = 12.dp)
+            .testTag("missing_app_row_$packageName"),
+        verticalAlignment = Alignment.CenterVertically
+    ) {
+        Box(
+            modifier = Modifier
+                .size(40.dp)
+                .clip(CircleShape)
+                .background(palette.warnContainer),
+            contentAlignment = Alignment.Center
+        ) {
+            Icon(
+                imageVector = Icons.Outlined.Info,
+                contentDescription = null,
+                tint = palette.warn
+            )
+        }
+
+        Spacer(modifier = Modifier.width(12.dp))
+
+        Column(modifier = Modifier.weight(1f)) {
+            Text(
+                text = packageName,
+                style = MaterialTheme.typography.titleMedium,
+                color = palette.textPrimary,
+                maxLines = 1,
+                overflow = TextOverflow.Ellipsis
+            )
+            Text(
+                text = "Not installed on this device",
+                style = MaterialTheme.typography.labelMedium,
+                color = palette.warn,
+                maxLines = 1,
+                overflow = TextOverflow.Ellipsis
+            )
+        }
+
+        Spacer(modifier = Modifier.width(8.dp))
+
+        Icon(
+            imageVector = if (isSelected) Icons.Outlined.CheckCircle else ResolveIcons.RadioButtonUnchecked,
+            contentDescription = if (isSelected) "Selected" else "Not selected",
+            tint = if (isSelected) palette.warn else palette.textMuted
+        )
+    }
+}
+
+@Composable
 private fun AppPickerRow(
     app: InstalledAppInfo,
     isSelected: Boolean,
     loadIcon: suspend (String) -> ImageBitmap?,
     onToggle: () -> Unit
 ) {
+    val palette = LocalResolveExtendedPalette.current
     var iconBitmap by remember(app.packageName) { mutableStateOf<ImageBitmap?>(null) }
     LaunchedEffect(app.packageName) {
         iconBitmap = loadIcon(app.packageName)
@@ -219,8 +344,8 @@ private fun AppPickerRow(
             .fillMaxWidth()
             .clip(RoundedCornerShape(16.dp))
             .background(
-                if (isSelected) ResolveColors.MintSoftContainer.copy(alpha = 0.7f)
-                else ResolveColors.ForestSurface
+                if (isSelected) palette.accentSoftContainer.copy(alpha = 0.72f)
+                else palette.background.copy(alpha = 0.65f)
             )
             .clickable(onClick = onToggle)
             .padding(horizontal = 14.dp, vertical = 12.dp)
@@ -240,13 +365,13 @@ private fun AppPickerRow(
                 modifier = Modifier
                     .size(40.dp)
                     .clip(CircleShape)
-                    .background(ResolveColors.ForestSurfaceElevated),
+                    .background(palette.cardTop),
                 contentAlignment = Alignment.Center
             ) {
                 Icon(
                     imageVector = ResolveIcons.Apps,
                     contentDescription = null,
-                    tint = ResolveColors.TextSecondary
+                    tint = palette.textSecondary
                 )
             }
         }
@@ -257,14 +382,14 @@ private fun AppPickerRow(
             Text(
                 text = app.appName,
                 style = MaterialTheme.typography.titleMedium,
-                color = ResolveColors.TextPrimary,
+                color = palette.textPrimary,
                 maxLines = 1,
                 overflow = TextOverflow.Ellipsis
             )
             Text(
                 text = if (app.isDialerOrTelecom) "${app.packageName} • System Dialer" else app.packageName,
                 style = MaterialTheme.typography.bodyMedium,
-                color = ResolveColors.TextSecondary,
+                color = palette.textSecondary,
                 maxLines = 1,
                 overflow = TextOverflow.Ellipsis
             )
@@ -275,7 +400,7 @@ private fun AppPickerRow(
         Icon(
             imageVector = if (isSelected) Icons.Outlined.CheckCircle else ResolveIcons.RadioButtonUnchecked,
             contentDescription = if (isSelected) "Selected" else "Not selected",
-            tint = if (isSelected) ResolveColors.MintAccent else ResolveColors.TextDisabled
+            tint = if (isSelected) palette.accent else palette.textMuted
         )
     }
 }

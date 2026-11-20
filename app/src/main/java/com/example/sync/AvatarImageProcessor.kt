@@ -73,12 +73,30 @@ object AvatarImageProcessor {
         }
     }
 
+    private val STRICT_BASE64_REGEX = Regex("^[A-Za-z0-9+/=\\s]+$")
+
     fun decodeAvatarBitmap(base64: String): Bitmap? {
-        if (base64.isBlank()) return null
+        val trimmed = base64.trim()
+        if (trimmed.isEmpty() || !STRICT_BASE64_REGEX.matches(trimmed)) return null
         return runCatching {
-            val bytes = Base64.decode(base64, Base64.DEFAULT)
+            val bytes = Base64.decode(trimmed, Base64.DEFAULT)
+            if (!looksLikeSupportedImage(bytes)) return null
             BitmapFactory.decodeByteArray(bytes, 0, bytes.size)
         }.getOrNull()
+    }
+
+    private fun looksLikeSupportedImage(bytes: ByteArray): Boolean {
+        if (bytes.size < 8) return false
+        val isJpeg = (bytes[0].toInt() and 0xFF) == 0xFF && (bytes[1].toInt() and 0xFF) == 0xD8
+        val isPng = (bytes[0].toInt() and 0xFF) == 0x89 &&
+            bytes[1].toInt() == 0x50 &&
+            bytes[2].toInt() == 0x4E &&
+            bytes[3].toInt() == 0x47
+        val isWebp = bytes[0].toInt() == 0x52 &&
+            bytes[1].toInt() == 0x49 &&
+            bytes[2].toInt() == 0x46 &&
+            bytes[3].toInt() == 0x46
+        return isJpeg || isPng || isWebp
     }
 
     private fun centerCropSquare(src: Bitmap): Bitmap {

@@ -10,7 +10,9 @@
     <uses-permission android:name="android.permission.POST_NOTIFICATIONS" />
     <uses-permission android:name="android.permission.SCHEDULE_EXACT_ALARM" />
     <uses-permission android:name="android.permission.WAKE_LOCK" />
+    <uses-permission android:name="android.permission.VIBRATE" />
     <uses-permission android:name="android.permission.SYSTEM_ALERT_WINDOW" />
+    <uses-permission android:name="android.permission.ACCESS_NOTIFICATION_POLICY" />
     <uses-permission android:name="android.permission.REQUEST_IGNORE_BATTERY_OPTIMIZATIONS" />
     <uses-permission
         android:name="android.permission.PACKAGE_USAGE_STATS"
@@ -60,9 +62,29 @@
             android:name=".presentation.lockscreen.LockScreenActivity"
             android:exported="false"
             android:excludeFromRecents="true"
+            android:taskAffinity="com.resolve.lock"
             android:launchMode="singleTask"
-            android:resizeableActivity="false"
-            android:screenOrientation="portrait"
+            android:configChanges="orientation|screenSize|smallestScreenSize|screenLayout"
+            android:showWhenLocked="true"
+            android:turnScreenOn="true"
+            android:theme="@style/Theme.Resolve.LockScreen" />
+
+        <activity
+            android:name=".presentation.applock.AppLockAuthActivity"
+            android:exported="false"
+            android:excludeFromRecents="true"
+            android:taskAffinity="com.resolve.applock"
+            android:launchMode="singleTask"
+            android:configChanges="orientation|screenSize|smallestScreenSize|screenLayout"
+            android:theme="@style/Theme.Resolve.LockScreen" />
+
+        <activity
+            android:name=".flipclock.FlipClockActivity"
+            android:exported="false"
+            android:excludeFromRecents="true"
+            android:taskAffinity="com.resolve.flipclock"
+            android:launchMode="singleTop"
+            android:configChanges="orientation|screenSize|smallestScreenSize|screenLayout"
             android:showWhenLocked="true"
             android:turnScreenOn="true"
             android:theme="@style/Theme.Resolve.LockScreen" />
@@ -108,11 +130,21 @@
             android:exported="false" />
 
         <receiver
+            android:name=".flipclock.FlipTimerAlarmReceiver"
+            android:exported="false" />
+
+        <service
+            android:name=".service.SessionRecoveryJobService"
+            android:exported="false"
+            android:permission="android.permission.BIND_JOB_SERVICE" />
+
+        <receiver
             android:name=".receiver.ResolveSystemReceiver"
             android:exported="true">
             <intent-filter>
                 <action android:name="android.intent.action.BOOT_COMPLETED" />
                 <action android:name="android.intent.action.LOCKED_BOOT_COMPLETED" />
+                <action android:name="android.intent.action.MY_PACKAGE_REPLACED" />
                 <action android:name="android.intent.action.TIME_SET" />
                 <action android:name="android.intent.action.TIMEZONE_CHANGED" />
                 <action android:name="android.app.action.SCHEDULE_EXACT_ALARM_PERMISSION_STATE_CHANGED" />

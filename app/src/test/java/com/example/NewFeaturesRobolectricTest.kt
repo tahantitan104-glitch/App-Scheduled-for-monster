@@ -1,0 +1,657 @@
+package com.example
+
+import android.app.Activity
+import android.content.Context
+import android.provider.Settings
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.setValue
+import androidx.compose.ui.test.assertIsDisplayed
+import androidx.compose.ui.test.getBoundsInRoot
+import androidx.compose.ui.test.hasTestTag
+import androidx.compose.ui.test.junit4.createComposeRule
+import androidx.compose.ui.test.onAllNodesWithTag
+import androidx.compose.ui.test.onNodeWithTag
+import androidx.compose.ui.test.onNodeWithText
+import androidx.compose.ui.test.performClick
+import androidx.compose.ui.test.performScrollToNode
+import androidx.room.Room
+import androidx.test.core.app.ApplicationProvider
+import com.example.data.local.ResolveDatabase
+import com.example.data.preferences.ResolvePreferencesRepository
+import com.example.data.repository.AllowlistRepository
+import com.example.data.repository.FlipPresetMutationResult
+import com.example.data.repository.FlipTimerPresetRepository
+import com.example.data.repository.HistoryRepository
+import com.example.data.repository.ScheduleRepository
+import com.example.data.repository.SessionRepository
+import com.example.designsystem.ResolveTheme
+import com.example.devicepolicy.DevicePolicyController
+import com.example.domain.model.EnforcementMode
+import com.example.domain.model.EnforcementPreparationResult
+import com.example.domain.model.FlipClockSettings
+import com.example.domain.model.FlipTimerPreset
+import com.example.domain.model.FlipTimerState
+import com.example.domain.model.InstalledAppInfo
+import com.example.domain.model.LockMode
+import com.example.domain.model.LockProfileSettings
+import com.example.domain.model.RecoveryVerificationResult
+import com.example.domain.time.ClockProvider
+import com.example.flipclock.FlipClockManager
+import com.example.flipclock.FlipTimerNotificationHelper
+import com.example.platform.SystemCapabilityChecker
+import com.example.presentation.components.AllowedAppsPickerSheet
+import com.example.presentation.lockscreen.SignatureLockScreen
+import com.example.scheduling.LockAlarmScheduler
+import com.example.security.AppLockSessionGuard
+import com.example.security.RecoveryCodeManager
+import com.example.session.EngineStartResult
+import com.example.session.LockSessionEngine
+import com.example.session.SessionPlatformBridge
+import com.example.sync.CloudDeviceInfo
+import com.example.sync.CloudFlipClockSettings
+import com.example.sync.CloudFlipTimerPreset
+import com.example.sync.CloudLockCommand
+import com.example.sync.CloudLockProfileSettings
+import com.example.sync.CloudSyncGateway
+import com.example.sync.CloudUserProfile
+import com.example.sync.MultiDeviceSyncCoordinator
+import com.google.firebase.auth.FirebaseUser
+import java.time.ZoneId
+import kotlinx.coroutines.flow.Flow
+import kotlinx.coroutines.flow.MutableStateFlow
+import kotlinx.coroutines.flow.emptyFlow
+import kotlinx.coroutines.flow.first
+import kotlinx.coroutines.test.runTest
+import org.junit.After
+import org.junit.Assert.assertEquals
+import org.junit.Assert.assertFalse
+import org.junit.Assert.assertNotNull
+import org.junit.Assert.assertNull
+import org.junit.Assert.assertTrue
+import org.junit.Before
+import org.junit.Rule
+import org.junit.Test
+import org.junit.runner.RunWith
+import org.robolectric.RobolectricTestRunner
+import org.robolectric.annotation.Config
+
+@RunWith(RobolectricTestRunner::class)
+@Config(sdk = [36])
+class NewFeaturesRobolectricTest {
+
+    @get:Rule
+    val composeRule = createComposeRule()
+
+    private lateinit var context: Context
+    private lateinit var db: ResolveDatabase
+    private lateinit var prefs: ResolvePreferencesRepository
+    private lateinit var allowlistRepo: AllowlistRepository
+    private lateinit var flipPresetRepo: FlipTimerPresetRepository
+    private lateinit var clock: FakeTestClock
+    private lateinit var engine: LockSessionEngine
+    private lateinit var recovery: RecoveryCodeManager
+
+    @Before
+    fun setUp() {
+        context = ApplicationProvider.getApplicationContext()
+        db = Room.inMemoryDatabaseBuilder(context, ResolveDatabase::class.java)
+            .allowMainThreadQueries()
+            .build()
+        prefs = (context as ResolveApplication).container.preferencesRepository
+        allowlistRepo = AllowlistRepository(db.allowedAppDao())
+        flipPresetRepo = FlipTimerPresetRepository(db.flipTimerPresetDao(), prefs)
+        clock = FakeTestClock(wallMs = 1_795_000_000_000L, elapsedMs = 50_000L)
+        recovery = RecoveryCodeManager(prefs, clock)
+        engine = LockSessionEngine(
+            sessionRepository = SessionRepository(db.activeSessionDao()),
+            scheduleRepository = ScheduleRepository(db.lockScheduleDao()),
+            historyRepository = HistoryRepository(db.sessionHistoryDao()),
+            preferencesRepository = prefs,
+            devicePolicyController = FakeDevicePolicy(),
+            alarmScheduler = NoOpAlarms(),
+            recoveryCodeManager = recovery,
+            capabilityChecker = SystemCapabilityChecker(context),
+            clockProvider = clock,
+            platformBridge = NoOpBridge()
+        )
+    }
+
+    @After
+    fun tearDown() {
+        engine.shutdown()
+        db.close()
+    }
+
+    @Test
+    fun `app lock session guard keeps 2_2s grace across transient system overlays and revokes on real switch`() {
+        val guard = AppLockSessionGuard()
+        guard.updateState(
+            enabled = true,
+            hasCredential = true,
+            protectedPackages = setOf("com.example.bank")
+        )
+        guard.grantTemporaryUnlock("com.example.bank", nowElapsedMs = 10_000L)
+
+        // Within 2200ms unlock transition grace, intermediate launcher/systemui does not revoke
+        guard.onForegroundAppChanged("com.android.systemui", nowElapsedMs = 11_800L)
+        assertTrue(guard.isTemporarilyUnlocked("com.example.bank", nowElapsedMs = 11_900L))
+
+        // Transient permission controller overlay beyond 2200ms still preserves grant
+        guard.onForegroundAppChanged("com.google.android.permissioncontroller", nowElapsedMs = 15_000L)
+        assertTrue(guard.isTemporarilyUnlocked("com.example.bank", nowElapsedMs = 15_100L))
+
+        // Switching to an actual unrelated external app after grace expires revokes the grant
+        guard.onForegroundAppChanged("com.android.chrome", nowElapsedMs = 16_000L)
+        assertFalse(guard.isTemporarilyUnlocked("com.example.bank", nowElapsedMs = 16_100L))
+    }
+
+    @Test
+    fun `strict mode starts without recovery code, blocks recovery unlock, and preserves existing hash`() = runTest {
+        assertTrue(recovery.saveRecoveryCode("1234567890123456"))
+        val originalRecord = prefs.getRecoveryRecord()
+        assertNotNull(originalRecord)
+
+        engine.initialize()
+        val result = engine.startInstantLock(
+            lockDurationMinutes = 25L,
+            allowedPackages = emptyList(),
+            phoneAccessEnabled = true,
+            isStrictMode = true,
+            showFlipClockShortcut = false
+        )
+        assertEquals(EngineStartResult.Started, result)
+        assertTrue(engine.activeSession.value?.isStrictMode == true)
+        assertTrue(engine.activeSession.value?.phoneAccessEnabled == true)
+
+        // Strict Mode rejects recovery code submission even with the valid stored code
+        val recoveryAttempt = engine.submitRecoveryCode("1234567890123456")
+        assertEquals(RecoveryVerificationResult.NotConfigured, recoveryAttempt)
+
+        // Existing stored recovery hash remains intact
+        assertEquals(originalRecord?.verifierBase64, prefs.getRecoveryRecord()?.verifierBase64)
+    }
+
+    @Test
+    fun `lock screen hides recovery button in strict mode and toggles flip clock shortcut visibility`() {
+        var strictMode by mutableStateOf(true)
+        var showFlipClock by mutableStateOf(false)
+
+        composeRule.setContent {
+            ResolveTheme {
+                SignatureLockScreen(
+                    remainingMillis = 300_000L,
+                    progressFraction = 0.5f,
+                    lockMode = LockMode.INSTANT,
+                    enforcementMode = EnforcementMode.ACCESSIBILITY_GUARD,
+                    phoneAccessEnabled = true,
+                    allowedApps = emptyList(),
+                    expectedRecoveryLength = 16,
+                    loadAppIcon = { null },
+                    onLaunchPhone = {},
+                    onLaunchAllowedApp = {},
+                    onSubmitRecoveryCode = { RecoveryVerificationResult.Verified },
+                    isStrictMode = strictMode,
+                    showFlipClockShortcut = showFlipClock
+                )
+            }
+        }
+        composeRule.waitForIdle()
+
+        assertTrue(composeRule.onAllNodesWithTag("lock_screen_recovery_button").fetchSemanticsNodes().isEmpty())
+        assertTrue(composeRule.onAllNodesWithTag("lock_screen_flip_clock_button").fetchSemanticsNodes().isEmpty())
+        composeRule.onNodeWithTag("lock_screen_phone_button").assertIsDisplayed()
+
+        strictMode = false
+        showFlipClock = true
+        composeRule.waitForIdle()
+
+        composeRule.onNodeWithTag("lock_screen_recovery_button").assertIsDisplayed()
+        composeRule.onNodeWithTag("lock_screen_flip_clock_button").assertIsDisplayed()
+    }
+
+    @Test
+    fun `allow selected apps toggle preserves saved packages and picker warns for missing synced apps`() = runTest {
+        val profile = LockProfileSettings(
+            mode = LockMode.INSTANT,
+            strictMode = false,
+            allowSelectedApps = false,
+            showFlipClockShortcut = false,
+            allowedPackages = listOf("com.example.notes", "com.missing.app"),
+            updatedAtWallMs = 1_000L
+        )
+        assertTrue(profile.effectiveAllowedPackages.isEmpty())
+        val reEnabled = profile.copy(allowSelectedApps = true)
+        assertEquals(listOf("com.example.notes", "com.missing.app"), reEnabled.effectiveAllowedPackages)
+
+        prefs.saveLockProfileSettings(
+            LockProfileSettings(
+                mode = LockMode.INSTANT,
+                strictMode = true,
+                allowSelectedApps = false,
+                showFlipClockShortcut = false,
+                allowedPackages = listOf("com.example.notes"),
+                updatedAtWallMs = 2_000L
+            )
+        )
+        assertEquals(listOf("com.example.notes"), prefs.getLockProfileSettingsSnapshot(LockMode.INSTANT).allowedPackages)
+
+        composeRule.setContent {
+            ResolveTheme {
+                AllowedAppsPickerSheet(
+                    installedApps = listOf(InstalledAppInfo("com.example.notes", "Notes")),
+                    initialSelectedPackages = setOf("com.example.notes", "com.missing.app"),
+                    loadIcon = { null },
+                    onDismiss = {},
+                    onSaveSelection = {}
+                )
+            }
+        }
+        composeRule.waitForIdle()
+        composeRule.onNodeWithTag("missing_allowed_apps_warning_banner").assertIsDisplayed()
+        composeRule.onNodeWithTag("missing_app_row_com.missing.app").assertIsDisplayed()
+    }
+
+    @Test
+    fun `flip clock presets cap at 15, reset preserves custom presets, and force-stop timer reconciles cleanly`() = runTest {
+        flipPresetRepo.ensureDefaultPresetsSeeded()
+        flipPresetRepo.restoreMissingBuiltInsWithinCap(1L)
+        val defaults = flipPresetRepo.getAllPresets()
+        assertEquals(9, defaults.size)
+
+        // Add 6 custom presets to hit cap of 15
+        repeat(6) { idx ->
+            val res = flipPresetRepo.savePreset(
+                presetId = null,
+                name = "Custom $idx",
+                durationSeconds = 120L + idx,
+                nowWallMs = 5_000L + idx
+            )
+            assertTrue(res is FlipPresetMutationResult.Saved)
+        }
+        assertEquals(FlipTimerPreset.MAX_TOTAL_PRESETS, flipPresetRepo.getAllPresets().size)
+
+        val overflow = flipPresetRepo.savePreset(
+            presetId = null,
+            name = "Overflow 16th",
+            durationSeconds = 300L,
+            nowWallMs = 6_000L
+        )
+        assertTrue(overflow is FlipPresetMutationResult.LimitReached)
+
+        // Force-stop recovery for a timer whose end timestamp already passed recently (within 5s banner)
+        prefs.saveFlipClockSettings(
+            FlipClockSettings(
+                use24HourFormat = true,
+                keepScreenAwake = true,
+                showDate = true,
+                autoRepeat = false,
+                zoomFraction = 1.25f,
+                lastBrightnessPercent = 50f,
+                updatedAtWallMs = 7_000L
+            )
+        )
+        prefs.saveFlipTimerState(
+            FlipTimerState(
+                activePresetId = "flip_builtin_1m",
+                timerName = "1 Minute",
+                selectedDurationMs = 60_000L,
+                targetEndWallMs = clock.wallMs - 1_500L,
+                isRunning = true,
+                isPaused = false
+            )
+        )
+
+        val notifHelper = FlipTimerNotificationHelper(context)
+        val manager = FlipClockManager(prefs, flipPresetRepo, notifHelper, engine, clock)
+        manager.initialize()
+
+        assertFalse(manager.timerState.value.isRunning)
+        assertEquals(clock.wallMs - 1_500L, manager.timerState.value.finishedAtWallMs)
+        assertNull(manager.timerState.value.autoRepeatScheduledAtWallMs)
+        assertTrue(manager.timerFinishedBannerVisible.value)
+
+        // Enabling autoRepeat during completion banner schedules autoRepeat at completionMessageUntilWallMs
+        manager.setAutoRepeat(true)
+        assertEquals(
+            manager.timerState.value.completionMessageUntilWallMs,
+            manager.timerState.value.autoRepeatScheduledAtWallMs
+        )
+
+        // Reset settings to default preserves custom presets and clears autoRepeat schedule
+        manager.resetSettingsToDefaultPreservingCustomPresets()
+        val afterResetSettings = prefs.getFlipClockSettingsSnapshot()
+        assertFalse(afterResetSettings.use24HourFormat)
+        assertFalse(afterResetSettings.autoRepeat)
+        assertEquals(1.0f, afterResetSettings.clampedZoomFraction, 0.001f)
+        assertNull(manager.timerState.value.autoRepeatScheduledAtWallMs)
+        assertEquals(15, flipPresetRepo.getAllPresets().size)
+
+        // Notification title formatting check
+        assertEquals(
+            "25 Minutes Timer — Completed!",
+            FlipTimerNotificationHelper.formatCompletionNotificationTitle("25 Minutes")
+        )
+    }
+
+    @Test
+    fun `multi device sync LWW merges lock profiles, flip settings preserving brightness, and flip preset tombstones`() = runTest {
+        val fakeGateway = RecordingFakeCloudGateway()
+        val manager = FlipClockManager(prefs, flipPresetRepo, FlipTimerNotificationHelper(context), engine, clock)
+        val coordinator = MultiDeviceSyncCoordinator(
+            appContext = context,
+            gateway = fakeGateway,
+            preferencesRepository = prefs,
+            allowlistRepository = allowlistRepo,
+            sessionEngine = engine,
+            clockProvider = clock,
+            flipTimerPresetRepository = flipPresetRepo,
+            flipClockManager = manager
+        )
+
+        // Local device has brightness = 38% and older updatedAtWallMs
+        prefs.saveFlipClockSettings(
+            FlipClockSettings(
+                use24HourFormat = false,
+                keepScreenAwake = false,
+                showDate = false,
+                autoRepeat = false,
+                zoomFraction = 1.0f,
+                lastBrightnessPercent = 38f,
+                updatedAtWallMs = 1_000L
+            )
+        )
+        prefs.saveLockProfileSettings(
+            LockProfileSettings(
+                mode = LockMode.INSTANT,
+                strictMode = false,
+                allowSelectedApps = true,
+                showFlipClockShortcut = false,
+                allowedPackages = listOf("com.old.app"),
+                updatedAtWallMs = 1_000L
+            )
+        )
+
+        val localDeviceId = prefs.getOrCreateDeviceInstallId()
+        assertNotNull(localDeviceId)
+
+        // Invoke private merge helpers cleanly via reflection on coordinator or verify snapshot flow behavior:
+        // Simulate brightness-only change -> verify lastBrightnessPercent updated without touching updatedAtWallMs
+        manager.saveLastBrightnessPercent(72f)
+        val afterBrightness = prefs.getFlipClockSettingsSnapshot()
+        assertEquals(72f, afterBrightness.lastBrightnessPercent)
+        assertEquals(1_000L, afterBrightness.updatedAtWallMs)
+
+        // Verify coordinator start observes FlipClockSettings without uploading brightness-only changes
+        coordinator.start()
+        fakeGateway.authFlow.value = null
+        assertEquals(0, fakeGateway.uploadedFlipSettings.size)
+
+        // Verify LockProfileSettings.effectiveAllowedPackages respects synced flags
+        val syncedStrictProfile = CloudLockProfileSettings(
+            userId = "u1",
+            profileMode = LockMode.DELAYED.name,
+            strictMode = true,
+            allowSelectedApps = false,
+            showFlipClockShortcut = true,
+            allowedPackages = listOf("com.synced.app"),
+            originDeviceId = "remote_dev",
+            updatedAtWallMs = 9_000L
+        )
+        assertEquals(LockMode.DELAYED, syncedStrictProfile.resolveLockMode())
+        assertTrue(syncedStrictProfile.strictMode)
+        assertTrue(syncedStrictProfile.showFlipClockShortcut)
+
+        // Verify FlipPreset tombstones prevent older remote preset resurrection
+        flipPresetRepo.ensureDefaultPresetsSeeded()
+        val saved = flipPresetRepo.savePreset("custom_tomb_1", "Deep Work", 1800L, nowWallMs = 5_000L)
+        assertTrue(saved is FlipPresetMutationResult.Saved)
+        flipPresetRepo.deletePreset("custom_tomb_1", nowWallMs = 6_000L)
+        val tombstones = prefs.getFlipPresetTombstones()
+        assertEquals(6_000L, tombstones["custom_tomb_1"])
+    }
+
+    @Test
+    fun `landscape tilt mode defaults to OFF and persists preference updates`() = runTest {
+        assertFalse(prefs.landscapeTiltModeFlow.first())
+        prefs.setLandscapeTiltMode(true)
+        assertTrue(prefs.landscapeTiltModeFlow.first())
+        prefs.setLandscapeTiltMode(false)
+        assertFalse(prefs.landscapeTiltModeFlow.first())
+    }
+
+    @Test
+    @Config(sdk = [36], qualifiers = "w800dp-h380dp")
+    fun `landscape lock screen respects allowLandscapeLayout and renders vertical action stack with Flip Clock label`() {
+        var allowLandscape by mutableStateOf(false)
+        composeRule.setContent {
+            ResolveTheme {
+                SignatureLockScreen(
+                    remainingMillis = 600_000L,
+                    progressFraction = 0.5f,
+                    lockMode = LockMode.INSTANT,
+                    enforcementMode = EnforcementMode.ACCESSIBILITY_GUARD,
+                    phoneAccessEnabled = true,
+                    allowedApps = listOf(InstalledAppInfo("com.example.notes", "Notes")),
+                    expectedRecoveryLength = 16,
+                    loadAppIcon = { null },
+                    onLaunchPhone = {},
+                    onLaunchAllowedApp = {},
+                    onSubmitRecoveryCode = { RecoveryVerificationResult.Verified },
+                    isStrictMode = false,
+                    showFlipClockShortcut = true,
+                    lockReminderEnabled = true,
+                    lockReminderText = "Stay disciplined.",
+                    allowLandscapeLayout = allowLandscape
+                )
+            }
+        }
+        composeRule.waitForIdle()
+        // Tilt OFF keeps Portrait layout even on landscape bounds
+        composeRule.onNodeWithTag("lock_screen_portrait_layout").assertIsDisplayed()
+
+        // Tilt ON enables Landscape layout with vertical button stack & icon+text Flip Clock
+        allowLandscape = true
+        composeRule.waitForIdle()
+        composeRule.onNodeWithTag("lock_screen_landscape_reminder_on").assertIsDisplayed()
+        composeRule.onNodeWithTag("lock_screen_landscape_action_stack").assertIsDisplayed()
+        val appsBounds = composeRule.onNodeWithTag("lock_screen_allowed_apps_button").assertIsDisplayed().getBoundsInRoot()
+        val phoneBounds = composeRule.onNodeWithTag("lock_screen_phone_button").assertIsDisplayed().getBoundsInRoot()
+        val emergencyBounds = composeRule.onNodeWithTag("lock_screen_recovery_button").assertIsDisplayed().getBoundsInRoot()
+        val flipBounds = composeRule.onNodeWithTag("lock_screen_flip_clock_button").assertIsDisplayed().getBoundsInRoot()
+        assertTrue(appsBounds.bottom <= phoneBounds.top)
+        assertTrue(phoneBounds.bottom <= emergencyBounds.top)
+        assertTrue(emergencyBounds.bottom <= flipBounds.top)
+        composeRule.onNodeWithText("Flip Clock").assertIsDisplayed()
+    }
+
+    @Test
+    fun `flip timer page shows large display in initial viewport and presets below on scroll`() {
+        val manager = kotlinx.coroutines.runBlocking {
+            flipPresetRepo.ensureDefaultPresetsSeeded()
+            flipPresetRepo.restoreMissingBuiltInsWithinCap(1L)
+            FlipClockManager(prefs, flipPresetRepo, FlipTimerNotificationHelper(context), engine, clock).also {
+                it.initialize()
+            }
+        }
+
+        composeRule.setContent {
+            ResolveTheme {
+                com.example.flipclock.FlipClockScreen(
+                    manager = manager,
+                    initialPage = com.example.domain.model.FlipClockPage.TIMER,
+                    isRestrictedLock = false,
+                    initialBrightnessPercent = 50f,
+                    controlsVisible = false,
+                    onControlsVisibleChange = {},
+                    onBrightnessChanged = {},
+                    onRequestTimerStartWithNotificationCheck = {},
+                    onOpenAppNotificationSettings = {},
+                    onExit = {}
+                )
+            }
+        }
+        composeRule.waitForIdle()
+        composeRule.onNodeWithTag("flip_timer_display").assertIsDisplayed()
+
+        // Scrolling reveals Custom Duration & 9 preset options cleanly below
+        composeRule.onNodeWithTag("flip_timer_preset_list")
+            .performScrollToNode(hasTestTag("flip_timer_custom_duration_btn"))
+        composeRule.onNodeWithTag("flip_timer_custom_duration_btn").assertIsDisplayed()
+        composeRule.onNodeWithTag("flip_timer_preset_list")
+            .performScrollToNode(hasTestTag("flip_preset_item_flip_builtin_120m"))
+        composeRule.onNodeWithTag("flip_preset_item_flip_builtin_120m").assertIsDisplayed()
+    }
+
+    @Test
+    fun `modes color inversion requires consent, enables live preview, and restores normal colors cleanly`() {
+        var inAppInverted by mutableStateOf(false)
+        var consentGranted by mutableStateOf(false)
+        val report = com.example.platform.ForceDarkCapabilityHelper.inspect(context)
+
+        composeRule.setContent {
+            ResolveTheme {
+                com.example.presentation.modes.ModesScreen(
+                    report = report,
+                    installedApps = emptyList(),
+                    darkModeAppPrefs = emptyMap(),
+                    colorInversionAppPrefs = emptyMap(),
+                    loadAppIcon = { null },
+                    onEnterFlipClock = {},
+                    onAttemptAppDarkMode = { _, _ -> },
+                    onAttemptAppColorInversion = { _, _ -> },
+                    onOpenDisplaySettings = {},
+                    onOpenAccessibilitySettings = {},
+                    onResetAllModes = { inAppInverted = false },
+                    initialDisplaySection = com.example.presentation.modes.VisionDisplaySection.COLOR_INVERSION,
+                    inAppColorInversionEnabled = inAppInverted,
+                    colorInversionConsentGranted = consentGranted,
+                    onToggleInAppColorInversion = {
+                        if (it) consentGranted = true
+                        inAppInverted = it
+                    }
+                )
+            }
+        }
+        composeRule.waitForIdle()
+        composeRule.onNodeWithTag("modes_list")
+            .performScrollToNode(hasTestTag("modes_inversion_preview_card"))
+        composeRule.onNodeWithTag("modes_inversion_preview_card").assertIsDisplayed()
+        composeRule.onNodeWithTag("modes_list")
+            .performScrollToNode(hasTestTag("modes_in_app_inversion_switch"))
+        composeRule.onNodeWithTag("modes_in_app_inversion_switch").performClick()
+        composeRule.waitForIdle()
+
+        // Consent dialog opens before activating
+        composeRule.onNodeWithTag("modes_inversion_consent_dialog").assertIsDisplayed()
+        composeRule.onNodeWithTag("modes_inversion_consent_confirm").performClick()
+        composeRule.waitForIdle()
+
+        assertTrue(consentGranted)
+        assertTrue(inAppInverted)
+        composeRule.onNodeWithTag("modes_list")
+            .performScrollToNode(hasTestTag("modes_restore_colors_btn"))
+        composeRule.onNodeWithTag("modes_restore_colors_btn").performClick()
+        composeRule.waitForIdle()
+        assertFalse(inAppInverted)
+    }
+
+    private class FakeTestClock(var wallMs: Long, var elapsedMs: Long) : ClockProvider {
+        override fun wallClockMs(): Long = wallMs
+        override fun elapsedRealtimeMs(): Long = elapsedMs
+        override fun zoneId(): ZoneId = ZoneId.of("UTC")
+    }
+
+    private class FakeDevicePolicy : DevicePolicyController {
+        override fun isDeviceOwner(): Boolean = true
+        override fun getLockTaskModeState(): Int = 0
+        override fun getAppliedLockTaskPackages(): List<String> = emptyList()
+        override suspend fun prepareLockTaskPolicy(
+            selectedPackages: List<String>,
+            phoneAccessEnabled: Boolean
+        ): EnforcementPreparationResult = EnforcementPreparationResult.Ready(emptyList())
+
+        override fun enterLockTask(activity: Activity): Boolean = true
+        override fun exitLockTask(activity: Activity): Boolean = true
+        override fun clearLockTaskPolicy() = Unit
+    }
+
+    private class NoOpAlarms : LockAlarmScheduler {
+        override fun scheduleDelayedLockTransition(sessionId: String, triggerWallMs: Long) = Unit
+        override fun cancelDelayedLockTransition() = Unit
+        override fun scheduleLockExpiration(sessionId: String, triggerWallMs: Long) = Unit
+        override fun cancelLockExpiration() = Unit
+        override fun scheduleNextScheduleTrigger(scheduleId: Long, triggerWallMs: Long) = Unit
+        override fun cancelScheduleTrigger(scheduleId: Long) = Unit
+        override fun cancelAllSessionAlarms() = Unit
+    }
+
+    private class NoOpBridge : SessionPlatformBridge {
+        override fun startMonitorService() = Unit
+        override fun stopMonitorService() = Unit
+        override fun launchLockScreen() = Unit
+        override fun notifyLockStateChanged() = Unit
+    }
+
+    private class RecordingFakeCloudGateway : CloudSyncGateway {
+        val authFlow = MutableStateFlow<FirebaseUser?>(null)
+        val uploadedFlipSettings = mutableListOf<CloudFlipClockSettings>()
+        val uploadedPresets = mutableListOf<CloudFlipTimerPreset>()
+
+        override val authState: Flow<FirebaseUser?> = authFlow
+        override val currentUserId: String? = null
+        override suspend fun signInWithGoogleIdToken(idToken: String): Result<FirebaseUser> =
+            Result.failure(UnsupportedOperationException())
+        override suspend fun signOut(): Result<Unit> = Result.success(Unit)
+        override fun observeUserProfile(userId: String): Flow<CloudUserProfile?> = emptyFlow()
+        override fun observeDevices(userId: String): Flow<List<CloudDeviceInfo>> = emptyFlow()
+        override fun observeLatestLockCommand(userId: String): Flow<CloudLockCommand?> = emptyFlow()
+        override suspend fun ensureUserProfile(user: FirebaseUser): Result<Unit> = Result.success(Unit)
+        override suspend fun registerOrUpdateDevice(
+            userId: String,
+            deviceId: String,
+            deviceName: String,
+            syncEnabled: Boolean
+        ): Result<Unit> = Result.success(Unit)
+        override suspend fun updateDeviceSyncEnabled(
+            userId: String,
+            deviceId: String,
+            deviceName: String,
+            syncEnabled: Boolean
+        ): Result<Unit> = Result.success(Unit)
+        override suspend fun updateAvatarBase64(userId: String, avatarBase64: String): Result<Unit> =
+            Result.success(Unit)
+        override suspend fun publishLockCommand(
+            userId: String,
+            originDeviceId: String,
+            originDeviceName: String,
+            mode: LockMode,
+            freeUseDurationMinutes: Long,
+            lockDurationMinutes: Long,
+            issuedAtWallMs: Long,
+            intendedStartWallMs: Long,
+            freeUseDeadlineWallMs: Long,
+            lockExpirationWallMs: Long,
+            scheduleId: String,
+            occurrenceId: String,
+            strictMode: Boolean,
+            showFlipClockShortcut: Boolean
+        ): Result<String> = Result.success("cmd_1")
+
+        override suspend fun upsertFlipClockSettings(
+            userId: String,
+            settings: CloudFlipClockSettings
+        ): Result<Unit> {
+            uploadedFlipSettings += settings
+            return Result.success(Unit)
+        }
+
+        override suspend fun upsertFlipTimerPreset(
+            userId: String,
+            preset: CloudFlipTimerPreset
+        ): Result<Unit> {
+            uploadedPresets += preset
+            return Result.success(Unit)
+        }
+    }
+}

@@ -3,6 +3,7 @@ package com.example.sync
 import android.app.Activity
 import android.content.Context
 import android.content.ContextWrapper
+import android.util.Log
 import androidx.credentials.ClearCredentialStateRequest
 import androidx.credentials.CredentialManager
 import androidx.credentials.CustomCredential
@@ -54,6 +55,7 @@ object GoogleSignInHelper {
                 GoogleSignInOutcome.Failed("Unsupported credential type returned.")
             }
         } catch (e: GetCredentialCancellationException) {
+            Log.w("Auth", "Google Sign-In flow cancelled or dismissed: ${e.message}", e)
             GoogleSignInOutcome.Cancelled
         } catch (e: NoCredentialException) {
             GoogleSignInOutcome.Failed("No Google account is signed in on this phone yet.")

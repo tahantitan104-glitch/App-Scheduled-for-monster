@@ -33,6 +33,7 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.outlined.CheckCircle
 import androidx.compose.material.icons.outlined.Close
 import androidx.compose.material.icons.outlined.Info
+import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Button
 import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.CircularProgressIndicator
@@ -46,7 +47,10 @@ import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.material3.minimumInteractiveComponentSize
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
@@ -62,9 +66,10 @@ import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
-import com.example.designsystem.ResolveColors
+import com.example.designsystem.LocalResolveExtendedPalette
 import com.example.sync.AccountSyncUiState
 import com.example.sync.AvatarImageProcessor
+import com.example.sync.CloudDeviceInfo
 
 @Composable
 fun SyncedAvatarBadge(
@@ -76,6 +81,7 @@ fun SyncedAvatarBadge(
     onClick: (() -> Unit)? = null,
     modifier: Modifier = Modifier
 ) {
+    val palette = LocalResolveExtendedPalette.current
     val decodedBitmap = remember(avatarBase64) {
         AvatarImageProcessor.decodeAvatarBitmap(avatarBase64)?.asImageBitmap()
     }
@@ -109,12 +115,12 @@ fun SyncedAvatarBadge(
                 .background(
                     Brush.linearGradient(
                         colors = listOf(
-                            ResolveColors.MintSoftContainer,
-                            ResolveColors.ForestSurfaceElevated
+                            palette.accentSoftContainer,
+                            palette.cardTop
                         )
                     )
                 )
-                .border(1.5.dp, ResolveColors.MintAccent.copy(alpha = 0.55f), CircleShape),
+                .border(1.5.dp, palette.accent.copy(alpha = 0.55f), CircleShape),
             contentAlignment = Alignment.Center
         ) {
             if (decodedBitmap != null) {
@@ -131,7 +137,7 @@ fun SyncedAvatarBadge(
                         fontWeight = FontWeight.Bold,
                         fontSize = (size.value * 0.34f).sp
                     ),
-                    color = ResolveColors.MintBright
+                    color = palette.accentStrong
                 )
             }
 
@@ -139,11 +145,11 @@ fun SyncedAvatarBadge(
                 Box(
                     modifier = Modifier
                         .fillMaxSize()
-                        .background(ResolveColors.ForestDeep.copy(alpha = 0.65f)),
+                        .background(palette.background.copy(alpha = 0.65f)),
                     contentAlignment = Alignment.Center
                 ) {
                     CircularProgressIndicator(
-                        color = ResolveColors.MintAccent,
+                        color = palette.accent,
                         strokeWidth = 2.dp,
                         modifier = Modifier.size(size * 0.42f)
                     )
@@ -157,14 +163,14 @@ fun SyncedAvatarBadge(
                     .align(Alignment.BottomEnd)
                     .size(22.dp)
                     .clip(CircleShape)
-                    .background(ResolveColors.MintAccent)
-                    .border(1.5.dp, ResolveColors.ForestDeep, CircleShape),
+                    .background(palette.accent)
+                    .border(1.5.dp, palette.background, CircleShape),
                 contentAlignment = Alignment.Center
             ) {
                 Icon(
                     imageVector = ResolveIcons.AddAPhoto,
                     contentDescription = "Change profile photo",
-                    tint = ResolveColors.ForestDeep,
+                    tint = palette.onAccent,
                     modifier = Modifier.size(12.dp)
                 )
             }
@@ -183,12 +189,13 @@ fun HomeOptionalSyncBanner(
     onDismiss: () -> Unit,
     modifier: Modifier = Modifier
 ) {
+    val palette = LocalResolveExtendedPalette.current
     Column(
         modifier = modifier
             .fillMaxWidth()
             .resolveGlassCard(
                 cornerRadius = 22.dp,
-                borderColor = ResolveColors.MintAccent.copy(alpha = 0.35f)
+                borderColor = palette.accent.copy(alpha = 0.35f)
             )
             .padding(16.dp)
             .testTag("home_optional_sync_banner"),
@@ -208,13 +215,13 @@ fun HomeOptionalSyncBanner(
                     modifier = Modifier
                         .size(38.dp)
                         .clip(RoundedCornerShape(12.dp))
-                        .background(ResolveColors.MintSoftContainer),
+                        .background(palette.accentSoftContainer),
                     contentAlignment = Alignment.Center
                 ) {
                     Icon(
                         imageVector = ResolveIcons.Sync,
                         contentDescription = null,
-                        tint = ResolveColors.MintAccent,
+                        tint = palette.accent,
                         modifier = Modifier.size(20.dp)
                     )
                 }
@@ -222,12 +229,12 @@ fun HomeOptionalSyncBanner(
                     Text(
                         text = "Multi-Device Lock Sync (Optional)",
                         style = MaterialTheme.typography.titleMedium,
-                        color = ResolveColors.TextPrimary
+                        color = palette.textPrimary
                     )
                     Text(
                         text = "Offline mode works anytime without signing in.",
                         style = MaterialTheme.typography.labelSmall,
-                        color = ResolveColors.MintAccent
+                        color = palette.accent
                     )
                 }
             }
@@ -240,7 +247,7 @@ fun HomeOptionalSyncBanner(
                 Icon(
                     imageVector = Icons.Outlined.Close,
                     contentDescription = "Stay offline and hide sync prompt",
-                    tint = ResolveColors.TextSecondary,
+                    tint = palette.textSecondary,
                     modifier = Modifier.size(18.dp)
                 )
             }
@@ -249,7 +256,7 @@ fun HomeOptionalSyncBanner(
         Text(
             text = "Connect a Google account on 2+ phones to sync Focus Locks across devices — while keeping Mascots, Allowed Apps & preferences separate on each phone.",
             style = MaterialTheme.typography.bodySmall,
-            color = ResolveColors.TextSecondary
+            color = palette.textSecondary
         )
 
         Row(
@@ -262,8 +269,8 @@ fun HomeOptionalSyncBanner(
                 enabled = !isAuthBusy,
                 shape = RoundedCornerShape(14.dp),
                 colors = ButtonDefaults.buttonColors(
-                    containerColor = ResolveColors.MintAccent,
-                    contentColor = ResolveColors.ForestDeep
+                    containerColor = palette.accent,
+                    contentColor = palette.onAccent
                 ),
                 modifier = Modifier
                     .weight(1f)
@@ -272,7 +279,7 @@ fun HomeOptionalSyncBanner(
             ) {
                 if (isAuthBusy) {
                     CircularProgressIndicator(
-                        color = ResolveColors.ForestDeep,
+                        color = palette.onAccent,
                         strokeWidth = 2.dp,
                         modifier = Modifier.size(16.dp)
                     )
@@ -287,7 +294,7 @@ fun HomeOptionalSyncBanner(
             OutlinedButton(
                 onClick = onDismiss,
                 shape = RoundedCornerShape(14.dp),
-                border = androidx.compose.foundation.BorderStroke(1.dp, ResolveColors.ForestOutline),
+                border = androidx.compose.foundation.BorderStroke(1.dp, palette.cardBorder),
                 modifier = Modifier
                     .minimumInteractiveComponentSize()
                     .testTag("home_sync_offline_button")
@@ -295,7 +302,7 @@ fun HomeOptionalSyncBanner(
                 Text(
                     text = "Stay Offline",
                     style = MaterialTheme.typography.labelLarge,
-                    color = ResolveColors.TextSecondary
+                    color = palette.textSecondary
                 )
             }
         }
@@ -311,14 +318,22 @@ fun SettingsAccountSyncCard(
     onToggleSyncEnabled: (Boolean) -> Unit,
     onPickAvatarUri: (Uri) -> Unit,
     onClearAvatar: () -> Unit,
-    modifier: Modifier = Modifier
+    modifier: Modifier = Modifier,
+    onUnlinkDevice: (String) -> Unit = {},
+    onUpdateProfileName: (String) -> Unit = {}
 ) {
+    val palette = LocalResolveExtendedPalette.current
     val photoPickerLauncher = rememberLauncherForActivityResult(
         contract = ActivityResultContracts.PickVisualMedia()
     ) { uri ->
         if (uri != null) {
             onPickAvatarUri(uri)
         }
+    }
+    var pendingUnlinkDevice by remember { mutableStateOf<CloudDeviceInfo?>(null) }
+    var showEditNameDialog by remember { mutableStateOf(false) }
+    var draftName by remember(state.displayName) {
+        mutableStateOf(state.displayName.ifBlank { "Focus Explorer" })
     }
 
     AnimatedContent(
@@ -330,54 +345,104 @@ fun SettingsAccountSyncCard(
         label = "settings_account_sync_card",
         modifier = modifier.fillMaxWidth()
     ) { signedIn ->
+        val resolvedName = state.displayName.ifBlank {
+            if (signedIn) "Resolve Focus Account" else "Focus Explorer"
+        }
+        val launchPhotoPicker = {
+            photoPickerLauncher.launch(
+                PickVisualMediaRequest(ActivityResultContracts.PickVisualMedia.ImageOnly)
+            )
+        }
+
         if (!signedIn) {
             Column(
                 modifier = Modifier
                     .fillMaxWidth()
                     .resolveGlassCard(
                         cornerRadius = 22.dp,
-                        borderColor = ResolveColors.ForestOutline
+                        borderColor = palette.cardBorder
                     )
-                    .padding(18.dp)
+                    .padding(16.dp)
                     .testTag("settings_account_signed_out_card"),
                 verticalArrangement = Arrangement.spacedBy(12.dp)
             ) {
+                // Compact Profile Header (Picture, Name, Connected Account, Sync Status)
                 Row(
+                    modifier = Modifier.fillMaxWidth(),
                     verticalAlignment = Alignment.CenterVertically,
                     horizontalArrangement = Arrangement.spacedBy(12.dp)
                 ) {
-                    Box(
-                        modifier = Modifier
-                            .size(44.dp)
-                            .clip(RoundedCornerShape(14.dp))
-                            .background(ResolveColors.MintSoftContainer),
-                        contentAlignment = Alignment.Center
-                    ) {
-                        Icon(
-                            imageVector = ResolveIcons.Devices,
-                            contentDescription = null,
-                            tint = ResolveColors.MintAccent,
-                            modifier = Modifier.size(22.dp)
-                        )
-                    }
-                    Column(modifier = Modifier.weight(1f)) {
-                        Text(
-                            text = "Connect Multiple Devices",
-                            style = MaterialTheme.typography.titleMedium,
-                            color = ResolveColors.TextPrimary
-                        )
-                        Text(
-                            text = "Optional Google Account Sync • Free",
-                            style = MaterialTheme.typography.labelSmall,
-                            color = ResolveColors.MintAccent
-                        )
-                    }
-                }
+                    SyncedAvatarBadge(
+                        displayName = resolvedName,
+                        avatarBase64 = state.avatarBase64,
+                        size = 54.dp,
+                        isUploading = state.isAvatarUploading,
+                        showEditBadge = true,
+                        onClick = launchPhotoPicker,
+                        modifier = Modifier.testTag("settings_profile_avatar_button")
+                    )
 
-                Column(verticalArrangement = Arrangement.spacedBy(5.dp)) {
-                    SyncBenefitBullet("Start a Focus Lock on one phone and sync it automatically to your other phones.")
-                    SyncBenefitBullet("Choose \"Sync all devices\" or \"This phone only\" for every lock.")
-                    SyncBenefitBullet("Mascot, Allowed Apps & Permissions stay private per device. No account required to use RESOLVE.")
+                    Column(modifier = Modifier.weight(1f)) {
+                        Row(
+                            verticalAlignment = Alignment.CenterVertically,
+                            horizontalArrangement = Arrangement.spacedBy(4.dp)
+                        ) {
+                            Text(
+                                text = resolvedName,
+                                style = MaterialTheme.typography.titleMedium.copy(fontWeight = FontWeight.SemiBold),
+                                color = palette.textPrimary,
+                                maxLines = 1,
+                                overflow = TextOverflow.Ellipsis,
+                                modifier = Modifier.weight(1f, fill = false)
+                            )
+                            IconButton(
+                                onClick = {
+                                    draftName = resolvedName
+                                    showEditNameDialog = true
+                                },
+                                modifier = Modifier
+                                    .size(30.dp)
+                                    .testTag("settings_profile_edit_name_button")
+                            ) {
+                                Icon(
+                                    imageVector = ResolveIcons.Edit,
+                                    contentDescription = "Edit profile name",
+                                    tint = palette.accent,
+                                    modifier = Modifier.size(16.dp)
+                                )
+                            }
+                            if (state.avatarBase64.isNotBlank()) {
+                                TextButton(
+                                    onClick = onClearAvatar,
+                                    enabled = !state.isAvatarUploading,
+                                    modifier = Modifier.testTag("settings_clear_avatar_button")
+                                ) {
+                                    Text(
+                                        text = "Reset",
+                                        style = MaterialTheme.typography.labelSmall,
+                                        color = palette.textSecondary
+                                    )
+                                }
+                            }
+                        }
+
+                        Text(
+                            text = "Google Account: Not Connected",
+                            style = MaterialTheme.typography.bodySmall,
+                            color = palette.textSecondary,
+                            maxLines = 1,
+                            overflow = TextOverflow.Ellipsis
+                        )
+
+                        Spacer(Modifier.height(2.dp))
+                        Text(
+                            text = "Sync Status: Offline Mode • Works without an account",
+                            style = MaterialTheme.typography.labelSmall,
+                            color = palette.accent,
+                            maxLines = 1,
+                            overflow = TextOverflow.Ellipsis
+                        )
+                    }
                 }
 
                 Button(
@@ -385,8 +450,8 @@ fun SettingsAccountSyncCard(
                     enabled = !state.isAuthBusy,
                     shape = RoundedCornerShape(14.dp),
                     colors = ButtonDefaults.buttonColors(
-                        containerColor = ResolveColors.MintAccent,
-                        contentColor = ResolveColors.ForestDeep
+                        containerColor = palette.accent,
+                        contentColor = palette.onAccent
                     ),
                     modifier = Modifier
                         .fillMaxWidth()
@@ -395,82 +460,101 @@ fun SettingsAccountSyncCard(
                 ) {
                     if (state.isAuthBusy) {
                         CircularProgressIndicator(
-                            color = ResolveColors.ForestDeep,
+                            color = palette.onAccent,
                             strokeWidth = 2.dp,
                             modifier = Modifier.size(18.dp)
                         )
                         Spacer(Modifier.width(8.dp))
                     }
                     Text(
-                        text = if (state.isAuthBusy) "Connecting Google Account…" else "Sign In with Google",
+                        text = if (state.isAuthBusy) "Connecting Google Account…" else "Sign In with Google for Sync",
                         style = MaterialTheme.typography.titleSmall
                     )
                 }
-
-                FeatureTipNote(
-                    text = "Tip: Prefer 100% offline? Skip sign-in — every feature works without an account.",
-                    icon = Icons.Outlined.Info
-                )
             }
         } else {
-            // Connected state: hides unnecessary explanatory pitch & displays crisp profile + synced avatar
+            // Connected state: compact profile + Google account + Sync status + Linked Devices
             Column(
                 modifier = Modifier
                     .fillMaxWidth()
                     .resolveGlassCard(
                         cornerRadius = 22.dp,
-                        borderColor = ResolveColors.MintAccent.copy(alpha = 0.42f)
+                        borderColor = palette.accent.copy(alpha = 0.42f)
                     )
-                    .padding(18.dp)
+                    .padding(16.dp)
                     .testTag("settings_account_signed_in_card"),
-                verticalArrangement = Arrangement.spacedBy(14.dp)
+                verticalArrangement = Arrangement.spacedBy(12.dp)
             ) {
                 Row(
                     modifier = Modifier.fillMaxWidth(),
                     verticalAlignment = Alignment.CenterVertically,
-                    horizontalArrangement = Arrangement.spacedBy(14.dp)
+                    horizontalArrangement = Arrangement.spacedBy(12.dp)
                 ) {
                     SyncedAvatarBadge(
-                        displayName = state.displayName,
+                        displayName = resolvedName,
                         avatarBase64 = state.avatarBase64,
-                        size = 58.dp,
+                        size = 56.dp,
                         isUploading = state.isAvatarUploading,
                         showEditBadge = true,
-                        onClick = {
-                            photoPickerLauncher.launch(
-                                PickVisualMediaRequest(ActivityResultContracts.PickVisualMedia.ImageOnly)
-                            )
-                        },
+                        onClick = launchPhotoPicker,
                         modifier = Modifier.testTag("settings_profile_avatar_button")
                     )
 
                     Column(modifier = Modifier.weight(1f)) {
-                        Text(
-                            text = state.displayName.ifBlank { "Resolve Focus Account" },
-                            style = MaterialTheme.typography.titleMedium,
-                            color = ResolveColors.TextPrimary,
-                            maxLines = 1,
-                            overflow = TextOverflow.Ellipsis
-                        )
+                        Row(
+                            verticalAlignment = Alignment.CenterVertically,
+                            horizontalArrangement = Arrangement.spacedBy(4.dp)
+                        ) {
+                            Text(
+                                text = resolvedName,
+                                style = MaterialTheme.typography.titleMedium.copy(fontWeight = FontWeight.SemiBold),
+                                color = palette.textPrimary,
+                                maxLines = 1,
+                                overflow = TextOverflow.Ellipsis,
+                                modifier = Modifier.weight(1f, fill = false)
+                            )
+                            IconButton(
+                                onClick = {
+                                    draftName = resolvedName
+                                    showEditNameDialog = true
+                                },
+                                modifier = Modifier
+                                    .size(30.dp)
+                                    .testTag("settings_profile_edit_name_button")
+                            ) {
+                                Icon(
+                                    imageVector = ResolveIcons.Edit,
+                                    contentDescription = "Edit profile name",
+                                    tint = palette.accent,
+                                    modifier = Modifier.size(16.dp)
+                                )
+                            }
+                        }
+
                         if (state.email.isNotBlank()) {
                             Text(
                                 text = state.email,
                                 style = MaterialTheme.typography.bodySmall,
-                                color = ResolveColors.TextSecondary,
+                                color = palette.textSecondary,
                                 maxLines = 1,
                                 overflow = TextOverflow.Ellipsis
                             )
                         }
-                        Spacer(Modifier.height(4.dp))
+                        Spacer(Modifier.height(3.dp))
                         Row(
                             verticalAlignment = Alignment.CenterVertically,
                             horizontalArrangement = Arrangement.spacedBy(6.dp)
                         ) {
-                            PulsingStatusDot(color = ResolveColors.MintAccent, size = 5.dp)
+                            PulsingStatusDot(color = palette.accent, size = 5.dp)
+                            val syncLabel = if (state.syncLockEnabled) {
+                                "Google Sync Active • ${state.activeSyncedDeviceCount.coerceAtLeast(1)} device(s)"
+                            } else {
+                                "Google Connected • Sync Paused"
+                            }
                             Text(
-                                text = "Connected • ${state.thisDeviceName}",
+                                text = syncLabel,
                                 style = MaterialTheme.typography.labelSmall,
-                                color = ResolveColors.MintAccent,
+                                color = palette.accent,
                                 maxLines = 1,
                                 overflow = TextOverflow.Ellipsis
                             )
@@ -486,54 +570,80 @@ fun SettingsAccountSyncCard(
                             Text(
                                 text = "Reset",
                                 style = MaterialTheme.typography.labelSmall,
-                                color = ResolveColors.TextSecondary
+                                color = palette.textSecondary
                             )
                         }
                     }
                 }
 
-                // Connected Devices Pills
+                // Connected Devices Pills with safe Unlink trigger
                 if (state.connectedDevices.isNotEmpty()) {
-                    FlowRow(
-                        horizontalArrangement = Arrangement.spacedBy(8.dp),
-                        verticalArrangement = Arrangement.spacedBy(6.dp)
-                    ) {
-                        state.connectedDevices.forEach { device ->
-                            val isThisPhone = device.deviceId == state.thisDeviceId
-                            Row(
-                                modifier = Modifier
-                                    .clip(CircleShape)
-                                    .background(
-                                        if (device.syncEnabled) {
-                                            ResolveColors.MintSoftContainer.copy(alpha = 0.7f)
-                                        } else {
-                                            ResolveColors.ForestSurfaceElevated
+                    Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
+                        Text(
+                            text = "Connected Devices (tap to unlink safely)",
+                            style = MaterialTheme.typography.labelSmall,
+                            color = palette.textSecondary
+                        )
+                        FlowRow(
+                            horizontalArrangement = Arrangement.spacedBy(8.dp),
+                            verticalArrangement = Arrangement.spacedBy(6.dp)
+                        ) {
+                            state.connectedDevices.forEach { device ->
+                                val isThisPhone = device.deviceId == state.thisDeviceId
+                                val isUnlinking = state.unlinkingDeviceId == device.deviceId
+                                Row(
+                                    modifier = Modifier
+                                        .clip(CircleShape)
+                                        .background(
+                                            if (device.syncEnabled) {
+                                                palette.accentSoftContainer.copy(alpha = 0.78f)
+                                            } else {
+                                                palette.background.copy(alpha = 0.55f)
+                                            }
+                                        )
+                                        .border(
+                                            1.dp,
+                                            if (device.syncEnabled) {
+                                                palette.accent.copy(alpha = 0.35f)
+                                            } else {
+                                                palette.cardBorder
+                                            },
+                                            CircleShape
+                                        )
+                                        .clickable(enabled = !isUnlinking) {
+                                            pendingUnlinkDevice = device
                                         }
+                                        .padding(horizontal = 10.dp, vertical = 5.dp)
+                                        .testTag("linked_device_chip_${device.deviceId}"),
+                                    verticalAlignment = Alignment.CenterVertically,
+                                    horizontalArrangement = Arrangement.spacedBy(5.dp)
+                                ) {
+                                    if (isUnlinking) {
+                                        CircularProgressIndicator(
+                                            color = palette.accent,
+                                            strokeWidth = 1.5.dp,
+                                            modifier = Modifier.size(12.dp)
+                                        )
+                                    } else {
+                                        Icon(
+                                            imageVector = ResolveIcons.Devices,
+                                            contentDescription = null,
+                                            tint = if (device.syncEnabled) palette.accent else palette.textSecondary,
+                                            modifier = Modifier.size(13.dp)
+                                        )
+                                    }
+                                    Text(
+                                        text = if (isThisPhone) "${device.deviceName} (This)" else device.deviceName,
+                                        style = MaterialTheme.typography.labelSmall,
+                                        color = palette.textPrimary
                                     )
-                                    .border(
-                                        1.dp,
-                                        if (device.syncEnabled) {
-                                            ResolveColors.MintAccent.copy(alpha = 0.3f)
-                                        } else {
-                                            ResolveColors.ForestOutline
-                                        },
-                                        CircleShape
+                                    Icon(
+                                        imageVector = Icons.Outlined.Close,
+                                        contentDescription = "Unlink ${device.deviceName}",
+                                        tint = palette.textSecondary,
+                                        modifier = Modifier.size(12.dp)
                                     )
-                                    .padding(horizontal = 10.dp, vertical = 4.dp),
-                                verticalAlignment = Alignment.CenterVertically,
-                                horizontalArrangement = Arrangement.spacedBy(5.dp)
-                            ) {
-                                Icon(
-                                    imageVector = ResolveIcons.Devices,
-                                    contentDescription = null,
-                                    tint = if (device.syncEnabled) ResolveColors.MintAccent else ResolveColors.TextSecondary,
-                                    modifier = Modifier.size(13.dp)
-                                )
-                                Text(
-                                    text = if (isThisPhone) "${device.deviceName} (This)" else device.deviceName,
-                                    style = MaterialTheme.typography.labelSmall,
-                                    color = ResolveColors.TextPrimary
-                                )
+                                }
                             }
                         }
                     }
@@ -544,8 +654,8 @@ fun SettingsAccountSyncCard(
                     modifier = Modifier
                         .fillMaxWidth()
                         .clip(RoundedCornerShape(16.dp))
-                        .background(ResolveColors.ForestDeep.copy(alpha = 0.55f))
-                        .border(1.dp, ResolveColors.ForestOutline, RoundedCornerShape(16.dp))
+                        .background(palette.background.copy(alpha = 0.55f))
+                        .border(1.dp, palette.cardBorder, RoundedCornerShape(16.dp))
                         .clickable { onToggleSyncEnabled(!state.syncLockEnabled) }
                         .padding(horizontal = 14.dp, vertical = 10.dp),
                     verticalAlignment = Alignment.CenterVertically
@@ -554,24 +664,24 @@ fun SettingsAccountSyncCard(
                         Text(
                             text = "Sync Lock Across Devices",
                             style = MaterialTheme.typography.titleSmall,
-                            color = ResolveColors.TextPrimary
+                            color = palette.textPrimary
                         )
                         Text(
                             text = if (state.syncLockEnabled) {
-                                "Active — locks started on linked devices engage here"
+                                "Active — eligible remote locks can trigger here"
                             } else {
                                 "Paused — this phone operates independently"
                             },
                             style = MaterialTheme.typography.bodySmall,
-                            color = ResolveColors.TextSecondary
+                            color = palette.textSecondary
                         )
                     }
                     Switch(
                         checked = state.syncLockEnabled,
                         onCheckedChange = onToggleSyncEnabled,
                         colors = SwitchDefaults.colors(
-                            checkedThumbColor = ResolveColors.ForestDeep,
-                            checkedTrackColor = ResolveColors.MintAccent
+                            checkedThumbColor = palette.onAccent,
+                            checkedTrackColor = palette.accent
                         ),
                         modifier = Modifier.testTag("settings_device_sync_switch")
                     )
@@ -583,7 +693,7 @@ fun SettingsAccountSyncCard(
                     verticalAlignment = Alignment.CenterVertically
                 ) {
                     FeatureTipNote(
-                        text = "Tap photo to update across devices.",
+                        text = "Tap photo or edit icon anytime.",
                         icon = ResolveIcons.AddAPhoto,
                         modifier = Modifier.weight(1f)
                     )
@@ -594,31 +704,132 @@ fun SettingsAccountSyncCard(
                         shape = RoundedCornerShape(12.dp),
                         border = androidx.compose.foundation.BorderStroke(
                             1.dp,
-                            ResolveColors.ForestOutline
+                            palette.cardBorder
                         ),
                         modifier = Modifier.testTag("settings_google_signout_button")
                     ) {
                         Icon(
                             imageVector = ResolveIcons.Logout,
                             contentDescription = null,
-                            tint = ResolveColors.TextSecondary,
+                            tint = palette.textSecondary,
                             modifier = Modifier.size(16.dp)
                         )
                         Spacer(Modifier.width(6.dp))
                         Text(
                             text = "Sign Out",
                             style = MaterialTheme.typography.labelMedium,
-                            color = ResolveColors.TextSecondary
+                            color = palette.textSecondary
                         )
                     }
                 }
             }
         }
     }
+
+    if (showEditNameDialog) {
+        AlertDialog(
+            onDismissRequest = { showEditNameDialog = false },
+            containerColor = palette.cardBottom,
+            title = {
+                Text(
+                    text = "Profile Name",
+                    style = MaterialTheme.typography.titleLarge,
+                    color = palette.textPrimary
+                )
+            },
+            text = {
+                ProvideSafeTextToolbar {
+                    androidx.compose.material3.OutlinedTextField(
+                        value = draftName,
+                        onValueChange = { if (it.length <= 48) draftName = it },
+                        singleLine = true,
+                        label = { Text("Display Name") },
+                        colors = androidx.compose.material3.OutlinedTextFieldDefaults.colors(
+                            focusedBorderColor = palette.accent,
+                            unfocusedBorderColor = palette.cardBorder,
+                            focusedTextColor = palette.textPrimary,
+                            unfocusedTextColor = palette.textPrimary
+                        ),
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .testTag("settings_profile_name_input")
+                    )
+                }
+            },
+            confirmButton = {
+                Button(
+                    onClick = {
+                        onUpdateProfileName(draftName)
+                        showEditNameDialog = false
+                    },
+                    colors = ButtonDefaults.buttonColors(
+                        containerColor = palette.accent,
+                        contentColor = palette.onAccent
+                    ),
+                    modifier = Modifier.testTag("settings_profile_name_save_button")
+                ) {
+                    Text("Save")
+                }
+            },
+            dismissButton = {
+                TextButton(onClick = { showEditNameDialog = false }) {
+                    Text("Cancel", color = palette.textSecondary)
+                }
+            }
+        )
+    }
+
+    pendingUnlinkDevice?.let { device ->
+        val isThis = device.deviceId == state.thisDeviceId
+        AlertDialog(
+            onDismissRequest = { pendingUnlinkDevice = null },
+            containerColor = palette.cardBottom,
+            title = {
+                Text(
+                    text = "Unlink ${device.deviceName}?",
+                    style = MaterialTheme.typography.titleLarge,
+                    color = palette.textPrimary
+                )
+            },
+            text = {
+                Text(
+                    text = if (isThis) {
+                        "This disconnects this phone from cloud sync and signs out cleanly. All local focus timers, mascots, App Lock, and history stay untouched on this phone."
+                    } else {
+                        "Removes ${device.deviceName} from your synced device list without erasing or modifying any local data on that phone."
+                    },
+                    style = MaterialTheme.typography.bodyMedium,
+                    color = palette.textSecondary
+                )
+            },
+            confirmButton = {
+                Button(
+                    onClick = {
+                        val id = device.deviceId
+                        pendingUnlinkDevice = null
+                        onUnlinkDevice(id)
+                    },
+                    colors = ButtonDefaults.buttonColors(
+                        containerColor = palette.accent,
+                        contentColor = palette.onAccent
+                    ),
+                    modifier = Modifier.testTag("confirm_unlink_device_button")
+                ) {
+                    Text("Unlink Device")
+                }
+            },
+            dismissButton = {
+                TextButton(onClick = { pendingUnlinkDevice = null }) {
+                    Text("Cancel", color = palette.textSecondary)
+                }
+            }
+        )
+    }
 }
 
 @Composable
 private fun SyncBenefitBullet(text: String) {
+    val palette = LocalResolveExtendedPalette.current
     Row(
         verticalAlignment = Alignment.Top,
         horizontalArrangement = Arrangement.spacedBy(8.dp)
@@ -626,7 +837,7 @@ private fun SyncBenefitBullet(text: String) {
         Icon(
             imageVector = Icons.Outlined.CheckCircle,
             contentDescription = null,
-            tint = ResolveColors.MintAccent,
+            tint = palette.accent,
             modifier = Modifier
                 .padding(top = 2.dp)
                 .size(15.dp)
@@ -634,7 +845,7 @@ private fun SyncBenefitBullet(text: String) {
         Text(
             text = text,
             style = MaterialTheme.typography.bodySmall,
-            color = ResolveColors.TextSecondary
+            color = palette.textSecondary
         )
     }
 }
