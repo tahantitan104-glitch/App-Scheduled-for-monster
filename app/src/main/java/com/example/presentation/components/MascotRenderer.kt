@@ -7,8 +7,8 @@ import androidx.compose.animation.fadeIn
 import androidx.compose.animation.fadeOut
 import androidx.compose.animation.scaleIn
 import androidx.compose.animation.scaleOut
+import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.Canvas
-import androidx.compose.foundation.border
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Spacer
@@ -26,7 +26,6 @@ import androidx.compose.runtime.Composable
 import androidx.compose.runtime.remember
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.draw.shadow
 import androidx.compose.ui.graphics.Path
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.semantics.contentDescription
@@ -37,7 +36,7 @@ import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
-import com.example.designsystem.ResolveColors
+import com.example.designsystem.LocalResolveExtendedPalette
 import com.example.domain.model.MascotAnimationState
 import com.example.domain.model.MascotMicroAnimation
 import com.example.domain.model.MascotType
@@ -168,15 +167,21 @@ fun FocusMessageBubble(
     isCelebration: Boolean = false,
     modifier: Modifier = Modifier
 ) {
+    val palette = LocalResolveExtendedPalette.current
     val bubbleBg = if (isCelebration) {
-        ResolveColors.MintBright
+        palette.accent
     } else {
-        ResolveColors.TextPrimary
+        palette.textPrimary
     }
     val bubbleBorder = if (isCelebration) {
-        ResolveColors.MintAccent
+        palette.accentStrong.copy(alpha = 0.65f)
     } else {
-        ResolveColors.MintAccent.copy(alpha = 0.55f)
+        palette.accent.copy(alpha = 0.55f)
+    }
+    val bubbleTextColor = if (isCelebration) {
+        palette.onAccent
+    } else {
+        palette.background
     }
     val tailPath = remember { Path() }
 
@@ -190,14 +195,9 @@ fun FocusMessageBubble(
         Surface(
             shape = RoundedCornerShape(18.dp),
             color = bubbleBg,
-            modifier = Modifier
-                .shadow(
-                    elevation = 10.dp,
-                    shape = RoundedCornerShape(18.dp),
-                    ambientColor = ResolveColors.MintAccent.copy(alpha = 0.25f),
-                    spotColor = ResolveColors.MintAccent.copy(alpha = 0.25f)
-                )
-                .border(1.dp, bubbleBorder, RoundedCornerShape(18.dp))
+            tonalElevation = 0.dp,
+            shadowElevation = 4.dp,
+            border = androidx.compose.foundation.BorderStroke(1.dp, bubbleBorder)
         ) {
             Text(
                 text = message,
@@ -206,7 +206,7 @@ fun FocusMessageBubble(
                     fontWeight = FontWeight.SemiBold,
                     lineHeight = 17.sp
                 ),
-                color = ResolveColors.ForestDeep,
+                color = bubbleTextColor,
                 textAlign = TextAlign.Center,
                 maxLines = 2,
                 overflow = TextOverflow.Ellipsis,

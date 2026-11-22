@@ -62,7 +62,7 @@ import androidx.lifecycle.LifecycleEventObserver
 import androidx.lifecycle.compose.LocalLifecycleOwner
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.example.ResolveApplication
-import com.example.designsystem.ResolveColors
+import com.example.designsystem.LocalResolveExtendedPalette
 import com.example.designsystem.ResolveTheme
 import com.example.domain.model.AppLockAuthMethod
 import com.example.domain.model.AppLockPinLength
@@ -214,6 +214,7 @@ internal fun AppLockAuthScreen(
     onOpenEmergencyPhone: () -> Unit,
     onGoHome: () -> Unit = {}
 ) {
+    val palette = LocalResolveExtendedPalette.current
     val scope = rememberCoroutineScope()
     var errorMsg by remember { mutableStateOf<String?>(null) }
     var resetKey by remember { mutableStateOf(0) }
@@ -240,15 +241,7 @@ internal fun AppLockAuthScreen(
     BoxWithConstraints(
         modifier = Modifier
             .fillMaxSize()
-            .background(
-                Brush.verticalGradient(
-                    colors = listOf(
-                        ResolveColors.ForestDeep,
-                        ResolveColors.ForestSecondary,
-                        ResolveColors.ForestDeep
-                    )
-                )
-            )
+            .background(palette.background)
             .windowInsetsPadding(WindowInsets.safeDrawing)
             .padding(horizontal = 20.dp, vertical = 14.dp)
             .testTag("applock_auth_screen")
@@ -262,7 +255,7 @@ internal fun AppLockAuthScreen(
             drawCircle(
                 brush = Brush.radialGradient(
                     colors = listOf(
-                        ResolveColors.MintAccent.copy(alpha = 0.14f),
+                        palette.accentSecondary.copy(alpha = 0.06f),
                         Color.Transparent
                     ),
                     center = center,
@@ -406,11 +399,12 @@ private fun AppLockTargetHeader(
     appName: String,
     appIcon: ImageBitmap?
 ) {
+    val palette = LocalResolveExtendedPalette.current
     Row(
         modifier = Modifier
             .clip(CircleShape)
-            .background(ResolveColors.ForestSurface.copy(alpha = 0.85f))
-            .border(1.dp, ResolveColors.MintAccent.copy(alpha = 0.30f), CircleShape)
+            .background(palette.surfaceSecondary)
+            .border(1.dp, palette.cardBorder, CircleShape)
             .padding(horizontal = 14.dp, vertical = 7.dp)
             .testTag("applock_auth_target_pill"),
         verticalAlignment = Alignment.CenterVertically,
@@ -426,7 +420,7 @@ private fun AppLockTargetHeader(
             Icon(
                 imageVector = Icons.Outlined.Lock,
                 contentDescription = null,
-                tint = ResolveColors.MintAccent,
+                tint = palette.accent,
                 modifier = Modifier.size(16.dp)
             )
         }
@@ -436,7 +430,7 @@ private fun AppLockTargetHeader(
                 letterSpacing = 0.9.sp,
                 fontWeight = FontWeight.SemiBold
             ),
-            color = ResolveColors.MintBright,
+            color = palette.accentStrong,
             maxLines = 1,
             overflow = TextOverflow.Ellipsis
         )
@@ -448,6 +442,7 @@ private fun AppLockBottomActions(
     onOpenEmergencyPhone: () -> Unit,
     onGoHome: () -> Unit
 ) {
+    val palette = LocalResolveExtendedPalette.current
     Row(
         horizontalArrangement = Arrangement.spacedBy(10.dp),
         verticalAlignment = Alignment.CenterVertically
@@ -460,11 +455,11 @@ private fun AppLockBottomActions(
             Icon(
                 imageVector = Icons.Outlined.Call,
                 contentDescription = "Emergency Phone",
-                tint = ResolveColors.MintAccent,
+                tint = palette.accentStrong,
                 modifier = Modifier.size(16.dp)
             )
             Spacer(Modifier.width(6.dp))
-            Text("Phone", color = ResolveColors.MintAccent)
+            Text("Phone", color = palette.accentStrong)
         }
 
         OutlinedButton(
@@ -475,11 +470,11 @@ private fun AppLockBottomActions(
             Icon(
                 imageVector = ResolveIcons.Shield,
                 contentDescription = "Leave locked app",
-                tint = ResolveColors.TextSecondary,
+                tint = palette.textSecondary,
                 modifier = Modifier.size(16.dp)
             )
             Spacer(Modifier.width(6.dp))
-            Text("Home", color = ResolveColors.TextSecondary)
+            Text("Home", color = palette.textSecondary)
         }
     }
 }

@@ -11,6 +11,7 @@ import androidx.core.splashscreen.SplashScreen.Companion.installSplashScreen
 import androidx.core.view.WindowCompat
 import com.example.designsystem.ResolveTheme
 import com.example.domain.startup.StartupStage
+import com.example.platform.ForceDarkCapabilityHelper
 import com.example.presentation.ResolveViewModel
 import com.example.presentation.components.ProvideSafeTextToolbar
 import com.example.presentation.navigation.ResolveAppShell
@@ -20,6 +21,7 @@ class MainActivity : ComponentActivity() {
     private val viewModel: ResolveViewModel by viewModels { ResolveViewModel.Factory }
 
     override fun onCreate(savedInstanceState: Bundle?) {
+        ForceDarkCapabilityHelper.ensureResolveNightMode(this)
         val splashScreen = installSplashScreen()
         super.onCreate(savedInstanceState)
         splashScreen.setKeepOnScreenCondition {

@@ -30,7 +30,6 @@ import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Switch
-import androidx.compose.material3.SwitchDefaults
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.remember
@@ -49,6 +48,7 @@ import com.example.presentation.components.FeatureTipNote
 import com.example.presentation.components.ResolveIcons
 import com.example.presentation.components.pressScale
 import com.example.presentation.components.resolveGlassCard
+import com.example.presentation.components.resolveSwitchColors
 import java.time.LocalDate
 import java.time.format.TextStyle
 import java.util.Locale
@@ -102,7 +102,7 @@ fun ScheduleScreen(
                     Column(
                         modifier = Modifier
                             .fillMaxWidth()
-                            .resolveGlassCard(cornerRadius = 24.dp)
+                            .resolveGlassCard(cornerRadius = 16.dp)
                             .padding(horizontal = 24.dp, vertical = 42.dp),
                         horizontalAlignment = Alignment.CenterHorizontally,
                         verticalArrangement = Arrangement.spacedBy(12.dp)
@@ -111,13 +111,13 @@ fun ScheduleScreen(
                             modifier = Modifier
                                 .size(64.dp)
                                 .clip(CircleShape)
-                                .background(palette.accentSoftContainer),
+                                .background(palette.surfaceElevated),
                             contentAlignment = Alignment.Center
                         ) {
                             Icon(
                                 imageVector = ResolveIcons.EventBusy,
                                 contentDescription = null,
-                                tint = palette.accent,
+                                tint = palette.accentStrong,
                                 modifier = Modifier.size(30.dp)
                             )
                         }
@@ -147,12 +147,13 @@ fun ScheduleScreen(
 
         FloatingActionButton(
             onClick = onAddSchedule,
-            containerColor = palette.accent,
-            contentColor = palette.onAccent,
+            containerColor = palette.primaryButton,
+            contentColor = palette.onPrimaryButton,
             shape = CircleShape,
             modifier = Modifier
                 .align(Alignment.BottomEnd)
                 .padding(20.dp)
+                .border(1.dp, palette.accentSecondary.copy(alpha = 0.42f), CircleShape)
                 .testTag("schedule_add_fab")
         ) {
             Icon(Icons.Outlined.Add, contentDescription = "Create schedule")
@@ -184,9 +185,9 @@ private fun ScheduleCard(
             .fillMaxWidth()
             .pressScale(interactionSource, 0.98f)
             .resolveGlassCard(
-                cornerRadius = 22.dp,
+                cornerRadius = 16.dp,
                 borderColor = if (schedule.isEnabled) {
-                    palette.accent.copy(alpha = 0.36f)
+                    palette.champagne.copy(alpha = 0.45f)
                 } else {
                     palette.cardBorder
                 }
@@ -214,15 +215,20 @@ private fun ScheduleCard(
                         .size(40.dp)
                         .clip(RoundedCornerShape(12.dp))
                         .background(
-                            if (schedule.isEnabled) palette.accentSoftContainer
-                            else palette.background.copy(alpha = 0.65f)
+                            if (schedule.isEnabled) palette.champagneContainer
+                            else palette.controlSurface
+                        )
+                        .border(
+                            1.dp,
+                            if (schedule.isEnabled) palette.champagne.copy(alpha = 0.28f) else palette.controlBorder,
+                            RoundedCornerShape(12.dp)
                         ),
                     contentAlignment = Alignment.Center
                 ) {
                     Icon(
                         imageVector = ResolveIcons.EventAvailable,
                         contentDescription = null,
-                        tint = if (schedule.isEnabled) palette.accent else palette.textMuted,
+                        tint = if (schedule.isEnabled) palette.champagneStrong else palette.textMuted,
                         modifier = Modifier.size(20.dp)
                     )
                 }
@@ -239,7 +245,7 @@ private fun ScheduleCard(
                             schedule.startMinute
                         ),
                         style = MaterialTheme.typography.bodyMedium.copy(fontFamily = JetBrainsMonoFamily),
-                        color = if (schedule.isEnabled) palette.accent else palette.textSecondary
+                        color = if (schedule.isEnabled) palette.champagneStrong else palette.textSecondary
                     )
                 }
             }
@@ -247,10 +253,7 @@ private fun ScheduleCard(
             Switch(
                 checked = schedule.isEnabled,
                 onCheckedChange = onToggle,
-                colors = SwitchDefaults.colors(
-                    checkedThumbColor = palette.onAccent,
-                    checkedTrackColor = palette.accent
-                )
+                colors = resolveSwitchColors()
             )
         }
 

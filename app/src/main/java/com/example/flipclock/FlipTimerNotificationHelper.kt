@@ -80,7 +80,7 @@ class FlipTimerNotificationHelper(private val context: Context) {
         // Part 23: No custom notification action buttons (no Restart/Dismiss buttons), preserve normal tap & swipe dismissal.
         val notification = NotificationCompat.Builder(context, CHANNEL_ID)
             .setSmallIcon(R.drawable.ic_notification_resolve)
-            .setColor(0xFF6EDCB0.toInt())
+            .setColor(0xFF176B5B.toInt())
             .setContentTitle(displayTitle)
             .setContentText("Tap to open Timer")
             .setPriority(NotificationCompat.PRIORITY_HIGH)

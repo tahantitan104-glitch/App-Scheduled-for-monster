@@ -44,7 +44,7 @@ import kotlin.math.sin
  * Uses zero external images/SVGs/PNGs/Lottie files and enforces Master Character Consistency
  * across all states:
  * - 7 Core Animations (`IDLE`, `BLINK`, `POINTING`, `CURIOUS`, `TURNING`, `HAPPY_DANCE`, `CELEBRATING`)
- * - 8-Stage Signature Peek-a-Boo Entrance (`PEEK_ENTRANCE` with independent `#10251F` curved wall)
+ * - 8-Stage Signature Peek-a-Boo Entrance (`PEEK_ENTRANCE` with independent `#16202A` curved wall)
  * - Micro-Animations (`EAR_WIGGLE`, `SMALL_HOP`, `GENTLE_WAVE`, `SHY`, `SLEEPY`)
  *
  * Respects [reducedMotion] and [isPaused] smoothly with calm static fallback.
@@ -304,7 +304,7 @@ fun ResolveBunnyMascot(
         val h = this.size.height
         val center = Offset(w * CENTER_X, h * 0.50f)
 
-        // Atmospheric #75DDB5 focus aura behind Bunny (optional, crisp at both hero and badge scales)
+        // Atmospheric Dark Teal Green (#176B5B) focus aura behind Bunny (optional, crisp at both hero and badge scales)
         if (showFocusAura) {
             val auraScale = 0.94f + 0.08f * breathSin + resolvedPose.auraBoost * 0.08f
             drawCircle(

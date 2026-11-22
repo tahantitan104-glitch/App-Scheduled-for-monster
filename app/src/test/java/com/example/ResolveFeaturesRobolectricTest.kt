@@ -430,9 +430,7 @@ class ResolveFeaturesRobolectricTest {
         reminderOn = false
         composeRule.waitForIdle()
         composeRule.onNodeWithTag("lock_screen_landscape_reminder_off").assertIsDisplayed()
-        assertTrue(
-            composeRule.onAllNodesWithTag("lock_screen_landscape_focus_guard_title").fetchSemanticsNodes().isEmpty()
-        )
+        composeRule.onNodeWithTag("lock_screen_landscape_focus_guard_title").assertIsDisplayed()
         assertTrue(composeRule.onAllNodesWithTag("lock_screen_reminder_text").fetchSemanticsNodes().isEmpty())
         composeRule.onNodeWithTag("lock_screen_countdown_card").assertIsDisplayed()
         composeRule.onNodeWithTag("lock_screen_allowed_apps_button").assertIsDisplayed()

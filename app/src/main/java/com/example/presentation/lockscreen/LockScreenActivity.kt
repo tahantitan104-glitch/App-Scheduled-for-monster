@@ -5,6 +5,7 @@ import android.content.Context
 import android.content.Intent
 import android.content.IntentFilter
 import android.content.pm.ActivityInfo
+import android.content.res.Configuration
 import android.hardware.SensorManager
 import android.os.Build
 import android.os.Bundle
@@ -17,15 +18,21 @@ import androidx.activity.ComponentActivity
 import androidx.activity.compose.BackHandler
 import androidx.activity.compose.setContent
 import androidx.activity.enableEdgeToEdge
+import androidx.compose.animation.AnimatedContent
 import androidx.compose.animation.core.EaseInOutSine
 import androidx.compose.animation.core.RepeatMode
 import androidx.compose.animation.core.Spring
 import androidx.compose.animation.core.animateFloat
 import androidx.compose.animation.core.animateFloatAsState
+import androidx.compose.animation.core.animateOffsetAsState
 import androidx.compose.animation.core.infiniteRepeatable
 import androidx.compose.animation.core.rememberInfiniteTransition
 import androidx.compose.animation.core.spring
 import androidx.compose.animation.core.tween
+import androidx.compose.animation.fadeIn
+import androidx.compose.animation.fadeOut
+import androidx.compose.animation.scaleIn
+import androidx.compose.animation.togetherWith
 import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.Image
@@ -44,6 +51,7 @@ import androidx.compose.foundation.layout.WindowInsets
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.navigationBarsPadding
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.safeDrawing
@@ -107,8 +115,9 @@ import androidx.lifecycle.compose.LocalLifecycleOwner
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.lifecycle.lifecycleScope
 import com.example.ResolveApplication
-import com.example.designsystem.OutfitTimerFamily
-import com.example.designsystem.ResolveColors
+import com.example.designsystem.InterFamily
+import com.example.designsystem.JetBrainsMonoFamily
+import com.example.designsystem.LocalResolveExtendedPalette
 import com.example.designsystem.ResolveTheme
 import com.example.domain.model.DefaultLockReminders
 import com.example.domain.model.EnforcementMode
@@ -131,6 +140,7 @@ import com.example.presentation.components.RecoveryCodeVerifySheet
 import com.example.presentation.components.ResolveIcons
 import com.example.presentation.components.pressScale
 import com.example.session.LockExitSignal
+import kotlinx.coroutines.flow.distinctUntilChanged
 import kotlinx.coroutines.launch
 
 class LockScreenActivity : ComponentActivity() {
@@ -139,6 +149,14 @@ class LockScreenActivity : ComponentActivity() {
     private var isConfirmingLock = false
     private var sawActiveLockEnforcement by mutableStateOf(false)
     private var isShowingCompletionCelebration by mutableStateOf(false)
+
+    private var hasLoadedTiltPreference by mutableStateOf(false)
+    private var isTiltModeEnabled by mutableStateOf(false)
+    private var isActivityResumed = false
+    private val orientationHandler = Handler(Looper.getMainLooper())
+    private var orientationListener: OrientationEventListener? = null
+    private var pendingTargetOrientation: Int? = null
+    private var pendingOrientationRunnable: Runnable? = null
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
@@ -153,12 +171,7 @@ class LockScreenActivity : ComponentActivity() {
             )
         }
         enableEdgeToEdge()
-        runCatching {
-            WindowCompat.getInsetsController(window, window.decorView).apply {
-                systemBarsBehavior = WindowInsetsControllerCompat.BEHAVIOR_SHOW_TRANSIENT_BARS_BY_SWIPE
-                hide(WindowInsetsCompat.Type.systemBars())
-            }
-        }
+        applyImmersiveSystemBars()
 
         val app = application as? ResolveApplication ?: run {
             finish()
@@ -194,6 +207,17 @@ class LockScreenActivity : ComponentActivity() {
             }
         }
 
+        lifecycleScope.launch {
+            container.preferencesRepository.landscapeTiltModeFlow
+                .distinctUntilChanged()
+                .collect { enabled ->
+                    hasLoadedTiltPreference = true
+                    val wasEnabled = isTiltModeEnabled
+                    isTiltModeEnabled = enabled
+                    reconcileOrientationMonitoring(transitionedToEnabled = enabled && !wasEnabled)
+                }
+        }
+
         setContent {
             ResolveTheme {
                 // Disable Back exit ONLY while Lock Mode is still enforced; once session finishes,
@@ -207,7 +231,7 @@ class LockScreenActivity : ComponentActivity() {
                 val mascotPreferences by container.mascotSelectionManager.preferencesFlow
                     .collectAsStateWithLifecycle(initialValue = MascotPreferences())
                 val landscapeTiltMode by container.preferencesRepository.landscapeTiltModeFlow
-                    .collectAsStateWithLifecycle(initialValue = false)
+                    .collectAsStateWithLifecycle(initialValue = isTiltModeEnabled)
 
                 var isLifecyclePaused by remember { mutableStateOf(false) }
                 var isScreenOff by remember { mutableStateOf(false) }
@@ -225,63 +249,6 @@ class LockScreenActivity : ComponentActivity() {
                     }
                     lifecycleOwner.lifecycle.addObserver(observer)
                     onDispose { lifecycleOwner.lifecycle.removeObserver(observer) }
-                }
-
-                // Strictly scoped Landscape Tilt Mode:
-                // - OFF: enforce Portrait; no OrientationEventListener attached.
-                // - ON + ON_RESUME: smooth angular hysteresis (±25 deg bands) + 280ms dwell debounce.
-                DisposableEffect(landscapeTiltMode, isLifecyclePaused) {
-                    if (!landscapeTiltMode) {
-                        if (requestedOrientation != ActivityInfo.SCREEN_ORIENTATION_PORTRAIT) {
-                            requestedOrientation = ActivityInfo.SCREEN_ORIENTATION_PORTRAIT
-                        }
-                        onDispose {}
-                    } else if (isLifecyclePaused) {
-                        onDispose {}
-                    } else {
-                        val mainHandler = Handler(Looper.getMainLooper())
-                        var pendingTargetOrientation: Int? = null
-                        var pendingRunnable: Runnable? = null
-
-                        val orientationListener = object : OrientationEventListener(
-                            this@LockScreenActivity,
-                            SensorManager.SENSOR_DELAY_UI
-                        ) {
-                            override fun onOrientationChanged(orientation: Int) {
-                                if (orientation == ORIENTATION_UNKNOWN) return
-                                val candidate = when {
-                                    orientation >= 335 || orientation <= 25 ->
-                                        ActivityInfo.SCREEN_ORIENTATION_PORTRAIT
-                                    orientation in 65..115 || orientation in 245..295 ->
-                                        ActivityInfo.SCREEN_ORIENTATION_SENSOR_LANDSCAPE
-                                    else -> return // Ignore transition deadzones to prevent flicker
-                                }
-                                if (candidate == requestedOrientation && pendingTargetOrientation == null) {
-                                    return
-                                }
-                                if (candidate != pendingTargetOrientation) {
-                                    pendingRunnable?.let { mainHandler.removeCallbacks(it) }
-                                    pendingTargetOrientation = candidate
-                                    val task = Runnable {
-                                        if (!isFinishing && requestedOrientation != candidate) {
-                                            requestedOrientation = candidate
-                                        }
-                                        pendingTargetOrientation = null
-                                    }
-                                    pendingRunnable = task
-                                    mainHandler.postDelayed(task, 280L)
-                                }
-                            }
-                        }
-
-                        if (orientationListener.canDetectOrientation()) {
-                            orientationListener.enable()
-                        }
-                        onDispose {
-                            pendingRunnable?.let { mainHandler.removeCallbacks(it) }
-                            orientationListener.disable()
-                        }
-                    }
                 }
 
                 DisposableEffect(context) {
@@ -435,8 +402,23 @@ class LockScreenActivity : ComponentActivity() {
         }
     }
 
+    override fun onNewIntent(intent: Intent) {
+        super.onNewIntent(intent)
+        setIntent(intent)
+        applyImmersiveSystemBars()
+        reconcileOrientationMonitoring(transitionedToEnabled = false)
+    }
+
+    override fun onConfigurationChanged(newConfig: Configuration) {
+        super.onConfigurationChanged(newConfig)
+        applyImmersiveSystemBars()
+    }
+
     override fun onResume() {
         super.onResume()
+        isActivityResumed = true
+        applyImmersiveSystemBars()
+        reconcileOrientationMonitoring(transitionedToEnabled = false)
         val app = application as? ResolveApplication ?: return
         app.container.foregroundGuard.clearBarrier()
         if (!isEngineInitialized || isConfirmingLock || isShowingCompletionCelebration) return
@@ -449,6 +431,104 @@ class LockScreenActivity : ComponentActivity() {
                 isConfirmingLock = false
             }
         }
+    }
+
+    override fun onPause() {
+        isActivityResumed = false
+        stopOrientationListener()
+        super.onPause()
+    }
+
+    override fun onDestroy() {
+        stopOrientationListener()
+        super.onDestroy()
+    }
+
+    private fun applyImmersiveSystemBars() {
+        runCatching {
+            WindowCompat.getInsetsController(window, window.decorView).apply {
+                systemBarsBehavior = WindowInsetsControllerCompat.BEHAVIOR_SHOW_TRANSIENT_BARS_BY_SWIPE
+                hide(WindowInsetsCompat.Type.systemBars())
+            }
+        }
+    }
+
+    private fun reconcileOrientationMonitoring(transitionedToEnabled: Boolean) {
+        if (!hasLoadedTiltPreference) return
+
+        if (!isTiltModeEnabled) {
+            stopOrientationListener()
+            if (!isFinishing && requestedOrientation != ActivityInfo.SCREEN_ORIENTATION_PORTRAIT) {
+                requestedOrientation = ActivityInfo.SCREEN_ORIENTATION_PORTRAIT
+            }
+            return
+        }
+
+        if (transitionedToEnabled && requestedOrientation == ActivityInfo.SCREEN_ORIENTATION_PORTRAIT) {
+            requestedOrientation = ActivityInfo.SCREEN_ORIENTATION_UNSPECIFIED
+        }
+
+        if (!isActivityResumed) {
+            stopOrientationListener()
+            return
+        }
+
+        if (orientationListener == null) {
+            orientationListener = object : OrientationEventListener(
+                this,
+                SensorManager.SENSOR_DELAY_UI
+            ) {
+                override fun onOrientationChanged(orientation: Int) {
+                    val candidate = resolveLockScreenCandidateOrientation(orientation) ?: return
+                    if (candidate == requestedOrientation) {
+                        pendingOrientationRunnable?.let { orientationHandler.removeCallbacks(it) }
+                        pendingOrientationRunnable = null
+                        pendingTargetOrientation = null
+                        return
+                    }
+                    if (candidate != pendingTargetOrientation) {
+                        pendingOrientationRunnable?.let { orientationHandler.removeCallbacks(it) }
+                        pendingTargetOrientation = candidate
+                        val task = Runnable {
+                            if (!isFinishing && isTiltModeEnabled && requestedOrientation != candidate) {
+                                requestedOrientation = candidate
+                            }
+                            pendingOrientationRunnable = null
+                            pendingTargetOrientation = null
+                        }
+                        pendingOrientationRunnable = task
+                        orientationHandler.postDelayed(task, 240L)
+                    }
+                }
+            }
+        }
+
+        val listener = orientationListener
+        if (listener != null && listener.canDetectOrientation()) {
+            listener.enable()
+        } else if (!isFinishing && requestedOrientation != ActivityInfo.SCREEN_ORIENTATION_FULL_USER) {
+            requestedOrientation = ActivityInfo.SCREEN_ORIENTATION_FULL_USER
+        }
+    }
+
+    private fun stopOrientationListener() {
+        pendingOrientationRunnable?.let { orientationHandler.removeCallbacks(it) }
+        pendingOrientationRunnable = null
+        pendingTargetOrientation = null
+        orientationListener?.disable()
+    }
+}
+
+internal fun resolveLockScreenCandidateOrientation(sensorDegrees: Int): Int? {
+    if (sensorDegrees == OrientationEventListener.ORIENTATION_UNKNOWN || sensorDegrees < 0) {
+        return null
+    }
+    val normalized = sensorDegrees % 360
+    return when {
+        normalized >= 325 || normalized <= 35 -> ActivityInfo.SCREEN_ORIENTATION_PORTRAIT
+        normalized in 50..130 -> ActivityInfo.SCREEN_ORIENTATION_REVERSE_LANDSCAPE
+        normalized in 230..310 -> ActivityInfo.SCREEN_ORIENTATION_LANDSCAPE
+        else -> null
     }
 }
 
@@ -480,6 +560,7 @@ internal fun SignatureLockScreen(
     allowLandscapeLayout: Boolean = true,
     onDismissCelebration: () -> Unit = {}
 ) {
+    val palette = LocalResolveExtendedPalette.current
     val scope = rememberCoroutineScope()
     val haptic = LocalHapticFeedback.current
     var showAllowedAppsSheet by remember { mutableStateOf(false) }
@@ -530,14 +611,13 @@ internal fun SignatureLockScreen(
             .background(
                 Brush.verticalGradient(
                     colors = listOf(
-                        ResolveColors.ForestDeep,
-                        ResolveColors.ForestSecondary,
-                        ResolveColors.ForestDeep
+                        palette.background,
+                        palette.surfaceSecondary,
+                        palette.background
                     )
                 )
             )
             .windowInsetsPadding(WindowInsets.safeDrawing)
-            .padding(horizontal = 20.dp, vertical = 14.dp)
             .then(
                 if (isCompletionCelebration) {
                     Modifier.pointerInput(onDismissCelebration) {
@@ -553,24 +633,27 @@ internal fun SignatureLockScreen(
             lockReminderEnabled &&
             lockReminderText.isNotBlank()
         val mascotStageSize = when {
-            isLandscape && availableHeight < 420.dp -> 118.dp
-            isLandscape -> 142.dp
+            isLandscape && availableHeight < 390.dp -> 110.dp
+            isLandscape -> 134.dp
             compactHeight -> 122.dp
             else -> 184.dp
         }
+        val spotlightFraction by animateOffsetAsState(
+            targetValue = if (isLandscape) Offset(0.26f, 0.52f) else Offset(0.50f, 0.37f),
+            animationSpec = tween(durationMillis = if (reducedMotion) 0 else 320, easing = EaseInOutSine),
+            label = "lock_spotlight_center"
+        )
 
         // Subtle radial ambient glow spotlight behind mascot (no encircling ring)
         Canvas(modifier = Modifier.fillMaxSize()) {
-            val center = if (isLandscape) {
-                Offset(size.width * 0.28f, size.height * 0.48f)
-            } else {
-                Offset(size.width / 2f, size.height * 0.37f)
-            }
+            val center = Offset(
+                size.width * spotlightFraction.x,
+                size.height * spotlightFraction.y
+            )
             drawCircle(
                 brush = Brush.radialGradient(
                     colors = listOf(
-                        ResolveColors.MintAccent.copy(alpha = if (isCompletionCelebration) 0.22f else 0.14f),
-                        ResolveColors.MintSoftContainer.copy(alpha = 0.14f),
+                        palette.accent.copy(alpha = if (isCompletionCelebration) 0.11f else 0.06f),
                         Color.Transparent
                     ),
                     center = center,
@@ -592,141 +675,174 @@ internal fun SignatureLockScreen(
             "Focus Guard"
         }
 
-        if (isLandscape) {
-            // Refined Landscape Lock Screen (both Reminder ON and OFF):
-            // Left column: Mascot slightly upward & centered + Countdown Card compactly paired below it
-            // Right column: Focus Reminder (upper-right when enabled) + vertical Action Buttons Stack
-            Column(
-                modifier = Modifier
-                    .fillMaxSize()
-                    .graphicsLayer {
-                        alpha = entranceAlpha
-                        scaleX = entranceScale
-                        scaleY = entranceScale
-                    }
-                    .testTag(
-                        if (showReminderAnchor) {
-                            "lock_screen_landscape_reminder_on"
-                        } else {
-                            "lock_screen_landscape_reminder_off"
+        AnimatedContent(
+            targetState = isLandscape,
+            modifier = Modifier
+                .fillMaxSize()
+                .padding(
+                    horizontal = if (isLandscape) 22.dp else 20.dp,
+                    vertical = if (isLandscape) 10.dp else 14.dp
+                ),
+            transitionSpec = {
+                val enterTransition = if (reducedMotion) {
+                    fadeIn(animationSpec = tween(durationMillis = 80))
+                } else {
+                    fadeIn(animationSpec = tween(durationMillis = 260, easing = EaseInOutSine)) +
+                        scaleIn(
+                            initialScale = 0.965f,
+                            animationSpec = tween(durationMillis = 260, easing = EaseInOutSine)
+                        )
+                }
+                val exitTransition = if (reducedMotion) {
+                    fadeOut(animationSpec = tween(durationMillis = 80))
+                } else {
+                    fadeOut(animationSpec = tween(durationMillis = 180, easing = EaseInOutSine))
+                }
+                enterTransition togetherWith exitTransition
+            },
+            label = "lock_screen_orientation_transition"
+        ) { landscapeMode ->
+            if (landscapeMode) {
+                // Balanced Two-Column Landscape Layout:
+                // Left Section: Vertically centered Mascot + Focus Countdown Timer
+                // Right Section: 1. Reminder Quote -> 2. Phone -> 3. Allowed Apps & Emergency -> 4. Flip Clock
+                Column(
+                    modifier = Modifier
+                        .fillMaxSize()
+                        .graphicsLayer {
+                            alpha = entranceAlpha
+                            scaleX = entranceScale
+                            scaleY = entranceScale
                         }
-                    ),
-                horizontalAlignment = Alignment.CenterHorizontally,
-                verticalArrangement = Arrangement.spacedBy(8.dp)
-            ) {
-                if (showReminderAnchor) {
+                        .testTag(
+                            if (showReminderAnchor) {
+                                "lock_screen_landscape_reminder_on"
+                            } else {
+                                "lock_screen_landscape_reminder_off"
+                            }
+                        ),
+                    horizontalAlignment = Alignment.CenterHorizontally,
+                    verticalArrangement = Arrangement.spacedBy(6.dp)
+                ) {
                     Row(
                         modifier = Modifier
                             .clip(CircleShape)
-                            .background(ResolveColors.ForestGlass)
-                            .border(1.dp, ResolveColors.ForestBorderGlow.copy(alpha = 0.7f), CircleShape)
-                            .padding(horizontal = 16.dp, vertical = 5.dp)
+                            .background(palette.surfaceSecondary.copy(alpha = 0.96f))
+                            .border(1.dp, palette.cardBorder, CircleShape)
+                            .padding(horizontal = 14.dp, vertical = 5.dp)
                             .testTag("lock_screen_landscape_focus_guard_title"),
                         verticalAlignment = Alignment.CenterVertically,
                         horizontalArrangement = Arrangement.spacedBy(8.dp)
                     ) {
-                        PulsingStatusDot(color = ResolveColors.MintAccent, size = 7.dp)
+                        PulsingStatusDot(
+                            color = if (isCompletionCelebration) palette.success else palette.accent,
+                            size = 7.dp
+                        )
                         Text(
-                            text = tierText,
-                            style = MaterialTheme.typography.titleSmall.copy(
+                            text = if (isCompletionCelebration) {
+                                "SESSION COMPLETED"
+                            } else {
+                                "$modeText  •  $tierText"
+                            },
+                            style = MaterialTheme.typography.labelSmall.copy(
                                 fontWeight = FontWeight.SemiBold,
-                                letterSpacing = 0.9.sp
+                                letterSpacing = 1.0.sp
                             ),
-                            color = ResolveColors.MintBright
+                            color = palette.accentStrong,
+                            maxLines = 1,
+                            overflow = TextOverflow.Ellipsis
                         )
                     }
-                }
 
-                Row(
-                    modifier = Modifier
-                        .weight(1f)
-                        .fillMaxWidth(),
-                    horizontalArrangement = Arrangement.spacedBy(20.dp),
-                    verticalAlignment = Alignment.CenterVertically
-                ) {
-                    // Left Side: Mascot + Countdown Card grouped slightly upward with breathing room above bottom edge
-                    Box(
+                    Row(
                         modifier = Modifier
                             .weight(1f)
-                            .fillMaxSize()
-                            .padding(bottom = 14.dp),
-                        contentAlignment = Alignment.Center
+                            .fillMaxWidth(),
+                        horizontalArrangement = Arrangement.spacedBy(20.dp),
+                        verticalAlignment = Alignment.CenterVertically
                     ) {
-                        Column(
+                        // Left Section: Masked Mascot and Focus Timer, vertically centered with balanced spacing
+                        Box(
                             modifier = Modifier
-                                .fillMaxWidth()
-                                .verticalScroll(rememberScrollState()),
-                            horizontalAlignment = Alignment.CenterHorizontally,
-                            verticalArrangement = Arrangement.spacedBy(8.dp, Alignment.CenterVertically)
+                                .weight(1f)
+                                .fillMaxSize(),
+                            contentAlignment = Alignment.Center
                         ) {
-                            LockScreenMascotStage(
-                                activeMascot = mascotType,
-                                controllerState = mascotControllerState,
-                                reducedMotion = reducedMotion,
-                                isPaused = isAnimationPaused,
-                                mascotStageSize = mascotStageSize
-                            )
-                            LockScreenCountdownCard(
-                                remainingMillis = remainingMillis,
-                                animatedProgress = animatedProgress,
-                                isCompletionCelebration = isCompletionCelebration,
-                                compactHeight = true
-                            )
-                        }
-                    }
-
-                    // Right Side: Upper-right Focus Reminder (when enabled) + Vertical Action Button Stack
-                    Box(
-                        modifier = Modifier
-                            .weight(1f)
-                            .fillMaxSize(),
-                        contentAlignment = Alignment.Center
-                    ) {
-                        Column(
-                            modifier = Modifier
-                                .fillMaxWidth()
-                                .verticalScroll(rememberScrollState()),
-                            horizontalAlignment = Alignment.CenterHorizontally,
-                            verticalArrangement = Arrangement.spacedBy(10.dp, Alignment.CenterVertically)
-                        ) {
-                            if (showReminderAnchor) {
-                                LockScreenReminderAnchor(
-                                    text = lockReminderText,
-                                    style = lockReminderStyle,
+                            Column(
+                                modifier = Modifier
+                                    .fillMaxWidth()
+                                    .verticalScroll(rememberScrollState()),
+                                horizontalAlignment = Alignment.CenterHorizontally,
+                                verticalArrangement = Arrangement.spacedBy(10.dp, Alignment.CenterVertically)
+                            ) {
+                                LockScreenMascotStage(
+                                    activeMascot = mascotType,
+                                    controllerState = mascotControllerState,
+                                    reducedMotion = reducedMotion,
+                                    isPaused = isAnimationPaused,
+                                    mascotStageSize = mascotStageSize
+                                )
+                                LockScreenCountdownCard(
+                                    remainingMillis = remainingMillis,
+                                    animatedProgress = animatedProgress,
+                                    isCompletionCelebration = isCompletionCelebration,
                                     compactHeight = true
                                 )
                             }
+                        }
 
-                            if (!isCompletionCelebration) {
-                                LandscapeVerticalActionButtons(
-                                    allowedAppsCount = allowedApps.size,
-                                    phoneAccessEnabled = phoneAccessEnabled,
-                                    isStrictMode = isStrictMode,
-                                    showFlipClockShortcut = showFlipClockShortcut,
-                                    onOpenAllowedApps = {
-                                        haptic.performHapticFeedback(HapticFeedbackType.TextHandleMove)
-                                        showAllowedAppsSheet = true
-                                    },
-                                    onLaunchPhone = {
-                                        haptic.performHapticFeedback(HapticFeedbackType.LongPress)
-                                        onLaunchPhone()
-                                    },
-                                    onOpenFlipClock = {
-                                        haptic.performHapticFeedback(HapticFeedbackType.TextHandleMove)
-                                        onOpenFlipClock()
-                                    },
-                                    onOpenRecovery = {
-                                        haptic.performHapticFeedback(HapticFeedbackType.TextHandleMove)
-                                        recoveryFeedback = null
-                                        showRecoverySheet = true
-                                    }
-                                )
+                        // Right Section: Reminder Quote -> Phone -> Other Actions -> Flip Clock (when enabled)
+                        Box(
+                            modifier = Modifier
+                                .weight(1f)
+                                .fillMaxSize(),
+                            contentAlignment = Alignment.Center
+                        ) {
+                            Column(
+                                modifier = Modifier
+                                    .fillMaxWidth()
+                                    .verticalScroll(rememberScrollState()),
+                                horizontalAlignment = Alignment.CenterHorizontally,
+                                verticalArrangement = Arrangement.spacedBy(8.dp, Alignment.CenterVertically)
+                            ) {
+                                if (showReminderAnchor) {
+                                    LockScreenReminderAnchor(
+                                        text = lockReminderText,
+                                        style = lockReminderStyle,
+                                        compactHeight = true
+                                    )
+                                }
+
+                                if (!isCompletionCelebration) {
+                                    LandscapeVerticalActionButtons(
+                                        allowedAppsCount = allowedApps.size,
+                                        phoneAccessEnabled = phoneAccessEnabled,
+                                        isStrictMode = isStrictMode,
+                                        showFlipClockShortcut = showFlipClockShortcut,
+                                        onOpenAllowedApps = {
+                                            haptic.performHapticFeedback(HapticFeedbackType.TextHandleMove)
+                                            showAllowedAppsSheet = true
+                                        },
+                                        onLaunchPhone = {
+                                            haptic.performHapticFeedback(HapticFeedbackType.LongPress)
+                                            onLaunchPhone()
+                                        },
+                                        onOpenFlipClock = {
+                                            haptic.performHapticFeedback(HapticFeedbackType.TextHandleMove)
+                                            onOpenFlipClock()
+                                        },
+                                        onOpenRecovery = {
+                                            haptic.performHapticFeedback(HapticFeedbackType.TextHandleMove)
+                                            recoveryFeedback = null
+                                            showRecoverySheet = true
+                                        }
+                                    )
+                                }
                             }
                         }
                     }
                 }
-            }
-        } else {
+            } else {
             // Portrait Layout
             Column(
                 modifier = Modifier
@@ -743,14 +859,14 @@ internal fun SignatureLockScreen(
                             scaleY = entranceScale
                         }
                         .clip(CircleShape)
-                        .background(ResolveColors.ForestGlass)
-                        .border(1.dp, ResolveColors.ForestBorderGlow.copy(alpha = 0.7f), CircleShape)
+                        .background(palette.surfaceSecondary.copy(alpha = 0.96f))
+                        .border(1.dp, palette.cardBorder, CircleShape)
                         .padding(horizontal = 14.dp, vertical = 7.dp),
                     verticalAlignment = Alignment.CenterVertically,
                     horizontalArrangement = Arrangement.spacedBy(8.dp)
                 ) {
                     PulsingStatusDot(
-                        color = if (isCompletionCelebration) ResolveColors.MintBright else ResolveColors.MintAccent,
+                        color = if (isCompletionCelebration) palette.success else palette.accent,
                         size = 7.dp
                     )
                     Text(
@@ -760,7 +876,7 @@ internal fun SignatureLockScreen(
                             "$modeText  •  $tierText"
                         },
                         style = MaterialTheme.typography.labelSmall.copy(letterSpacing = 1.1.sp),
-                        color = ResolveColors.MintBright
+                        color = palette.accentStrong
                     )
                 }
 
@@ -829,8 +945,8 @@ internal fun SignatureLockScreen(
                             }
                             .widthIn(max = 460.dp)
                             .clip(RoundedCornerShape(32.dp))
-                            .background(ResolveColors.ForestGlass)
-                            .border(1.dp, ResolveColors.ForestBorderGlow.copy(alpha = 0.7f), RoundedCornerShape(32.dp))
+                            .background(palette.surfaceSecondary.copy(alpha = 0.96f))
+                            .border(1.dp, palette.cardBorder, RoundedCornerShape(32.dp))
                             .padding(horizontal = 12.dp, vertical = 10.dp),
                         horizontalArrangement = Arrangement.spacedBy(10.dp, Alignment.CenterHorizontally),
                         verticalAlignment = Alignment.CenterVertically
@@ -844,7 +960,8 @@ internal fun SignatureLockScreen(
                                 },
                                 interactionSource = appsInteraction,
                                 shape = CircleShape,
-                                color = ResolveColors.ForestSurfaceElevated,
+                                color = palette.slateTealContainer,
+                                border = BorderStroke(1.dp, palette.slateTeal.copy(alpha = 0.32f)),
                                 modifier = Modifier
                                     .minimumInteractiveComponentSize()
                                     .pressScale(appsInteraction, 0.95f)
@@ -857,14 +974,14 @@ internal fun SignatureLockScreen(
                                     Icon(
                                         imageVector = ResolveIcons.Apps,
                                         contentDescription = "Allowed apps",
-                                        tint = ResolveColors.MintAccent,
+                                        tint = palette.slateTealStrong,
                                         modifier = Modifier.size(19.dp)
                                     )
                                     Spacer(Modifier.width(7.dp))
                                     Text(
                                         text = "${allowedApps.size} Apps",
                                         style = MaterialTheme.typography.labelLarge,
-                                        color = ResolveColors.TextPrimary
+                                        color = palette.textPrimary
                                     )
                                 }
                             }
@@ -879,10 +996,10 @@ internal fun SignatureLockScreen(
                                 },
                                 interactionSource = phoneInteraction,
                                 shape = CircleShape,
-                                color = ResolveColors.MintSoftContainer,
+                                color = palette.primaryButton,
                                 border = BorderStroke(
                                     1.dp,
-                                    ResolveColors.MintAccent.copy(alpha = 0.45f)
+                                    palette.accentStrong.copy(alpha = 0.35f)
                                 ),
                                 modifier = Modifier
                                     .minimumInteractiveComponentSize()
@@ -896,14 +1013,14 @@ internal fun SignatureLockScreen(
                                     Icon(
                                         imageVector = Icons.Outlined.Call,
                                         contentDescription = "Open phone dialer",
-                                        tint = ResolveColors.MintBright,
+                                        tint = palette.onPrimaryButton,
                                         modifier = Modifier.size(20.dp)
                                     )
                                     Spacer(Modifier.width(8.dp))
                                     Text(
                                         text = "Phone",
                                         style = MaterialTheme.typography.labelLarge,
-                                        color = ResolveColors.MintBright
+                                        color = palette.onPrimaryButton
                                     )
                                 }
                             }
@@ -918,13 +1035,14 @@ internal fun SignatureLockScreen(
                                 modifier = Modifier
                                     .size(48.dp)
                                     .clip(CircleShape)
-                                    .background(ResolveColors.ForestSurfaceElevated.copy(alpha = 0.85f))
+                                    .background(palette.champagneContainer)
+                                    .border(1.dp, palette.champagne.copy(alpha = 0.36f), CircleShape)
                                     .testTag("lock_screen_flip_clock_button")
                             ) {
                                 Icon(
                                     imageVector = ResolveIcons.FlipClock,
                                     contentDescription = "Open Flip Clock",
-                                    tint = ResolveColors.MintAccent,
+                                    tint = palette.champagneStrong,
                                     modifier = Modifier.size(20.dp)
                                 )
                             }
@@ -940,13 +1058,14 @@ internal fun SignatureLockScreen(
                                 modifier = Modifier
                                     .size(48.dp)
                                     .clip(CircleShape)
-                                    .background(ResolveColors.ForestSurfaceElevated.copy(alpha = 0.85f))
+                                    .background(palette.controlSurface)
+                                    .border(1.dp, palette.controlBorder, CircleShape)
                                     .testTag("lock_screen_recovery_button")
                             ) {
                                 Icon(
                                     imageVector = ResolveIcons.Key,
                                     contentDescription = "Enter recovery code",
-                                    tint = ResolveColors.TextSecondary,
+                                    tint = palette.textSecondary,
                                     modifier = Modifier.size(20.dp)
                                 )
                             }
@@ -955,12 +1074,13 @@ internal fun SignatureLockScreen(
                 }
             }
         }
+        }
     }
 
     if (showAllowedAppsSheet) {
         ModalBottomSheet(
             onDismissRequest = { showAllowedAppsSheet = false },
-            containerColor = ResolveColors.ForestSecondary
+            containerColor = palette.surfaceSecondary
         ) {
             ProvideSafeTextToolbar {
                 Column(
@@ -973,12 +1093,12 @@ internal fun SignatureLockScreen(
                     Text(
                         text = "Allowed Applications",
                         style = MaterialTheme.typography.titleLarge,
-                        color = ResolveColors.TextPrimary
+                        color = palette.textPrimary
                     )
                     Text(
                         text = "Only these selected apps are accessible while Focus Lock is active.",
                         style = MaterialTheme.typography.bodyMedium,
-                        color = ResolveColors.TextSecondary
+                        color = palette.textSecondary
                     )
                     LazyColumn(verticalArrangement = Arrangement.spacedBy(8.dp)) {
                         if (allowedApps.isEmpty()) {
@@ -986,7 +1106,7 @@ internal fun SignatureLockScreen(
                                 Text(
                                     text = "No extra applications are allowlisted for this focus session.",
                                     style = MaterialTheme.typography.bodyMedium,
-                                    color = ResolveColors.TextSecondary,
+                                    color = palette.textSecondary,
                                     modifier = Modifier.padding(vertical = 8.dp)
                                 )
                             }
@@ -1036,6 +1156,7 @@ private fun AllowedAppLaunchRow(
     loadAppIcon: suspend (String) -> ImageBitmap?,
     onClick: () -> Unit
 ) {
+    val palette = LocalResolveExtendedPalette.current
     var icon by remember(app.packageName) { mutableStateOf<ImageBitmap?>(null) }
     LaunchedEffect(app.packageName) {
         icon = loadAppIcon(app.packageName)
@@ -1045,8 +1166,8 @@ private fun AllowedAppLaunchRow(
         modifier = Modifier
             .fillMaxWidth()
             .clip(RoundedCornerShape(16.dp))
-            .background(ResolveColors.ForestSurface)
-            .border(1.dp, ResolveColors.ForestOutline, RoundedCornerShape(16.dp))
+            .background(palette.cardTop)
+            .border(1.dp, palette.cardBorder, RoundedCornerShape(16.dp))
             .clickable(onClick = onClick)
             .padding(horizontal = 16.dp, vertical = 12.dp),
         verticalAlignment = Alignment.CenterVertically
@@ -1063,7 +1184,7 @@ private fun AllowedAppLaunchRow(
             Icon(
                 imageVector = ResolveIcons.Apps,
                 contentDescription = null,
-                tint = ResolveColors.MintAccent,
+                tint = palette.accentStrong,
                 modifier = Modifier.size(32.dp)
             )
         }
@@ -1071,7 +1192,7 @@ private fun AllowedAppLaunchRow(
         Text(
             text = app.appName,
             style = MaterialTheme.typography.titleMedium,
-            color = ResolveColors.TextPrimary,
+            color = palette.textPrimary,
             maxLines = 1,
             overflow = TextOverflow.Ellipsis
         )
@@ -1092,6 +1213,7 @@ private fun LockScreenReminderAnchor(
     style: LockReminderStyle,
     compactHeight: Boolean
 ) {
+    val palette = LocalResolveExtendedPalette.current
     when (style) {
         LockReminderStyle.SOFT_BOX -> {
             Box(
@@ -1099,10 +1221,10 @@ private fun LockScreenReminderAnchor(
                     .widthIn(max = 290.dp)
                     .fillMaxWidth()
                     .clip(RoundedCornerShape(16.dp))
-                    .background(ResolveColors.ForestSurface.copy(alpha = 0.70f))
+                    .background(palette.surfaceElevated.copy(alpha = 0.85f))
                     .border(
                         1.dp,
-                        ResolveColors.MintAccent.copy(alpha = 0.24f),
+                        palette.cardBorder,
                         RoundedCornerShape(16.dp)
                     )
                     .padding(
@@ -1119,7 +1241,7 @@ private fun LockScreenReminderAnchor(
                         fontWeight = FontWeight.Medium,
                         lineHeight = 18.sp
                     ),
-                    color = ResolveColors.TextPrimary.copy(alpha = 0.94f),
+                    color = palette.textPrimary.copy(alpha = 0.94f),
                     textAlign = TextAlign.Center,
                     maxLines = 3,
                     overflow = TextOverflow.Ellipsis,
@@ -1144,7 +1266,7 @@ private fun LockScreenReminderAnchor(
                         fontWeight = FontWeight.Medium,
                         lineHeight = 18.sp
                     ),
-                    color = ResolveColors.MintBright.copy(alpha = 0.92f),
+                    color = palette.accentStrong.copy(alpha = 0.92f),
                     textAlign = TextAlign.Center,
                     maxLines = 3,
                     overflow = TextOverflow.Ellipsis,
@@ -1162,6 +1284,7 @@ private fun LockScreenCountdownCard(
     isCompletionCelebration: Boolean,
     compactHeight: Boolean
 ) {
+    val palette = LocalResolveExtendedPalette.current
     Column(
         modifier = Modifier
             .widthIn(max = 290.dp)
@@ -1170,14 +1293,14 @@ private fun LockScreenCountdownCard(
             .background(
                 Brush.verticalGradient(
                     colors = listOf(
-                        ResolveColors.ForestSurfaceElevated.copy(alpha = 0.78f),
-                        ResolveColors.ForestSurface.copy(alpha = 0.88f)
+                        palette.surfaceElevated,
+                        palette.cardBottom
                     )
                 )
             )
             .border(
                 1.dp,
-                ResolveColors.MintAccent.copy(alpha = 0.25f),
+                palette.cardBorder,
                 RoundedCornerShape(22.dp)
             )
             .padding(
@@ -1194,7 +1317,7 @@ private fun LockScreenCountdownCard(
             Icon(
                 imageVector = Icons.Outlined.Lock,
                 contentDescription = null,
-                tint = ResolveColors.MintAccent,
+                tint = palette.accentStrong,
                 modifier = Modifier.size(12.dp)
             )
             Text(
@@ -1203,7 +1326,7 @@ private fun LockScreenCountdownCard(
                     fontSize = 10.sp,
                     letterSpacing = 1.4.sp
                 ),
-                color = ResolveColors.TextSecondary
+                color = palette.textSecondary
             )
         }
 
@@ -1212,13 +1335,13 @@ private fun LockScreenCountdownCard(
         Text(
             text = formatCountdownHms(remainingMillis),
             style = MaterialTheme.typography.displayLarge.copy(
-                fontFamily = OutfitTimerFamily,
+                fontFamily = JetBrainsMonoFamily,
                 fontSize = if (compactHeight) 32.sp else 38.sp,
                 fontWeight = FontWeight.Medium,
                 letterSpacing = 1.6.sp,
                 fontFeatureSettings = "tnum"
             ),
-            color = ResolveColors.TextPrimary,
+            color = palette.textPrimary,
             modifier = Modifier.testTag("lock_screen_countdown")
         )
 
@@ -1226,8 +1349,8 @@ private fun LockScreenCountdownCard(
 
         LinearProgressIndicator(
             progress = { animatedProgress },
-            color = ResolveColors.MintAccent,
-            trackColor = ResolveColors.ForestDeep.copy(alpha = 0.85f),
+            color = palette.accentStrong,
+            trackColor = palette.divider,
             strokeCap = StrokeCap.Round,
             modifier = Modifier
                 .fillMaxWidth(0.88f)
@@ -1244,11 +1367,11 @@ private fun LockScreenCountdownCard(
                 "Stay present • Unlocks at zero"
             },
             style = MaterialTheme.typography.labelSmall.copy(
-                fontFamily = OutfitTimerFamily,
+                fontFamily = InterFamily,
                 fontWeight = FontWeight.Normal,
                 letterSpacing = 0.4.sp
             ),
-            color = ResolveColors.TextSecondary.copy(alpha = 0.9f),
+            color = palette.textSecondary.copy(alpha = 0.9f),
             maxLines = 1,
             overflow = TextOverflow.Ellipsis
         )
@@ -1266,50 +1389,52 @@ private fun LandscapeVerticalActionButtons(
     onOpenFlipClock: () -> Unit = {},
     onOpenRecovery: () -> Unit
 ) {
-    val hasAnyButton = allowedAppsCount > 0 || phoneAccessEnabled || !isStrictMode || showFlipClockShortcut
+    val palette = LocalResolveExtendedPalette.current
+    val hasAnyButton = phoneAccessEnabled || allowedAppsCount > 0 || !isStrictMode || showFlipClockShortcut
     if (!hasAnyButton) return
 
     Column(
         modifier = Modifier
-            .widthIn(min = 196.dp, max = 264.dp)
-            .fillMaxWidth(0.88f)
-            .clip(RoundedCornerShape(22.dp))
-            .background(ResolveColors.ForestGlass)
-            .border(1.dp, ResolveColors.ForestBorderGlow.copy(alpha = 0.7f), RoundedCornerShape(22.dp))
-            .padding(10.dp)
+            .widthIn(min = 200.dp, max = 264.dp)
+            .fillMaxWidth(0.90f)
+            .clip(RoundedCornerShape(20.dp))
+            .background(palette.surfaceSecondary.copy(alpha = 0.96f))
+            .border(1.dp, palette.cardBorder, RoundedCornerShape(20.dp))
+            .padding(horizontal = 10.dp, vertical = 8.dp)
             .testTag("lock_screen_landscape_action_stack"),
-        verticalArrangement = Arrangement.spacedBy(8.dp),
+        verticalArrangement = Arrangement.spacedBy(6.dp),
         horizontalAlignment = Alignment.CenterHorizontally
     ) {
-        // 1. Allowed Apps
-        if (allowedAppsCount > 0) {
-            val appsInteraction = remember { MutableInteractionSource() }
+        // 1. Phone Icon & Call Action
+        if (phoneAccessEnabled) {
+            val phoneInteraction = remember { MutableInteractionSource() }
             Surface(
-                onClick = onOpenAllowedApps,
-                interactionSource = appsInteraction,
-                shape = RoundedCornerShape(14.dp),
-                color = ResolveColors.ForestSurfaceElevated,
+                onClick = onLaunchPhone,
+                interactionSource = phoneInteraction,
+                shape = RoundedCornerShape(13.dp),
+                color = palette.primaryButton,
+                border = BorderStroke(1.dp, palette.accentStrong.copy(alpha = 0.35f)),
                 modifier = Modifier
                     .fillMaxWidth()
-                    .minimumInteractiveComponentSize()
-                    .pressScale(appsInteraction, 0.96f)
-                    .testTag("lock_screen_allowed_apps_button")
+                    .heightIn(min = 48.dp)
+                    .pressScale(phoneInteraction, 0.96f)
+                    .testTag("lock_screen_phone_button")
             ) {
                 Row(
-                    modifier = Modifier.padding(horizontal = 14.dp, vertical = 12.dp),
+                    modifier = Modifier.padding(horizontal = 14.dp, vertical = 10.dp),
                     verticalAlignment = Alignment.CenterVertically,
                     horizontalArrangement = Arrangement.spacedBy(10.dp)
                 ) {
                     Icon(
-                        imageVector = ResolveIcons.Apps,
-                        contentDescription = "Allowed Apps",
-                        tint = ResolveColors.MintAccent,
+                        imageVector = Icons.Outlined.Call,
+                        contentDescription = "Phone Call",
+                        tint = palette.onPrimaryButton,
                         modifier = Modifier.size(18.dp)
                     )
                     Text(
-                        text = "Allowed Apps ($allowedAppsCount)",
+                        text = "Phone Call",
                         style = MaterialTheme.typography.labelLarge,
-                        color = ResolveColors.TextPrimary,
+                        color = palette.onPrimaryButton,
                         maxLines = 1,
                         overflow = TextOverflow.Ellipsis
                     )
@@ -1317,108 +1442,111 @@ private fun LandscapeVerticalActionButtons(
             }
         }
 
-        // 2. Phone Call
-        if (phoneAccessEnabled) {
-            val phoneInteraction = remember { MutableInteractionSource() }
+        // 2. Other Action Icons: Allowed Apps & Emergency
+        if (allowedAppsCount > 0) {
+            val appsInteraction = remember { MutableInteractionSource() }
             Surface(
-                onClick = onLaunchPhone,
-                interactionSource = phoneInteraction,
-                shape = RoundedCornerShape(14.dp),
-                color = ResolveColors.MintSoftContainer,
-                border = BorderStroke(1.dp, ResolveColors.MintAccent.copy(alpha = 0.45f)),
+                onClick = onOpenAllowedApps,
+                interactionSource = appsInteraction,
+                shape = RoundedCornerShape(13.dp),
+                color = palette.slateTealContainer,
+                border = BorderStroke(1.dp, palette.slateTeal.copy(alpha = 0.30f)),
                 modifier = Modifier
                     .fillMaxWidth()
-                    .minimumInteractiveComponentSize()
-                    .pressScale(phoneInteraction, 0.96f)
-                    .testTag("lock_screen_phone_button")
+                    .heightIn(min = 48.dp)
+                    .pressScale(appsInteraction, 0.96f)
+                    .testTag("lock_screen_allowed_apps_button")
             ) {
                 Row(
-                    modifier = Modifier.padding(horizontal = 14.dp, vertical = 12.dp),
+                    modifier = Modifier.padding(horizontal = 14.dp, vertical = 10.dp),
                     verticalAlignment = Alignment.CenterVertically,
                     horizontalArrangement = Arrangement.spacedBy(10.dp)
                 ) {
                     Icon(
-                        imageVector = Icons.Outlined.Call,
-                        contentDescription = "Phone Call",
-                        tint = ResolveColors.MintBright,
+                        imageVector = ResolveIcons.Apps,
+                        contentDescription = "Allowed Apps",
+                        tint = palette.slateTealStrong,
                         modifier = Modifier.size(18.dp)
                     )
                     Text(
-                        text = "Phone Call",
+                        text = "Allowed Apps ($allowedAppsCount)",
                         style = MaterialTheme.typography.labelLarge,
-                        color = ResolveColors.MintBright,
-                        maxLines = 1
+                        color = palette.textPrimary,
+                        maxLines = 1,
+                        overflow = TextOverflow.Ellipsis
                     )
                 }
             }
         }
 
-        // 3. Emergency
         if (!isStrictMode) {
             val recoveryInteraction = remember { MutableInteractionSource() }
             Surface(
                 onClick = onOpenRecovery,
                 interactionSource = recoveryInteraction,
-                shape = RoundedCornerShape(14.dp),
-                color = ResolveColors.ForestSurfaceElevated,
+                shape = RoundedCornerShape(13.dp),
+                color = palette.controlSurface,
+                border = BorderStroke(1.dp, palette.controlBorder),
                 modifier = Modifier
                     .fillMaxWidth()
-                    .minimumInteractiveComponentSize()
+                    .heightIn(min = 48.dp)
                     .pressScale(recoveryInteraction, 0.96f)
                     .testTag("lock_screen_recovery_button")
             ) {
                 Row(
-                    modifier = Modifier.padding(horizontal = 14.dp, vertical = 12.dp),
+                    modifier = Modifier.padding(horizontal = 14.dp, vertical = 10.dp),
                     verticalAlignment = Alignment.CenterVertically,
                     horizontalArrangement = Arrangement.spacedBy(10.dp)
                 ) {
                     Icon(
                         imageVector = ResolveIcons.Key,
                         contentDescription = "Emergency",
-                        tint = ResolveColors.TextSecondary,
+                        tint = palette.textSecondary,
                         modifier = Modifier.size(18.dp)
                     )
                     Text(
                         text = "Emergency",
                         style = MaterialTheme.typography.labelLarge,
-                        color = ResolveColors.TextPrimary,
-                        maxLines = 1
+                        color = palette.textPrimary,
+                        maxLines = 1,
+                        overflow = TextOverflow.Ellipsis
                     )
                 }
             }
         }
 
-        // 4. Flip Clock (conditional, icon + text label)
+        // 3. Flip Clock Icon (only when Flip Clock is enabled)
         if (showFlipClockShortcut) {
             val flipInteraction = remember { MutableInteractionSource() }
             Surface(
                 onClick = onOpenFlipClock,
                 interactionSource = flipInteraction,
-                shape = RoundedCornerShape(14.dp),
-                color = ResolveColors.ForestSurfaceElevated,
-                border = BorderStroke(1.dp, ResolveColors.MintAccent.copy(alpha = 0.30f)),
+                shape = RoundedCornerShape(13.dp),
+                color = palette.champagneContainer,
+                border = BorderStroke(1.dp, palette.champagne.copy(alpha = 0.36f)),
                 modifier = Modifier
                     .fillMaxWidth()
-                    .minimumInteractiveComponentSize()
+                    .heightIn(min = 48.dp)
                     .pressScale(flipInteraction, 0.96f)
                     .testTag("lock_screen_flip_clock_button")
             ) {
                 Row(
-                    modifier = Modifier.padding(horizontal = 14.dp, vertical = 12.dp),
+                    modifier = Modifier.padding(horizontal = 14.dp, vertical = 10.dp),
                     verticalAlignment = Alignment.CenterVertically,
                     horizontalArrangement = Arrangement.spacedBy(10.dp)
                 ) {
                     Icon(
                         imageVector = ResolveIcons.FlipClock,
                         contentDescription = "Open Flip Clock",
-                        tint = ResolveColors.MintAccent,
+                        tint = palette.champagneStrong,
                         modifier = Modifier.size(18.dp)
                     )
                     Text(
                         text = "Flip Clock",
                         style = MaterialTheme.typography.labelLarge,
-                        color = ResolveColors.MintBright,
-                        maxLines = 1
+                        color = palette.champagneStrong,
+                        maxLines = 1,
+                        overflow = TextOverflow.Ellipsis
                     )
                 }
             }

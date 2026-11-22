@@ -92,7 +92,7 @@ fun AllowedAppsPickerSheet(
     ModalBottomSheet(
         onDismissRequest = onDismiss,
         sheetState = sheetState,
-        containerColor = palette.cardBottom
+        containerColor = palette.surfaceSecondary
     ) {
         ProvideSafeTextToolbar {
             CleanupTextInteractionsOnDispose()
@@ -128,7 +128,7 @@ fun AllowedAppsPickerSheet(
                             onClick = { selectedPackages = emptySet() },
                             modifier = Modifier.testTag("clear_allowed_apps_button")
                         ) {
-                            Text("Clear", color = palette.accent)
+                            Text("Clear", color = palette.accentStrong)
                         }
                     }
                 }
@@ -243,8 +243,8 @@ fun AllowedAppsPickerSheet(
                         onSaveSelection(selectedPackages)
                     },
                     colors = ButtonDefaults.buttonColors(
-                        containerColor = palette.accent,
-                        contentColor = palette.onAccent
+                        containerColor = palette.primaryButton,
+                        contentColor = palette.onPrimaryButton
                     ),
                     shape = RoundedCornerShape(16.dp),
                     modifier = Modifier
@@ -344,8 +344,13 @@ private fun AppPickerRow(
             .fillMaxWidth()
             .clip(RoundedCornerShape(16.dp))
             .background(
-                if (isSelected) palette.accentSoftContainer.copy(alpha = 0.72f)
-                else palette.background.copy(alpha = 0.65f)
+                if (isSelected) palette.surfaceElevated
+                else palette.cardBottom
+            )
+            .border(
+                width = 1.dp,
+                color = if (isSelected) palette.accentSecondary.copy(alpha = 0.45f) else palette.cardBorder,
+                shape = RoundedCornerShape(16.dp)
             )
             .clickable(onClick = onToggle)
             .padding(horizontal = 14.dp, vertical = 12.dp)
@@ -400,7 +405,7 @@ private fun AppPickerRow(
         Icon(
             imageVector = if (isSelected) Icons.Outlined.CheckCircle else ResolveIcons.RadioButtonUnchecked,
             contentDescription = if (isSelected) "Selected" else "Not selected",
-            tint = if (isSelected) palette.accent else palette.textMuted
+            tint = if (isSelected) palette.success else palette.textMuted
         )
     }
 }

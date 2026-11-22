@@ -18,12 +18,12 @@ import androidx.compose.ui.unit.dp
 /**
  * Refined Pure-Flat geometric RESOLVE Focus Symbol drawn natively via Compose Canvas:
  * - Symmetrical open geometric Focus Ring with architectural upper-right break (-26° to -64°, sweep 322°)
- * - Crisp flat negative space and central refined Mint Focus Dot
+ * - Crisp flat negative space and central Dark Teal Green Focus Dot
  * - Pure flat aesthetic: zero gradients, shadows, 3D depth, or glow artifacts.
- * Matches ic_launcher_foreground.xml, ic_resolve_splash.xml, and resolve_logo_master.svg 1:1.
+ * Matches ic_launcher_foreground.xml and ic_resolve_splash.xml 1:1.
  */
-private val RefinedFlatRingMint = Color(0xFF6EDCB0)
-private val RefinedFlatDotMint = Color(0xFFA5F2D2)
+private val RefinedFlatRingLight = Color(0xFFF2F5F1)
+private val RefinedFlatDotTeal = Color(0xFF176B5B)
 
 @Composable
 fun FocusSymbolMark(
@@ -54,7 +54,7 @@ fun FocusSymbolMark(
         if (clampedRingProgress > 0.005f && clampedRingAlpha > 0.005f) {
             val totalSweep = 322f
             drawArc(
-                color = RefinedFlatRingMint.copy(alpha = clampedRingAlpha),
+                color = RefinedFlatRingLight.copy(alpha = clampedRingAlpha),
                 startAngle = -26f,
                 sweepAngle = totalSweep * clampedRingProgress,
                 useCenter = false,
@@ -67,7 +67,7 @@ fun FocusSymbolMark(
         val clampedDotAlpha = dotAlpha.coerceIn(0f, 1f)
         if (clampedDotAlpha > 0.005f) {
             drawCircle(
-                color = RefinedFlatDotMint.copy(alpha = clampedDotAlpha),
+                color = RefinedFlatDotTeal.copy(alpha = clampedDotAlpha),
                 radius = dotRadius,
                 center = center
             )

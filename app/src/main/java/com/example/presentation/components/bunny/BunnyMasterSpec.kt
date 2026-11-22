@@ -32,10 +32,10 @@ object BunnyMasterSpec {
     val DetailCocoaSoft = Color(0xFF5A4743)
     val EyeIrisWarm = Color(0xFF4F3B36)
 
-    val WallForestGreen = Color(0xFF10251F)
-    val WallShadow = Color(0xFF091612)
-    val WallBevel = Color(0xFF214237)
-    val MintAccent = Color(0xFF75DDB5)
+    val WallForestGreen = Color(0xFF0E1A15)
+    val WallShadow = Color(0xFF07110D)
+    val WallBevel = Color(0xFF1E3027)
+    val MintAccent = Color(0xFF176B5B)
 
     // Master normalized proportions (1.0 x 1.0 square viewport)
     const val CENTER_X = 0.50f

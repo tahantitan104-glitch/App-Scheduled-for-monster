@@ -1,5 +1,7 @@
 package com.example.flipclock
 
+import android.os.SystemClock
+import android.text.format.DateFormat
 import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.animation.fadeIn
 import androidx.compose.animation.fadeOut
@@ -14,11 +16,12 @@ import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.BoxWithConstraints
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.ExperimentalLayoutApi
+import androidx.compose.foundation.layout.FlowRow
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.WindowInsets
-import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
@@ -55,6 +58,7 @@ import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableFloatStateOf
+import androidx.compose.runtime.mutableLongStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
@@ -69,6 +73,7 @@ import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.input.pointer.PointerEventPass
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.input.pointer.positionChanged
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.text.font.FontWeight
@@ -79,7 +84,7 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.min
 import androidx.compose.ui.unit.sp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
-import com.example.designsystem.OutfitTimerFamily
+import com.example.designsystem.FlipClockDisplayFamily
 import com.example.designsystem.ResolveColors
 import com.example.domain.model.FlipClockPage
 import com.example.domain.model.FlipClockSettings
@@ -108,7 +113,8 @@ fun FlipClockScreen(
     onRequestTimerStartWithNotificationCheck: () -> Unit,
     onOpenAppNotificationSettings: () -> Unit,
     onExit: () -> Unit,
-    modifier: Modifier = Modifier
+    modifier: Modifier = Modifier,
+    onSleepTimerExpired: () -> Unit = onExit
 ) {
     val scope = rememberCoroutineScope()
     val settings by manager.settings.collectAsStateWithLifecycle()
@@ -162,8 +168,13 @@ fun FlipClockScreen(
         }
     }
 
+    val context = LocalContext.current
+    val tickerAudioPlayer = remember(context) { FlipTickerAudioPlayer(context) }
+
     // Real system clock tick for Clock page
     var currentDateTime by remember { mutableStateOf(ZonedDateTime.now()) }
+    var didEmitInitialClockSample by remember { mutableStateOf(false) }
+
     LaunchedEffect(Unit) {
         while (true) {
             currentDateTime = ZonedDateTime.ofInstant(
@@ -173,6 +184,76 @@ fun FlipClockScreen(
             val msIntoSecond = System.currentTimeMillis() % 1000L
             delay((1000L - msIntoSecond).coerceIn(100L, 1000L))
         }
+    }
+
+    // Play subtle mechanical tick sound on Clock second change when enabled
+    LaunchedEffect(currentDateTime.second, settings.clockTickerSoundEnabled, pagerState.currentPage) {
+        if (!didEmitInitialClockSample) {
+            didEmitInitialClockSample = true
+        } else if (settings.clockTickerSoundEnabled &&
+            pagerState.currentPage == FlipClockPage.CLOCK.ordinal
+        ) {
+            tickerAudioPlayer.playTickIfPermitted()
+        }
+    }
+
+    // Sleep timer countdown (local to active Flip Clock session)
+    var sleepDeadlineElapsedMs by remember(settings.sleepTimerMinutes) {
+        mutableStateOf(
+            if (settings.sleepTimerMinutes > 0) {
+                SystemClock.elapsedRealtime() + settings.sleepTimerMinutes * 60_000L
+            } else {
+                null
+            }
+        )
+    }
+    var sleepRemainingSeconds by remember { mutableLongStateOf(0L) }
+    LaunchedEffect(sleepDeadlineElapsedMs) {
+        val deadline = sleepDeadlineElapsedMs
+        if (deadline == null) {
+            sleepRemainingSeconds = 0L
+            return@LaunchedEffect
+        }
+        while (true) {
+            val remMs = deadline - SystemClock.elapsedRealtime()
+            if (remMs <= 0L) {
+                sleepRemainingSeconds = 0L
+                manager.setSleepTimerMinutes(0)
+                onSleepTimerExpired()
+                break
+            }
+            sleepRemainingSeconds = ((remMs + 999L) / 1000L).coerceAtLeast(1L)
+            delay(1_000L)
+        }
+    }
+
+    // Telemetry state for Battery, Upcoming Alarm, and optional Open-Meteo Weather
+    val isSystem24Hour = DateFormat.is24HourFormat(context)
+    val effective24Hour = if (settings.useSystemTimeFormat) isSystem24Hour else settings.use24HourFormat
+    var batteryLabel by remember { mutableStateOf<String?>(null) }
+    var alarmLabel by remember { mutableStateOf<String?>(null) }
+    var weatherState by remember { mutableStateOf<FlipWeatherResult>(FlipWeatherResult.NeedsCity) }
+
+    LaunchedEffect(settings.showBattery, settings.showUpcomingAlarm, effective24Hour, currentDateTime.minute) {
+        batteryLabel = if (settings.showBattery) {
+            FlipClockTelemetry.readBattery(context)?.formatLabel()
+        } else null
+        alarmLabel = if (settings.showUpcomingAlarm) {
+            FlipClockTelemetry.readUpcomingAlarmLabel(context, effective24Hour) ?: "No alarm"
+        } else null
+    }
+
+    LaunchedEffect(settings.showWeather, settings.weatherLocationQuery) {
+        if (!settings.showWeather) {
+            weatherState = FlipWeatherResult.NeedsCity
+            return@LaunchedEffect
+        }
+        if (settings.weatherLocationQuery.isBlank()) {
+            weatherState = FlipWeatherResult.NeedsCity
+            return@LaunchedEffect
+        }
+        weatherState = FlipWeatherResult.Loading
+        weatherState = FlipWeatherRepository.fetchWeather(settings.weatherLocationQuery)
     }
 
     val latestControlsVisible by rememberUpdatedState(controlsVisible)
@@ -296,6 +377,7 @@ fun FlipClockScreen(
                         timerState = timerState,
                         remainingMs = timerRemainingMs,
                         finishedBannerVisible = timerFinishedBannerVisible,
+                        showFlipAxis = settings.showFlipAxis,
                         zoomFraction = liveZoomFraction,
                         controlsVisible = controlsVisible,
                         onTapDisplayToggle = {
@@ -340,6 +422,11 @@ fun FlipClockScreen(
                     FlipClockFacePage(
                         dateTime = currentDateTime,
                         settings = settings,
+                        effective24Hour = effective24Hour,
+                        batteryLabel = batteryLabel,
+                        alarmLabel = alarmLabel,
+                        weatherResult = weatherState,
+                        sleepRemainingSeconds = sleepRemainingSeconds,
                         zoomFraction = liveZoomFraction
                     )
                 }
@@ -348,6 +435,7 @@ fun FlipClockScreen(
                     FlipStopwatchPage(
                         stopwatchState = stopwatchState,
                         elapsedMs = stopwatchElapsedMs,
+                        showFlipAxis = settings.showFlipAxis,
                         zoomFraction = liveZoomFraction,
                         controlsVisible = controlsVisible,
                         onToggleDisplay = {
@@ -460,7 +548,7 @@ fun FlipClockScreen(
                 Row(
                     modifier = Modifier
                         .clip(CircleShape)
-                        .background(FlipClockPalette.PanelDark.copy(alpha = 0.88f))
+                        .background(FlipClockPalette.PanelDark.copy(alpha = 0.92f))
                         .border(1.dp, FlipClockPalette.PanelOutline, CircleShape)
                         .padding(3.dp),
                     horizontalArrangement = Arrangement.spacedBy(2.dp)
@@ -471,7 +559,7 @@ fun FlipClockScreen(
                             modifier = Modifier
                                 .clip(CircleShape)
                                 .background(
-                                    if (selected) FlipClockPalette.PanelElevated else Color.Transparent
+                                    if (selected) FlipClockPalette.PrimaryCta else Color.Transparent
                                 )
                                 .clickable {
                                     interactionPulse++
@@ -486,8 +574,10 @@ fun FlipClockScreen(
                                     FlipClockPage.CLOCK -> "Clock"
                                     FlipClockPage.STOPWATCH -> "Stopwatch"
                                 },
-                                style = MaterialTheme.typography.labelMedium,
-                                color = if (selected) FlipClockPalette.AccentSoft else FlipClockPalette.SubTextGrey
+                                style = MaterialTheme.typography.labelMedium.copy(
+                                    fontWeight = if (selected) FontWeight.SemiBold else FontWeight.Medium
+                                ),
+                                color = if (selected) FlipClockPalette.PrimaryCtaText else FlipClockPalette.SubTextGrey
                             )
                         }
                     }
@@ -522,9 +612,22 @@ fun FlipClockScreen(
                 showSettingsSheet = false
                 interactionPulse++
             },
+            onSetUseSystemTimeFormat = { enabled -> scope.launch { manager.setUseSystemTimeFormat(enabled) } },
             onSetUse24Hour = { enabled -> scope.launch { manager.setUse24HourFormat(enabled) } },
-            onSetKeepScreenAwake = { enabled -> scope.launch { manager.setKeepScreenAwake(enabled) } },
+            onSetHourLeadingZero = { enabled -> scope.launch { manager.setHourLeadingZero(enabled) } },
+            onSetDateFormatPattern = { pattern -> scope.launch { manager.setDateFormatPattern(pattern) } },
+            onSetShowFlipAxis = { enabled -> scope.launch { manager.setShowFlipAxis(enabled) } },
+            onSetShowSeconds = { enabled -> scope.launch { manager.setShowSeconds(enabled) } },
+            onSetShowWeekday = { enabled -> scope.launch { manager.setShowWeekday(enabled) } },
             onSetShowDate = { enabled -> scope.launch { manager.setShowDate(enabled) } },
+            onSetShowBattery = { enabled -> scope.launch { manager.setShowBattery(enabled) } },
+            onSetShowUpcomingAlarm = { enabled -> scope.launch { manager.setShowUpcomingAlarm(enabled) } },
+            onSetShowWeather = { enabled -> scope.launch { manager.setShowWeather(enabled) } },
+            onSetWeatherLocationQuery = { query -> scope.launch { manager.setWeatherLocationQuery(query) } },
+            onSetSleepTimerMinutes = { mins -> scope.launch { manager.setSleepTimerMinutes(mins) } },
+            onSetClockTickerSound = { enabled -> scope.launch { manager.setClockTickerSoundEnabled(enabled) } },
+            onSetCustomTag = { tag -> scope.launch { manager.setCustomTag(tag) } },
+            onSetKeepScreenAwake = { enabled -> scope.launch { manager.setKeepScreenAwake(enabled) } },
             onSetAutoRepeat = { enabled -> scope.launch { manager.setAutoRepeat(enabled) } },
             onResetZoom = { scope.launch { manager.resetZoom() } },
             onSavePreset = { presetId, name, totalSeconds ->
@@ -577,8 +680,8 @@ fun FlipClockScreen(
                         scope.launch { manager.resetTimer() }
                     },
                     colors = ButtonDefaults.buttonColors(
-                        containerColor = ResolveColors.MintSoftContainer,
-                        contentColor = ResolveColors.MintBright
+                        containerColor = FlipClockPalette.PrimaryCta,
+                        contentColor = FlipClockPalette.PrimaryCtaText
                     ),
                     modifier = Modifier.testTag("flip_timer_reset_confirm_btn")
                 ) {
@@ -611,8 +714,8 @@ fun FlipClockScreen(
                         scope.launch { manager.selectTimerPreset(chosen) }
                     },
                     colors = ButtonDefaults.buttonColors(
-                        containerColor = ResolveColors.MintSoftContainer,
-                        contentColor = ResolveColors.MintBright
+                        containerColor = FlipClockPalette.PrimaryCta,
+                        contentColor = FlipClockPalette.PrimaryCtaText
                     ),
                     modifier = Modifier.testTag("flip_timer_switch_confirm_btn")
                 ) {
@@ -628,28 +731,66 @@ fun FlipClockScreen(
     }
 }
 
+@OptIn(ExperimentalLayoutApi::class)
 @Composable
 private fun FlipClockFacePage(
     dateTime: ZonedDateTime,
     settings: FlipClockSettings,
+    effective24Hour: Boolean,
+    batteryLabel: String?,
+    alarmLabel: String?,
+    weatherResult: FlipWeatherResult,
+    sleepRemainingSeconds: Long,
     zoomFraction: Float
 ) {
-    val hourValue = if (settings.use24HourFormat) {
-        "%02d".format(dateTime.hour)
+    val rawHour = if (effective24Hour) {
+        dateTime.hour
     } else {
         val h12 = dateTime.hour % 12
-        "%02d".format(if (h12 == 0) 12 else h12)
+        if (h12 == 0) 12 else h12
+    }
+    val hourValue = if (settings.hourLeadingZero || effective24Hour) {
+        "%02d".format(rawHour)
+    } else {
+        "%d".format(rawHour)
     }
     val minuteValue = "%02d".format(dateTime.minute)
     val secondValue = "%02d".format(dateTime.second)
     val amPmText = if (dateTime.hour < 12) "AM" else "PM"
-    val dateLineText = remember(dateTime.toLocalDate()) {
-        dateTime.format(DateTimeFormatter.ofPattern("EEE, MMM d", Locale.getDefault())).uppercase(Locale.getDefault())
+    val weekdayText = remember(dateTime.toLocalDate()) {
+        dateTime.format(DateTimeFormatter.ofPattern("EEEE", Locale.getDefault()))
+    }
+    val dateLineText = remember(dateTime.toLocalDate(), settings.dateFormatPattern) {
+        val fmt = settings.resolvedDateFormat.pattern
+        runCatching {
+            dateTime.format(DateTimeFormatter.ofPattern(fmt, Locale.getDefault()))
+        }.getOrElse {
+            dateTime.format(DateTimeFormatter.ofPattern("dd/MM/yy", Locale.getDefault()))
+        }
+    }
+
+    val statusItems = buildList {
+        if (settings.customTag.isNotBlank()) add(settings.customTag.trim())
+        if (settings.showBattery && !batteryLabel.isNullOrBlank()) add(batteryLabel)
+        if (settings.showUpcomingAlarm && !alarmLabel.isNullOrBlank()) add(alarmLabel)
+        if (settings.showWeather) {
+            when (weatherResult) {
+                FlipWeatherResult.NeedsCity -> add("Weather: Set city")
+                FlipWeatherResult.Loading -> add("Weather...")
+                is FlipWeatherResult.Ready -> add(weatherResult.formatLabel())
+                FlipWeatherResult.Unavailable -> add("Weather offline")
+            }
+        }
+        if (sleepRemainingSeconds > 0L) {
+            val mins = ((sleepRemainingSeconds + 59L) / 60L).coerceAtLeast(1L)
+            add("Sleep ${mins}m")
+        }
     }
 
     BoxWithConstraints(
         modifier = Modifier
             .fillMaxSize()
+            .background(FlipClockPalette.CanvasBlack)
             .testTag("flip_clock_face_page"),
         contentAlignment = Alignment.Center
     ) {
@@ -660,9 +801,10 @@ private fun FlipClockFacePage(
         )
 
         if (isLandscape) {
-            val baseHeight = min(maxHeight * 0.62f, maxWidth * 0.34f).coerceIn(130.dp, 260.dp)
-            val baseWidth = (baseHeight * 0.92f).coerceAtLeast(130.dp)
-            val digitFontSize = (baseHeight.value * 0.56f).sp
+            val baseHeight = min(maxHeight * 0.64f, maxWidth * 0.34f).coerceIn(132.dp, 256.dp)
+            val minuteWidth = (baseHeight * 1.20f).coerceAtLeast(164.dp)
+            val hourWidth = (baseHeight * (if (hourValue.length > 1) 1.20f else 0.78f)).coerceAtLeast(116.dp)
+            val digitFontSize = (baseHeight.value * 0.85f).sp
 
             Column(
                 modifier = Modifier
@@ -672,87 +814,109 @@ private fun FlipClockFacePage(
                     }
                     .testTag("flip_clock_landscape_cluster"),
                 horizontalAlignment = Alignment.CenterHorizontally,
-                verticalArrangement = Arrangement.spacedBy(8.dp)
+                verticalArrangement = Arrangement.spacedBy(10.dp)
             ) {
-                if (settings.showDate) {
-                    Text(
-                        text = dateLineText,
-                        style = MaterialTheme.typography.labelLarge.copy(
-                            letterSpacing = 1.8.sp,
-                            fontWeight = FontWeight.Medium
-                        ),
-                        color = FlipClockPalette.SubTextGrey,
-                        modifier = Modifier.testTag("flip_clock_date_text")
-                    )
-                }
-
                 Row(
-                    verticalAlignment = Alignment.Top,
-                    horizontalArrangement = Arrangement.spacedBy(14.dp)
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.spacedBy(28.dp)
                 ) {
-                    Column(horizontalAlignment = Alignment.CenterHorizontally) {
-                        SplitFlipCard(
-                            value = hourValue,
-                            cardWidth = baseWidth,
-                            cardHeight = baseHeight,
-                            fontSize = digitFontSize,
-                            modifier = Modifier.testTag("flip_clock_hour_card")
-                        )
-                        if (!settings.use24HourFormat) {
-                            Spacer(Modifier.height(6.dp))
-                            Text(
-                                text = amPmText,
-                                style = MaterialTheme.typography.labelLarge.copy(
-                                    fontFamily = OutfitTimerFamily,
-                                    letterSpacing = 1.4.sp
-                                ),
-                                color = FlipClockPalette.SubTextGrey,
-                                modifier = Modifier.testTag("flip_clock_ampm_label")
-                            )
-                        }
-                    }
-
-                    // Static non-blinking colon
-                    Box(
-                        modifier = Modifier.height(baseHeight),
-                        contentAlignment = Alignment.Center
+                    // Left block: Date top-right, Hour center, AM/PM bottom-left
+                    Column(
+                        modifier = Modifier.width(hourWidth),
+                        horizontalAlignment = Alignment.CenterHorizontally
                     ) {
                         Text(
-                            text = ":",
-                            fontFamily = OutfitTimerFamily,
-                            fontWeight = FontWeight.Bold,
+                            text = if (settings.showDate) dateLineText else " ",
+                            style = MaterialTheme.typography.titleSmall.copy(
+                                fontFamily = FlipClockDisplayFamily,
+                                fontWeight = FontWeight.SemiBold,
+                                letterSpacing = 0.6.sp
+                            ),
+                            color = if (settings.showDate) FlipClockPalette.SubTextGrey else Color.Transparent,
+                            modifier = Modifier
+                                .align(Alignment.End)
+                                .padding(bottom = 4.dp)
+                                .let { if (settings.showDate) it.testTag("flip_clock_date_text") else it }
+                        )
+
+                        SplitFlipCard(
+                            value = hourValue,
+                            cardWidth = hourWidth,
+                            cardHeight = baseHeight,
                             fontSize = digitFontSize,
-                            color = FlipClockPalette.SubTextGrey,
-                            modifier = Modifier.testTag("flip_clock_colon")
+                            showFlipAxis = settings.showFlipAxis,
+                            modifier = Modifier.testTag("flip_clock_hour_card")
+                        )
+
+                        Text(
+                            text = if (!effective24Hour) amPmText else " ",
+                            style = MaterialTheme.typography.titleMedium.copy(
+                                fontFamily = FlipClockDisplayFamily,
+                                fontWeight = FontWeight.SemiBold,
+                                letterSpacing = 0.8.sp
+                            ),
+                            color = if (!effective24Hour) FlipClockPalette.SubTextGrey else Color.Transparent,
+                            modifier = Modifier
+                                .align(Alignment.Start)
+                                .padding(start = 6.dp, top = 4.dp)
+                                .let { if (!effective24Hour) it.testTag("flip_clock_ampm_label") else it }
                         )
                     }
 
-                    Column(horizontalAlignment = Alignment.CenterHorizontally) {
+                    // Right block: Weekday top-center, Minute center, Seconds bottom-right
+                    Column(
+                        modifier = Modifier.width(minuteWidth),
+                        horizontalAlignment = Alignment.CenterHorizontally
+                    ) {
+                        Text(
+                            text = if (settings.showWeekday) weekdayText else " ",
+                            style = MaterialTheme.typography.titleSmall.copy(
+                                fontFamily = FlipClockDisplayFamily,
+                                fontWeight = FontWeight.SemiBold,
+                                letterSpacing = 0.5.sp
+                            ),
+                            color = if (settings.showWeekday) FlipClockPalette.SubTextGrey else Color.Transparent,
+                            modifier = Modifier
+                                .align(Alignment.CenterHorizontally)
+                                .padding(bottom = 4.dp)
+                                .let { if (settings.showWeekday) it.testTag("flip_clock_weekday_label") else it }
+                        )
+
                         SplitFlipCard(
                             value = minuteValue,
-                            cardWidth = baseWidth,
+                            cardWidth = minuteWidth,
                             cardHeight = baseHeight,
                             fontSize = digitFontSize,
+                            showFlipAxis = settings.showFlipAxis,
                             modifier = Modifier.testTag("flip_clock_minute_card")
                         )
-                        Spacer(Modifier.height(6.dp))
+
                         Text(
-                            text = secondValue,
+                            text = if (settings.showSeconds) secondValue else " ",
                             style = MaterialTheme.typography.titleMedium.copy(
-                                fontFamily = OutfitTimerFamily,
-                                letterSpacing = 1.2.sp,
+                                fontFamily = FlipClockDisplayFamily,
+                                fontWeight = FontWeight.SemiBold,
+                                letterSpacing = 0.8.sp,
                                 fontFeatureSettings = "tnum"
                             ),
-                            color = FlipClockPalette.SubTextGrey,
-                            modifier = Modifier.testTag("flip_clock_seconds_label")
+                            color = if (settings.showSeconds) FlipClockPalette.SubTextGrey else Color.Transparent,
+                            modifier = Modifier
+                                .align(Alignment.End)
+                                .padding(end = 6.dp, top = 4.dp)
+                                .let { if (settings.showSeconds) it.testTag("flip_clock_seconds_label") else it }
                         )
                     }
+                }
+
+                if (statusItems.isNotEmpty()) {
+                    FlipClockSubtleStatusStrip(statusItems = statusItems)
                 }
             }
         } else {
-            val baseHeight = min(maxHeight * 0.27f, maxWidth * 0.56f).coerceIn(130.dp, 240.dp)
-            val baseWidth = (baseHeight * 0.94f).coerceAtLeast(130.dp)
-            val digitFontSize = (baseHeight.value * 0.56f).sp
+            val baseHeight = min(maxHeight * 0.27f, maxWidth * 0.54f).coerceIn(136.dp, 232.dp)
+            val minuteWidth = (baseHeight * 1.20f).coerceAtLeast(164.dp)
+            val hourWidth = minuteWidth
+            val digitFontSize = (baseHeight.value * 0.85f).sp
 
             Column(
                 modifier = Modifier
@@ -761,61 +925,134 @@ private fun FlipClockFacePage(
                         scaleY = scale
                     }
                     .testTag("flip_clock_portrait_cluster"),
-                horizontalAlignment = Alignment.CenterHorizontally,
-                verticalArrangement = Arrangement.spacedBy(8.dp)
+                horizontalAlignment = Alignment.CenterHorizontally
             ) {
                 SplitFlipCard(
                     value = hourValue,
-                    cardWidth = baseWidth,
+                    cardWidth = hourWidth,
                     cardHeight = baseHeight,
                     fontSize = digitFontSize,
+                    showFlipAxis = settings.showFlipAxis,
                     modifier = Modifier.testTag("flip_clock_hour_card")
                 )
 
-                if (!settings.use24HourFormat) {
-                    Text(
-                        text = amPmText,
-                        style = MaterialTheme.typography.labelLarge.copy(
-                            fontFamily = OutfitTimerFamily,
-                            letterSpacing = 1.6.sp
-                        ),
-                        color = FlipClockPalette.SubTextGrey,
-                        modifier = Modifier.testTag("flip_clock_ampm_label")
-                    )
+                Row(
+                    modifier = Modifier
+                        .width(hourWidth)
+                        .padding(horizontal = 8.dp, vertical = 2.dp),
+                    horizontalArrangement = Arrangement.SpaceBetween,
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    if (!effective24Hour) {
+                        Text(
+                            text = amPmText,
+                            style = MaterialTheme.typography.titleMedium.copy(
+                                fontFamily = FlipClockDisplayFamily,
+                                fontWeight = FontWeight.SemiBold,
+                                letterSpacing = 0.8.sp
+                            ),
+                            color = FlipClockPalette.SubTextGrey,
+                            modifier = Modifier.testTag("flip_clock_ampm_label")
+                        )
+                    } else {
+                        Spacer(Modifier.width(1.dp))
+                    }
+
+                    if (settings.showDate) {
+                        Text(
+                            text = dateLineText,
+                            style = MaterialTheme.typography.titleSmall.copy(
+                                fontFamily = FlipClockDisplayFamily,
+                                fontWeight = FontWeight.SemiBold,
+                                letterSpacing = 0.6.sp
+                            ),
+                            color = FlipClockPalette.SubTextGrey,
+                            modifier = Modifier.testTag("flip_clock_date_text")
+                        )
+                    }
                 }
 
-                if (settings.showDate) {
+                Spacer(Modifier.height(10.dp))
+
+                if (settings.showWeekday) {
                     Text(
-                        text = dateLineText,
-                        style = MaterialTheme.typography.labelMedium.copy(letterSpacing = 1.5.sp),
+                        text = weekdayText,
+                        style = MaterialTheme.typography.titleSmall.copy(
+                            fontFamily = FlipClockDisplayFamily,
+                            fontWeight = FontWeight.SemiBold,
+                            letterSpacing = 0.6.sp
+                        ),
                         color = FlipClockPalette.SubTextGrey,
                         modifier = Modifier
-                            .padding(vertical = 2.dp)
-                            .testTag("flip_clock_date_text")
+                            .padding(bottom = 8.dp)
+                            .testTag("flip_clock_weekday_label")
                     )
-                } else {
-                    Spacer(Modifier.height(4.dp))
                 }
 
                 SplitFlipCard(
                     value = minuteValue,
-                    cardWidth = baseWidth,
+                    cardWidth = minuteWidth,
                     cardHeight = baseHeight,
                     fontSize = digitFontSize,
+                    showFlipAxis = settings.showFlipAxis,
                     modifier = Modifier.testTag("flip_clock_minute_card")
                 )
 
-                Text(
-                    text = secondValue,
-                    style = MaterialTheme.typography.titleMedium.copy(
-                        fontFamily = OutfitTimerFamily,
-                        letterSpacing = 1.4.sp,
-                        fontFeatureSettings = "tnum"
-                    ),
-                    color = FlipClockPalette.SubTextGrey,
-                    modifier = Modifier.testTag("flip_clock_seconds_label")
-                )
+                if (settings.showSeconds) {
+                    Row(
+                        modifier = Modifier
+                            .width(minuteWidth)
+                            .padding(horizontal = 8.dp, vertical = 2.dp),
+                        horizontalArrangement = Arrangement.End
+                    ) {
+                        Text(
+                            text = secondValue,
+                            style = MaterialTheme.typography.titleMedium.copy(
+                                fontFamily = FlipClockDisplayFamily,
+                                fontWeight = FontWeight.SemiBold,
+                                letterSpacing = 0.8.sp,
+                                fontFeatureSettings = "tnum"
+                            ),
+                            color = FlipClockPalette.SubTextGrey,
+                            modifier = Modifier.testTag("flip_clock_seconds_label")
+                        )
+                    }
+                }
+
+                if (statusItems.isNotEmpty()) {
+                    Spacer(Modifier.height(12.dp))
+                    FlipClockSubtleStatusStrip(statusItems = statusItems)
+                }
             }
+        }
+    }
+}
+
+@OptIn(ExperimentalLayoutApi::class)
+@Composable
+private fun FlipClockSubtleStatusStrip(
+    statusItems: List<String>,
+    modifier: Modifier = Modifier
+) {
+    FlowRow(
+        modifier = modifier
+            .widthIn(max = 460.dp)
+            .padding(horizontal = 16.dp)
+            .testTag("flip_clock_status_strip"),
+        horizontalArrangement = Arrangement.spacedBy(8.dp, Alignment.CenterHorizontally),
+        verticalArrangement = Arrangement.spacedBy(4.dp)
+    ) {
+        statusItems.forEachIndexed { idx, label ->
+            val display = if (idx < statusItems.lastIndex) "$label ·" else label
+            Text(
+                text = display,
+                style = MaterialTheme.typography.labelMedium.copy(
+                    letterSpacing = 0.5.sp
+                ),
+                color = FlipClockPalette.SubTextGrey.copy(alpha = 0.82f),
+                maxLines = 1,
+                overflow = TextOverflow.Ellipsis
+            )
         }
     }
 }
@@ -826,6 +1063,7 @@ private fun FlipTimerPage(
     timerState: FlipTimerState,
     remainingMs: Long,
     finishedBannerVisible: Boolean,
+    showFlipAxis: Boolean,
     zoomFraction: Float,
     controlsVisible: Boolean,
     onTapDisplayToggle: () -> Unit,
@@ -856,13 +1094,21 @@ private fun FlipTimerPage(
             FlipClockSettings.MIN_ZOOM_FRACTION,
             FlipClockSettings.MAX_ZOOM_FRACTION
         )
-        val heroCardHeight = if (isLandscape) {
-            min(boxMaxHeight * 0.48f, boxMaxWidth * 0.25f).coerceIn(106.dp, 188.dp)
+        val heroCardHeight = if (hours > 0) {
+            if (isLandscape) {
+                min(boxMaxHeight * 0.50f, boxMaxWidth * 0.21f).coerceIn(92.dp, 184.dp)
+            } else {
+                min(boxMaxWidth * 0.24f, boxMaxHeight * 0.22f).coerceIn(82.dp, 152.dp)
+            }
         } else {
-            min(boxMaxWidth * 0.31f, boxMaxHeight * 0.24f).coerceIn(96.dp, 168.dp)
+            if (isLandscape) {
+                min(boxMaxHeight * 0.56f, boxMaxWidth * 0.28f).coerceIn(118.dp, 210.dp)
+            } else {
+                min(boxMaxWidth * 0.36f, boxMaxHeight * 0.26f).coerceIn(106.dp, 184.dp)
+            }
         }
 
-        // Initial viewport shows ONLY the large split-flap Timer Display (+ playback overlay when shown).
+        // Initial viewport shows ONLY the pure-black split-flap Timer Display (+ playback overlay when shown).
         // Scrolling vertically reveals Custom Duration and all Timer Presets below cleanly.
         LazyColumn(
             state = listState,
@@ -891,6 +1137,7 @@ private fun FlipTimerPage(
                             seconds = seconds,
                             timerState = timerState,
                             finishedBannerVisible = finishedBannerVisible,
+                            showFlipAxis = showFlipAxis,
                             cardHeight = heroCardHeight,
                             scale = scale,
                             onTapDisplayToggle = onTapDisplayToggle
@@ -915,15 +1162,6 @@ private fun FlipTimerPage(
                             )
                         }
                     }
-
-                    Text(
-                        text = "Scroll down for timer durations & presets",
-                        style = MaterialTheme.typography.labelSmall.copy(letterSpacing = 0.6.sp),
-                        color = FlipClockPalette.SubTextGrey.copy(alpha = 0.55f),
-                        modifier = Modifier
-                            .align(Alignment.BottomCenter)
-                            .padding(bottom = 8.dp)
-                    )
                 }
             }
 
@@ -942,7 +1180,7 @@ private fun FlipTimerPage(
             item(key = "custom_duration_btn") {
                 Surface(
                     onClick = onOpenCustomDuration,
-                    shape = RoundedCornerShape(14.dp),
+                    shape = RoundedCornerShape(16.dp),
                     color = FlipClockPalette.PanelElevated,
                     border = BorderStroke(1.dp, FlipClockPalette.PanelOutline),
                     modifier = Modifier
@@ -958,12 +1196,12 @@ private fun FlipTimerPage(
                         Text(
                             text = "Custom Duration (H : M : S)",
                             style = MaterialTheme.typography.titleSmall,
-                            color = ResolveColors.MintBright
+                            color = FlipClockPalette.PrimaryCtaText
                         )
                         Text(
                             text = "Pick",
                             style = MaterialTheme.typography.labelLarge,
-                            color = ResolveColors.MintAccent
+                            color = FlipClockPalette.SageLabel
                         )
                     }
                 }
@@ -978,11 +1216,11 @@ private fun FlipTimerPage(
                             timerScope.launch { listState.animateScrollToItem(0) }
                         }
                     },
-                    shape = RoundedCornerShape(14.dp),
-                    color = if (selected) ResolveColors.MintSoftContainer.copy(alpha = 0.55f) else FlipClockPalette.PanelDark,
+                    shape = RoundedCornerShape(16.dp),
+                    color = if (selected) FlipClockPalette.PanelActive else FlipClockPalette.PanelDark,
                     border = BorderStroke(
                         1.dp,
-                        if (selected) ResolveColors.MintAccent.copy(alpha = 0.55f) else FlipClockPalette.PanelOutline
+                        if (selected) FlipClockPalette.SageLabel.copy(alpha = 0.65f) else FlipClockPalette.PanelOutline
                     ),
                     modifier = Modifier
                         .widthIn(max = 520.dp)
@@ -997,14 +1235,14 @@ private fun FlipTimerPage(
                         Text(
                             text = preset.name,
                             style = MaterialTheme.typography.bodyLarge.copy(fontWeight = FontWeight.Medium),
-                            color = if (selected) ResolveColors.MintBright else FlipClockPalette.AccentSoft,
+                            color = if (selected) FlipClockPalette.PrimaryCtaText else FlipClockPalette.AccentSoft,
                             maxLines = 1,
                             overflow = TextOverflow.Ellipsis
                         )
                         Text(
                             text = formatDurationWords(preset.durationSeconds),
                             style = MaterialTheme.typography.labelMedium,
-                            color = if (selected) ResolveColors.MintAccent else FlipClockPalette.SubTextGrey
+                            color = if (selected) FlipClockPalette.SageLabel else FlipClockPalette.SubTextGrey
                         )
                     }
                 }
@@ -1020,12 +1258,14 @@ private fun TimerDisplayCluster(
     seconds: Int,
     timerState: FlipTimerState,
     finishedBannerVisible: Boolean,
+    showFlipAxis: Boolean,
     cardHeight: Dp,
     scale: Float,
     onTapDisplayToggle: () -> Unit
 ) {
-    val cardWidth = (cardHeight * 0.88f).coerceAtLeast(78.dp)
-    val fontSize = (cardHeight.value * 0.54f).sp
+    val cardWidth = (cardHeight * 1.20f).coerceAtLeast(94.dp)
+    val fontSize = (cardHeight.value * 0.85f).sp
+    val cardSpacing = if (hours > 0) 12.dp else 18.dp
 
     Column(
         modifier = Modifier
@@ -1039,32 +1279,47 @@ private fun TimerDisplayCluster(
         horizontalAlignment = Alignment.CenterHorizontally,
         verticalArrangement = Arrangement.spacedBy(10.dp)
     ) {
-        Text(
-            text = timerState.timerName.uppercase(Locale.getDefault()),
-            style = MaterialTheme.typography.labelLarge.copy(letterSpacing = 1.4.sp),
-            color = FlipClockPalette.SubTextGrey,
-            maxLines = 1,
-            overflow = TextOverflow.Ellipsis
-        )
+        Row(
+            verticalAlignment = Alignment.CenterVertically,
+            horizontalArrangement = Arrangement.spacedBy(7.dp)
+        ) {
+            Box(
+                modifier = Modifier
+                    .size(7.dp)
+                    .clip(CircleShape)
+                    .background(FlipClockPalette.TimerIndicator)
+            )
+            Text(
+                text = timerState.timerName,
+                style = MaterialTheme.typography.titleSmall.copy(
+                    fontFamily = FlipClockDisplayFamily,
+                    fontWeight = FontWeight.SemiBold,
+                    letterSpacing = 0.4.sp
+                ),
+                color = FlipClockPalette.SubTextGrey,
+                maxLines = 1,
+                overflow = TextOverflow.Ellipsis
+            )
+        }
 
         if (finishedBannerVisible) {
             Text(
                 text = "${timerState.timerName} — Completed!",
                 style = MaterialTheme.typography.titleMedium.copy(fontWeight = FontWeight.SemiBold),
-                color = ResolveColors.MintBright,
+                color = FlipClockPalette.PrimaryCtaText,
                 textAlign = TextAlign.Center,
                 modifier = Modifier
                     .clip(CircleShape)
-                    .background(ResolveColors.MintSoftContainer)
+                    .background(FlipClockPalette.PrimaryCta)
                     .padding(horizontal = 16.dp, vertical = 6.dp)
                     .testTag("flip_timer_finished_banner")
             )
         }
 
-        // Pure split-flip Timer cards with static ':' and NO progress bar
+        // Borderless split-flip Timer numerals on pure black (no colon, no box)
         Row(
             verticalAlignment = Alignment.CenterVertically,
-            horizontalArrangement = Arrangement.spacedBy(8.dp)
+            horizontalArrangement = Arrangement.spacedBy(cardSpacing)
         ) {
             if (hours > 0) {
                 SplitFlipCard(
@@ -1072,24 +1327,25 @@ private fun TimerDisplayCluster(
                     cardWidth = cardWidth,
                     cardHeight = cardHeight,
                     fontSize = fontSize,
-                    cornerRadius = 18.dp
+                    digitColor = FlipClockPalette.DigitGrey,
+                    showFlipAxis = showFlipAxis
                 )
-                StaticColon(fontSize = fontSize)
             }
             SplitFlipCard(
                 value = "%02d".format(minutes),
                 cardWidth = cardWidth,
                 cardHeight = cardHeight,
                 fontSize = fontSize,
-                cornerRadius = 18.dp
+                digitColor = FlipClockPalette.DigitGrey,
+                showFlipAxis = showFlipAxis
             )
-            StaticColon(fontSize = fontSize)
             SplitFlipCard(
                 value = "%02d".format(seconds),
                 cardWidth = cardWidth,
                 cardHeight = cardHeight,
                 fontSize = fontSize,
-                cornerRadius = 18.dp
+                digitColor = FlipClockPalette.DigitGrey,
+                showFlipAxis = showFlipAxis
             )
         }
     }
@@ -1100,6 +1356,7 @@ private fun TimerDisplayCluster(
 private fun FlipStopwatchPage(
     stopwatchState: FlipStopwatchState,
     elapsedMs: Long,
+    showFlipAxis: Boolean,
     zoomFraction: Float,
     controlsVisible: Boolean,
     onToggleDisplay: () -> Unit,
@@ -1107,7 +1364,7 @@ private fun FlipStopwatchPage(
     onPause: () -> Unit,
     onResetImmediate: () -> Unit
 ) {
-    // MM:SS seconds only, no milliseconds, no laps
+    // MM SS seconds only, no milliseconds, no laps
     val totalSeconds = (elapsedMs / 1000L).coerceAtLeast(0L)
     val minutes = (totalSeconds / 60L).toInt()
     val seconds = (totalSeconds % 60L).toInt()
@@ -1117,6 +1374,7 @@ private fun FlipStopwatchPage(
     BoxWithConstraints(
         modifier = Modifier
             .fillMaxSize()
+            .background(FlipClockPalette.CanvasBlack)
             .padding(horizontal = 20.dp, vertical = 16.dp)
             .testTag("flip_stopwatch_page")
     ) {
@@ -1126,12 +1384,12 @@ private fun FlipStopwatchPage(
             FlipClockSettings.MAX_ZOOM_FRACTION
         )
         val cardHeight = if (isLandscape) {
-            min(maxHeight * 0.54f, maxWidth * 0.30f).coerceIn(115.dp, 220.dp)
+            min(maxHeight * 0.56f, maxWidth * 0.30f).coerceIn(124.dp, 224.dp)
         } else {
-            min(maxWidth * 0.36f, maxHeight * 0.25f).coerceIn(115.dp, 200.dp)
+            min(maxWidth * 0.38f, maxHeight * 0.27f).coerceIn(120.dp, 200.dp)
         }
-        val cardWidth = (cardHeight * 0.92f).coerceAtLeast(110.dp)
-        val fontSize = (cardHeight.value * 0.56f).sp
+        val cardWidth = (cardHeight * 1.20f).coerceAtLeast(130.dp)
+        val fontSize = (cardHeight.value * 0.85f).sp
 
         Column(
             modifier = Modifier.fillMaxSize(),
@@ -1151,28 +1409,35 @@ private fun FlipStopwatchPage(
                 verticalArrangement = Arrangement.spacedBy(10.dp)
             ) {
                 Text(
-                    text = "STOPWATCH",
-                    style = MaterialTheme.typography.labelLarge.copy(letterSpacing = 1.6.sp),
+                    text = "Stopwatch",
+                    style = MaterialTheme.typography.titleSmall.copy(
+                        fontFamily = FlipClockDisplayFamily,
+                        fontWeight = FontWeight.SemiBold,
+                        letterSpacing = 0.6.sp
+                    ),
                     color = FlipClockPalette.SubTextGrey
                 )
 
                 Row(
                     verticalAlignment = Alignment.CenterVertically,
-                    horizontalArrangement = Arrangement.spacedBy(12.dp)
+                    horizontalArrangement = Arrangement.spacedBy(18.dp)
                 ) {
                     SplitFlipCard(
                         value = minStr,
                         cardWidth = cardWidth,
                         cardHeight = cardHeight,
                         fontSize = fontSize,
+                        digitColor = FlipClockPalette.DigitGrey,
+                        showFlipAxis = showFlipAxis,
                         modifier = Modifier.testTag("flip_stopwatch_min_card")
                     )
-                    StaticColon(fontSize = fontSize)
                     SplitFlipCard(
                         value = secStr,
                         cardWidth = cardWidth,
                         cardHeight = cardHeight,
                         fontSize = fontSize,
+                        digitColor = FlipClockPalette.DigitGrey,
+                        showFlipAxis = showFlipAxis,
                         modifier = Modifier.testTag("flip_stopwatch_sec_card")
                     )
                 }
@@ -1195,17 +1460,6 @@ private fun FlipStopwatchPage(
             }
         }
     }
-}
-
-@Composable
-private fun StaticColon(fontSize: androidx.compose.ui.unit.TextUnit) {
-    Text(
-        text = ":",
-        fontFamily = OutfitTimerFamily,
-        fontWeight = FontWeight.Bold,
-        fontSize = fontSize,
-        color = FlipClockPalette.SubTextGrey
-    )
 }
 
 @Composable
@@ -1248,8 +1502,8 @@ private fun HorizontalFloatingPlaybackButtons(
                 onClick = onStartOrResume,
                 shape = CircleShape,
                 colors = ButtonDefaults.buttonColors(
-                    containerColor = ResolveColors.MintSoftContainer,
-                    contentColor = ResolveColors.MintBright
+                    containerColor = FlipClockPalette.PrimaryCta,
+                    contentColor = FlipClockPalette.PrimaryCtaText
                 ),
                 modifier = Modifier.testTag(startTag)
             ) {
@@ -1298,7 +1552,7 @@ private fun NotificationDeniedNotice(
             modifier = Modifier.weight(1f)
         )
         TextButton(onClick = onOpenAppSettings) {
-            Text("Settings", color = ResolveColors.MintBright)
+            Text("Settings", color = FlipClockPalette.SageLabel)
         }
     }
 }

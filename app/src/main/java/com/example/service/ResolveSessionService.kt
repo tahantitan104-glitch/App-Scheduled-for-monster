@@ -191,7 +191,7 @@ class ResolveSessionService : Service() {
 
         return NotificationCompat.Builder(this, CHANNEL_ID)
             .setSmallIcon(R.drawable.ic_notification_resolve)
-            .setColor(0xFF75E0B5.toInt())
+            .setColor(0xFF176B5B.toInt())
             .setContentTitle(title)
             .setContentText(text)
             .setOngoing(true)
@@ -273,7 +273,7 @@ class ResolveSessionService : Service() {
                 )
                 val notification = NotificationCompat.Builder(context, CHANNEL_ID)
                     .setSmallIcon(R.drawable.ic_notification_resolve)
-                    .setColor(0xFF75E0B5.toInt())
+                    .setColor(0xFF176B5B.toInt())
                     .setContentTitle("Focus Session Restored")
                     .setContentText("Tap to resume Resolve Lock Screen protection.")
                     .setAutoCancel(true)

@@ -539,7 +539,7 @@ private fun DrawScope.drawCloudBrow(
     path.quadraticTo(center.x, center.y - width * 0.18f, center.x + width * 0.5f, center.y + width * 0.14f)
     drawPath(
         path = path,
-        color = ResolveColors.ForestDeep.copy(alpha = 0.42f),
+        color = Color(0xFF14241D).copy(alpha = 0.48f),
         style = Stroke(width = width * 0.14f, cap = StrokeCap.Round)
     )
 }
@@ -583,7 +583,7 @@ private fun DrawScope.drawCloudEye(
         )
         drawPath(
             path = paths.eyeLidPath,
-            color = ResolveColors.ForestDeep,
+            color = Color(0xFF0E1A15),
             style = Stroke(width = eyeWidth * 0.22f, cap = StrokeCap.Round)
         )
         return
@@ -599,9 +599,9 @@ private fun DrawScope.drawCloudEye(
     drawOval(
         brush = Brush.radialGradient(
             colors = listOf(
-                Color(0xFF0A1B16),
-                ResolveColors.ForestDeep,
-                Color(0xFF214A3E)
+                Color(0xFF050D09),
+                Color(0xFF14241D),
+                ResolveColors.ForestSurface
             ),
             center = Offset(center.x + gazeX, center.y + gazeY - eyeHeight * 0.12f),
             radius = eyeHeight * 0.72f
@@ -615,7 +615,7 @@ private fun DrawScope.drawCloudEye(
         center = Offset(center.x - eyeWidth * 0.16f + gazeX * 0.7f, center.y - eyeHeight * 0.19f + gazeY * 0.7f)
     )
     drawCircle(
-        color = ResolveColors.MintBright.copy(alpha = 0.65f),
+        color = ResolveColors.SlateTealStrong.copy(alpha = 0.68f),
         radius = eyeWidth * 0.095f,
         center = Offset(center.x + eyeWidth * 0.18f + gazeX * 0.7f, center.y + eyeHeight * 0.18f + gazeY * 0.7f)
     )
@@ -628,7 +628,7 @@ private fun DrawScope.drawCloudEye(
             size = Size(eyeWidth * 1.24f, lidHeight + eyeHeight * 0.14f)
         )
         drawLine(
-            color = ResolveColors.ForestDeep,
+            color = Color(0xFF0E1A15),
             start = Offset(eyeRect.left - eyeWidth * 0.05f, eyeRect.top + lidHeight),
             end = Offset(eyeRect.right + eyeWidth * 0.05f, eyeRect.top + lidHeight),
             strokeWidth = eyeWidth * 0.14f,
@@ -656,7 +656,7 @@ private fun DrawScope.drawCloudMouth(
             path.quadraticTo(centerX, mouthY + w * 0.034f, centerX + span * 0.95f, mouthY - w * 0.002f)
             drawPath(
                 path = path,
-                color = ResolveColors.ForestDeep.copy(alpha = 0.90f),
+                color = Color(0xFF0E1A15).copy(alpha = 0.90f),
                 style = Stroke(width = strokeW, cap = StrokeCap.Round, join = StrokeJoin.Round)
             )
             drawOval(
@@ -667,7 +667,7 @@ private fun DrawScope.drawCloudMouth(
         }
         MascotAnimationState.CURIOUS -> {
             drawOval(
-                color = ResolveColors.ForestDeep.copy(alpha = 0.88f),
+                color = Color(0xFF0E1A15).copy(alpha = 0.88f),
                 topLeft = Offset(centerX - span * 0.28f, mouthY - w * 0.003f),
                 size = Size(span * 0.56f, w * 0.018f),
                 style = Stroke(width = strokeW * 0.88f)
@@ -680,7 +680,7 @@ private fun DrawScope.drawCloudMouth(
             path.quadraticTo(centerX + span * 0.42f, mouthY + w * 0.020f, centerX + span * 0.88f, mouthY - w * 0.002f)
             drawPath(
                 path = path,
-                color = ResolveColors.ForestDeep.copy(alpha = 0.88f),
+                color = Color(0xFF0E1A15).copy(alpha = 0.88f),
                 style = Stroke(width = strokeW, cap = StrokeCap.Round, join = StrokeJoin.Round)
             )
         }
@@ -702,6 +702,6 @@ private fun DrawScope.drawStarlightSparkle(
     path.close()
     drawPath(
         path = path,
-        color = ResolveColors.MintBright.copy(alpha = alpha.coerceIn(0f, 1f))
+        color = ResolveColors.ChampagneStrong.copy(alpha = alpha.coerceIn(0f, 1f))
     )
 }

@@ -196,9 +196,9 @@ fun PatternLockPad(
         Box(
             modifier = Modifier
                 .size(gridSize)
-                .clip(RoundedCornerShape(24.dp))
-                .background(palette.cardBottom.copy(alpha = 0.75f))
-                .border(1.dp, palette.cardBorder, RoundedCornerShape(24.dp))
+                .clip(RoundedCornerShape(18.dp))
+                .background(palette.cardBottom)
+                .border(1.dp, palette.cardBorder, RoundedCornerShape(18.dp))
                 .onSizeChanged { canvasSize = it }
                 .pointerInput(resetKey) {
                     detectDragGestures(
@@ -253,7 +253,7 @@ fun PatternLockPad(
                         val a = nodeCenter(selectedNodes[i], sz)
                         val b = nodeCenter(selectedNodes[i + 1], sz)
                         drawLine(
-                            color = palette.accent,
+                            color = palette.accentStrong,
                             start = a,
                             end = b,
                             strokeWidth = size.width * 0.028f,
@@ -265,7 +265,7 @@ fun PatternLockPad(
                 val finger = dragPosition
                 if (last != null && finger != null) {
                     drawLine(
-                        color = palette.accent.copy(alpha = 0.55f),
+                        color = palette.accentStrong.copy(alpha = 0.65f),
                         start = nodeCenter(last, sz),
                         end = finger,
                         strokeWidth = size.width * 0.020f,
@@ -284,7 +284,7 @@ fun PatternLockPad(
                             center = center
                         )
                         drawCircle(
-                            color = palette.accent,
+                            color = palette.accentStrong,
                             radius = size.width * 0.072f,
                             center = center,
                             style = androidx.compose.ui.graphics.drawscope.Stroke(
@@ -511,16 +511,16 @@ fun SixCellSequentialPad(
 
                         val cellBg by animateColorAsState(
                             targetValue = when {
-                                isSelectedInSetup -> palette.accentSoftContainer
-                                isPulsing -> palette.accent.copy(alpha = 0.34f)
-                                else -> palette.cardTop.copy(alpha = 0.92f)
+                                isSelectedInSetup -> palette.surfaceElevated
+                                isPulsing -> palette.primaryButton.copy(alpha = 0.45f)
+                                else -> palette.cardBottom
                             },
                             animationSpec = tween(140),
                             label = "six_cell_bg_$cellIndex"
                         )
                         val cellBorder by animateColorAsState(
                             targetValue = when {
-                                isSelectedInSetup || isPulsing -> palette.accent
+                                isSelectedInSetup || isPulsing -> palette.accentSecondary
                                 else -> palette.cardBorder
                             },
                             animationSpec = tween(140),
@@ -532,9 +532,9 @@ fun SixCellSequentialPad(
                                 .weight(1f)
                                 .height(cellHeight)
                                 .minimumInteractiveComponentSize()
-                                .clip(RoundedCornerShape(18.dp))
+                                .clip(RoundedCornerShape(16.dp))
                                 .background(cellBg)
-                                .border(1.5.dp, cellBorder, RoundedCornerShape(18.dp))
+                                .border(1.5.dp, cellBorder, RoundedCornerShape(16.dp))
                                 .clickable(role = Role.Button) {
                                     haptic.performHapticFeedback(HapticFeedbackType.TextHandleMove)
                                     if (!tappedOrder.contains(cellIndex) && tappedOrder.size < 6) {
@@ -622,8 +622,8 @@ fun SixCellSequentialPad(
                     onSequenceSubmitted(seq)
                 },
                 colors = ButtonDefaults.buttonColors(
-                    containerColor = palette.accent,
-                    contentColor = palette.onAccent
+                    containerColor = palette.primaryButton,
+                    contentColor = palette.onPrimaryButton
                 ),
                 shape = RoundedCornerShape(14.dp),
                 modifier = Modifier

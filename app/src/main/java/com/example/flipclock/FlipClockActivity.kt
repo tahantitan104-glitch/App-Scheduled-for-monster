@@ -177,6 +177,13 @@ class FlipClockActivity : ComponentActivity() {
                             }
                             runCatching { startActivity(appSettingsIntent) }
                         },
+                        onSleepTimerExpired = {
+                            window.clearFlags(WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON)
+                            applyWindowBrightness(FlipClockSettings.MIN_BRIGHTNESS_PERCENT)
+                            if (!isFinishing) {
+                                finish()
+                            }
+                        },
                         onExit = { finish() }
                     )
                 }

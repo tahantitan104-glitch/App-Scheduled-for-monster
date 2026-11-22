@@ -6,6 +6,7 @@ import androidx.compose.animation.core.tween
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.ui.graphics.Color
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.PaddingValues
@@ -38,7 +39,6 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
-import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.StrokeCap
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.text.font.FontWeight
@@ -144,8 +144,8 @@ fun HistoryScreen(
                         modifier = Modifier
                             .fillMaxWidth()
                             .resolveGlassCard(
-                                cornerRadius = 20.dp,
-                                borderColor = palette.accent.copy(alpha = 0.25f)
+                                cornerRadius = 16.dp,
+                                borderColor = palette.cardBorder
                             )
                             .padding(16.dp),
                         horizontalArrangement = Arrangement.SpaceEvenly
@@ -201,7 +201,7 @@ fun HistoryScreen(
                     Column(
                         modifier = Modifier
                             .fillMaxWidth()
-                            .resolveGlassCard(cornerRadius = 24.dp)
+                            .resolveGlassCard(cornerRadius = 16.dp)
                             .padding(horizontal = 24.dp, vertical = 34.dp),
                         horizontalAlignment = Alignment.CenterHorizontally,
                         verticalArrangement = Arrangement.spacedBy(12.dp)
@@ -210,7 +210,7 @@ fun HistoryScreen(
                             modifier = Modifier
                                 .size(60.dp)
                                 .clip(CircleShape)
-                                .background(palette.accentSoftContainer),
+                                .background(palette.surfaceElevated),
                             contentAlignment = Alignment.Center
                         ) {
                             Icon(
@@ -253,12 +253,16 @@ private fun WeeklyFocusChartCard(weeklyStats: List<DayFocusStat>) {
     }
     val weeklyTotal = remember(weeklyStats) { weeklyStats.sumOf { it.focusMinutes } }
 
+    val peakMinutes = remember(weeklyStats) {
+        weeklyStats.maxOfOrNull { it.focusMinutes }?.takeIf { it > 0L }
+    }
+
     Column(
         modifier = Modifier
             .fillMaxWidth()
             .resolveGlassCard(
-                cornerRadius = 20.dp,
-                borderColor = palette.accent.copy(alpha = 0.24f)
+                cornerRadius = 16.dp,
+                borderColor = palette.cardBorder
             )
             .padding(16.dp)
             .testTag("insights_weekly_chart_card"),
@@ -289,7 +293,7 @@ private fun WeeklyFocusChartCard(weeklyStats: List<DayFocusStat>) {
                     fontFamily = JetBrainsMonoFamily,
                     fontWeight = FontWeight.SemiBold
                 ),
-                color = palette.accent
+                color = palette.accentStrong
             )
         }
 
@@ -325,26 +329,17 @@ private fun WeeklyFocusChartCard(weeklyStats: List<DayFocusStat>) {
                             .fillMaxWidth(),
                         contentAlignment = Alignment.BottomCenter
                     ) {
+                        val isPeakDay = peakMinutes != null && day.focusMinutes == peakMinutes
                         Box(
                             modifier = Modifier
                                 .fillMaxWidth(0.56f)
                                 .fillMaxHeight(barHeightFraction)
-                                .clip(RoundedCornerShape(topStart = 8.dp, topEnd = 8.dp, bottomStart = 4.dp, bottomEnd = 4.dp))
+                                .clip(RoundedCornerShape(topStart = 7.dp, topEnd = 7.dp, bottomStart = 3.dp, bottomEnd = 3.dp))
                                 .background(
-                                    if (day.focusMinutes > 0L) {
-                                        Brush.verticalGradient(
-                                            listOf(
-                                                palette.accentStrong,
-                                                palette.accent.copy(alpha = 0.72f)
-                                            )
-                                        )
-                                    } else {
-                                        Brush.verticalGradient(
-                                            listOf(
-                                                palette.cardBorder,
-                                                palette.background.copy(alpha = 0.55f)
-                                            )
-                                        )
+                                    when {
+                                        isPeakDay -> palette.champagne
+                                        day.focusMinutes > 0L -> palette.accentStrong
+                                        else -> palette.divider
                                     }
                                 )
                         )
@@ -353,7 +348,11 @@ private fun WeeklyFocusChartCard(weeklyStats: List<DayFocusStat>) {
                     Text(
                         text = day.dayLabel,
                         style = MaterialTheme.typography.labelSmall,
-                        color = if (day.focusMinutes > 0L) palette.accentStrong else palette.textSecondary
+                        color = when {
+                            peakMinutes != null && day.focusMinutes == peakMinutes -> palette.champagneStrong
+                            day.focusMinutes > 0L -> palette.accentStrong
+                            else -> palette.textSecondary
+                        }
                     )
                 }
             }
@@ -372,7 +371,7 @@ private fun ModeSplitInsightsCard(
     Column(
         modifier = Modifier
             .fillMaxWidth()
-            .resolveGlassCard(cornerRadius = 20.dp)
+            .resolveGlassCard(cornerRadius = 16.dp)
             .padding(16.dp)
             .testTag("insights_mode_split_card"),
         verticalArrangement = Arrangement.spacedBy(10.dp)
@@ -383,9 +382,9 @@ private fun ModeSplitInsightsCard(
             color = palette.textPrimary
         )
 
-        ModeSplitBarRow("Instant Lock", instantCount, total)
-        ModeSplitBarRow("Delayed Lock", delayedCount, total)
-        ModeSplitBarRow("Schedule Lock", scheduleCount, total)
+        ModeSplitBarRow("Instant Lock", instantCount, total, barColor = palette.accentStrong)
+        ModeSplitBarRow("Delayed Lock", delayedCount, total, barColor = palette.slateTeal)
+        ModeSplitBarRow("Schedule Lock", scheduleCount, total, barColor = palette.champagne)
     }
 }
 
@@ -393,7 +392,8 @@ private fun ModeSplitInsightsCard(
 private fun ModeSplitBarRow(
     label: String,
     count: Int,
-    total: Int
+    total: Int,
+    barColor: Color
 ) {
     val palette = LocalResolveExtendedPalette.current
     val ratio = if (total <= 0) 0f else (count.toFloat() / total.toFloat()).coerceIn(0f, 1f)
@@ -415,13 +415,13 @@ private fun ModeSplitBarRow(
             Text(
                 text = "$count (${(ratio * 100).toInt()}%)",
                 style = MaterialTheme.typography.labelSmall.copy(fontFamily = JetBrainsMonoFamily),
-                color = palette.accent
+                color = barColor
             )
         }
         LinearProgressIndicator(
             progress = { animatedRatio },
-            color = palette.accent,
-            trackColor = palette.background.copy(alpha = 0.7f),
+            color = barColor,
+            trackColor = palette.divider,
             strokeCap = StrokeCap.Round,
             modifier = Modifier
                 .fillMaxWidth()
@@ -440,7 +440,7 @@ private fun InsightsUsageDistributionCard(
     Column(
         modifier = Modifier
             .fillMaxWidth()
-            .resolveGlassCard(cornerRadius = 20.dp)
+            .resolveGlassCard(cornerRadius = 16.dp)
             .padding(16.dp)
             .testTag("insights_usage_summary_card"),
         verticalArrangement = Arrangement.spacedBy(10.dp)
@@ -459,7 +459,7 @@ private fun InsightsUsageDistributionCard(
                 Text(
                     text = formatInsightsDuration(summary.totalScreenTimeMs),
                     style = MaterialTheme.typography.labelMedium.copy(fontFamily = JetBrainsMonoFamily),
-                    color = palette.accent
+                    color = palette.slateTealStrong
                 )
             }
         }
@@ -473,8 +473,11 @@ private fun InsightsUsageDistributionCard(
             OutlinedButton(
                 onClick = onGrantUsageAccess,
                 shape = RoundedCornerShape(12.dp),
-                border = androidx.compose.foundation.BorderStroke(1.dp, palette.accent.copy(alpha = 0.55f)),
-                colors = ButtonDefaults.outlinedButtonColors(contentColor = palette.accent),
+                border = androidx.compose.foundation.BorderStroke(1.dp, palette.slateTeal.copy(alpha = 0.48f)),
+                colors = ButtonDefaults.outlinedButtonColors(
+                    containerColor = palette.slateTealContainer.copy(alpha = 0.72f),
+                    contentColor = palette.slateTealStrong
+                ),
                 modifier = Modifier.testTag("insights_grant_usage_button")
             ) {
                 Text("Grant Usage Access")
@@ -506,7 +509,7 @@ private fun InsightsUsageDistributionCard(
                     Text(
                         text = "${formatInsightsDuration(app.foregroundTimeMs)} ($pct%)",
                         style = MaterialTheme.typography.labelSmall.copy(fontFamily = JetBrainsMonoFamily),
-                        color = palette.accent
+                        color = palette.slateTealStrong
                     )
                 }
             }
@@ -532,7 +535,7 @@ private fun HistoryStatColumn(label: String, value: String) {
         Text(
             text = value,
             style = MaterialTheme.typography.titleLarge.copy(fontFamily = JetBrainsMonoFamily),
-            color = palette.accent
+            color = palette.accentStrong
         )
         Text(
             text = label,
@@ -551,7 +554,7 @@ private fun HistoryCard(record: SessionHistoryRecord) {
         LockMode.SCHEDULED -> "Schedule Lock"
     }
     val (statusLabel, statusColor, statusBg) = when (record.outcome) {
-        SessionOutcome.COMPLETED -> Triple("Completed", palette.accent, palette.accentSoftContainer)
+        SessionOutcome.COMPLETED -> Triple("Completed", palette.onAccent, palette.success)
         SessionOutcome.RECOVERED -> Triple("Recovered", palette.warn, palette.warnContainer)
         SessionOutcome.INTERRUPTED -> Triple("Interrupted", palette.textSecondary, palette.cardBottom)
         SessionOutcome.ENFORCEMENT_FAILED -> Triple("Failed", palette.error, palette.errorContainer)
@@ -563,7 +566,7 @@ private fun HistoryCard(record: SessionHistoryRecord) {
     Column(
         modifier = Modifier
             .fillMaxWidth()
-            .resolveGlassCard(cornerRadius = 20.dp)
+            .resolveGlassCard(cornerRadius = 16.dp)
             .padding(16.dp),
         verticalArrangement = Arrangement.spacedBy(6.dp)
     ) {

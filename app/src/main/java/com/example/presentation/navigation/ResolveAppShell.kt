@@ -4,14 +4,11 @@ import androidx.activity.compose.BackHandler
 import androidx.compose.animation.AnimatedContent
 import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.animation.animateColorAsState
-import androidx.compose.animation.core.FastOutSlowInEasing
-import androidx.compose.animation.core.Spring
 import androidx.compose.animation.core.animateFloatAsState
-import androidx.compose.animation.core.spring
-import androidx.compose.animation.core.tween
 import androidx.compose.animation.fadeIn
 import androidx.compose.animation.fadeOut
 import androidx.compose.animation.scaleIn
+import androidx.compose.animation.scaleOut
 import androidx.compose.animation.slideInHorizontally
 import androidx.compose.animation.slideInVertically
 import androidx.compose.animation.slideOutHorizontally
@@ -41,8 +38,6 @@ import androidx.compose.material3.NavigationRail
 import androidx.compose.material3.NavigationRailItem
 import androidx.compose.material3.NavigationRailItemDefaults
 import androidx.compose.material3.Scaffold
-import androidx.compose.material3.SnackbarHost
-import androidx.compose.material3.SnackbarHostState
 import androidx.compose.material3.Text
 import androidx.compose.material3.minimumInteractiveComponentSize
 import androidx.compose.runtime.Composable
@@ -77,7 +72,6 @@ import androidx.navigation.compose.currentBackStackEntryAsState
 import androidx.navigation.compose.rememberNavController
 import androidx.navigation.navArgument
 import com.example.designsystem.LocalResolveExtendedPalette
-import com.example.designsystem.ResolveColors
 import com.example.domain.model.DurationSelection
 import com.example.domain.model.FlipClockPage
 import com.example.domain.model.LockMode
@@ -91,10 +85,13 @@ import com.example.presentation.analysis.DeviceAnalysisScreen
 import com.example.presentation.applock.AppLockSetupScreen
 import com.example.presentation.components.DeviceOwnerGuideSheet
 import com.example.presentation.components.ResolveIcons
+import com.example.presentation.components.ResolveMotion
+import com.example.presentation.components.ResolveNotificationHost
+import com.example.presentation.components.rememberEffectiveReducedMotion
+import com.example.presentation.components.rememberResolveNotificationController
 import com.example.presentation.home.HomeScreen
 import com.example.presentation.insights.InsightsScreen
 import com.example.presentation.modes.ModesScreen
-import com.example.presentation.modes.rgbColorInversion
 import com.example.presentation.more.MoreScreen
 import com.example.presentation.settings.SettingsScreen
 import com.example.presentation.setup.DelayedLockSetupScreen
@@ -133,16 +130,27 @@ private data class TopLevelTab(
 
 private val TOP_LEVEL_TABS = listOf(
     TopLevelTab(ResolveRoutes.HOME, "Home", Icons.Filled.Home, Icons.Outlined.Home),
-    TopLevelTab(ResolveRoutes.INSIGHTS, "Insights", ResolveIcons.History, ResolveIcons.History),
-    TopLevelTab(ResolveRoutes.MODES, "Modes", ResolveIcons.Vision, ResolveIcons.Vision),
+    TopLevelTab(ResolveRoutes.INSIGHTS, "Insights", ResolveIcons.InsightsFilled, ResolveIcons.InsightsOutlined),
+    TopLevelTab(ResolveRoutes.MODES, "Modes", ResolveIcons.ModesFilled, ResolveIcons.ModesOutlined),
     TopLevelTab(ResolveRoutes.MORE, "More", ResolveIcons.MoreHoriz, ResolveIcons.MoreHoriz)
 )
+
+private fun isSubScreenRoute(route: String?): Boolean {
+    if (route.isNullOrBlank()) return false
+    return route.contains("setup") ||
+        route == ResolveRoutes.SETTINGS ||
+        route.startsWith("device_analysis") ||
+        route == ResolveRoutes.ABOUT_RESOLVE
+}
+
+private fun tabIndexForRoute(route: String?): Int =
+    TOP_LEVEL_TABS.indexOfFirst { it.route == route }
 
 @Composable
 fun ResolveAppShell(viewModel: ResolveViewModel) {
     val palette = LocalResolveExtendedPalette.current
     val navController = rememberNavController()
-    val snackbarHostState = remember { SnackbarHostState() }
+    val notificationController = rememberResolveNotificationController()
     val backStackEntry by navController.currentBackStackEntryAsState()
     val currentRoute = backStackEntry?.destination?.route
 
@@ -182,20 +190,16 @@ fun ResolveAppShell(viewModel: ResolveViewModel) {
     val delayedProfile by viewModel.delayedProfile.collectAsStateWithLifecycle()
     val scheduledProfile by viewModel.scheduledProfile.collectAsStateWithLifecycle()
     val darkModeAppPrefs by viewModel.darkModeAppPrefs.collectAsStateWithLifecycle()
-    val colorInversionAppPrefs by viewModel.colorInversionAppPrefs.collectAsStateWithLifecycle()
     val forceDarkReport by viewModel.forceDarkReport.collectAsStateWithLifecycle()
     val notificationControlConfig by viewModel.notificationControlConfig.collectAsStateWithLifecycle()
     val notificationProtectionState by viewModel.notificationProtectionState.collectAsStateWithLifecycle()
     val deviceAnalysisReport by viewModel.deviceAnalysisReport.collectAsStateWithLifecycle()
     val landscapeTiltMode by viewModel.landscapeTiltMode.collectAsStateWithLifecycle()
-    val inAppColorInversionEnabled by viewModel.inAppColorInversionEnabled.collectAsStateWithLifecycle()
-    val colorInversionConsentGranted by viewModel.colorInversionConsentGranted.collectAsStateWithLifecycle()
-    val priorOsColorInversionState by viewModel.priorOsColorInversionState.collectAsStateWithLifecycle()
 
     var showDeviceOwnerGuide by remember { mutableStateOf(false) }
     val haptic = LocalHapticFeedback.current
     val context = LocalContext.current
-    val reducedMotion = mascotPreferences.reducedMotionEnabled
+    val reducedMotion = rememberEffectiveReducedMotion(mascotPreferences.reducedMotionEnabled)
 
     val navigateToTab: (String) -> Unit = { route ->
         if (currentRoute != route) {
@@ -234,7 +238,12 @@ fun ResolveAppShell(viewModel: ResolveViewModel) {
     LaunchedEffect(viewModel) {
         viewModel.events.collect { event ->
             when (event) {
-                is UiEvent.ShowMessage -> snackbarHostState.showSnackbar(event.message)
+                is UiEvent.ShowMessage -> notificationController.show(
+                    message = event.message,
+                    tone = event.tone,
+                    actionLabel = event.actionLabel,
+                    showCloseButton = event.showCloseButton
+                )
                 UiEvent.NavigateBackToHome -> {
                     runCatching {
                         navController.popBackStack(ResolveRoutes.HOME, inclusive = false)
@@ -255,8 +264,17 @@ fun ResolveAppShell(viewModel: ResolveViewModel) {
     AnimatedContent(
         targetState = startupStage,
         transitionSpec = {
-            fadeIn(tween(240, easing = FastOutSlowInEasing)) togetherWith
-                fadeOut(tween(180, easing = FastOutSlowInEasing))
+            if (reducedMotion) {
+                fadeIn(ResolveMotion.fastTween(true)) togetherWith
+                    fadeOut(ResolveMotion.exitTween(true))
+            } else {
+                (fadeIn(ResolveMotion.standardTween(false)) +
+                    scaleIn(
+                        initialScale = 0.975f,
+                        animationSpec = ResolveMotion.standardTween(false)
+                    )) togetherWith
+                    fadeOut(ResolveMotion.exitTween(false))
+            }
         },
         label = "startup_stage_transition"
     ) { stage ->
@@ -266,20 +284,20 @@ fun ResolveAppShell(viewModel: ResolveViewModel) {
                 Box(
                     modifier = Modifier
                         .fillMaxSize()
-                        .background(ResolveColors.ForestBrandDeep)
+                        .background(palette.background)
                 )
             }
 
             StartupStage.BRAND_INTRO -> {
                 BrandIntroScreen(
-                    reducedMotion = mascotPreferences.reducedMotionEnabled,
+                    reducedMotion = reducedMotion,
                     onIntroCompleted = { viewModel.onBrandIntroCompleted() }
                 )
             }
 
             StartupStage.FIRST_TIME_WELCOME -> {
                 FirstTimeWelcomeScreen(
-                    reducedMotion = mascotPreferences.reducedMotionEnabled,
+                    reducedMotion = reducedMotion,
                     onContinue = { viewModel.onFirstTimeWelcomeContinue() }
                 )
             }
@@ -295,8 +313,10 @@ fun ResolveAppShell(viewModel: ResolveViewModel) {
                         onCompleteSetup = { viewModel.onCompleteRequiredSetup() },
                         onDeferSetupToHome = { viewModel.onDeferRequiredSetupToHome() }
                     )
-                    SnackbarHost(
-                        hostState = snackbarHostState,
+                    ResolveNotificationHost(
+                        controller = notificationController,
+                        reducedMotion = reducedMotion,
+                        bottomClearance = 18.dp,
                         modifier = Modifier.align(Alignment.BottomCenter)
                     )
                 }
@@ -304,20 +324,27 @@ fun ResolveAppShell(viewModel: ResolveViewModel) {
 
             StartupStage.HOME -> {
                 BoxWithConstraints(
-                    modifier = Modifier
-                        .fillMaxSize()
-                        .rgbColorInversion(enabled = inAppColorInversionEnabled)
+                    modifier = Modifier.fillMaxSize()
                 ) {
                     val useNavigationRail = maxWidth >= 600.dp || maxWidth > maxHeight
 
                     Scaffold(
                         containerColor = palette.background,
-                        snackbarHost = { SnackbarHost(hostState = snackbarHostState) },
                         bottomBar = {
                             AnimatedVisibility(
                                 visible = isTopLevelDestination && !useNavigationRail,
-                                enter = fadeIn(tween(220)) + slideInVertically(tween(220)) { it / 2 },
-                                exit = fadeOut(tween(180)) + slideOutVertically(tween(180)) { it / 2 }
+                                enter = if (reducedMotion) {
+                                    fadeIn(ResolveMotion.fastTween(true))
+                                } else {
+                                    fadeIn(ResolveMotion.fastTween(false)) +
+                                        slideInVertically(ResolveMotion.intOffsetSlideTween(false)) { it / 2 }
+                                },
+                                exit = if (reducedMotion) {
+                                    fadeOut(ResolveMotion.exitTween(true))
+                                } else {
+                                    fadeOut(ResolveMotion.exitTween(false)) +
+                                        slideOutVertically(ResolveMotion.intOffsetSlideTween(false)) { it / 2 }
+                                }
                             ) {
                                 FloatingCapsuleNavDock(
                                     tabs = TOP_LEVEL_TABS,
@@ -337,7 +364,7 @@ fun ResolveAppShell(viewModel: ResolveViewModel) {
                                 .padding(innerPadding)
                         ) {
                             if (isTopLevelDestination && useNavigationRail) {
-                                NavigationRail(containerColor = palette.cardBottom) {
+                                NavigationRail(containerColor = palette.surfaceSecondary) {
                                     TOP_LEVEL_TABS.forEach { tab ->
                                         val selected = currentRoute == tab.route
                                         NavigationRailItem(
@@ -354,11 +381,11 @@ fun ResolveAppShell(viewModel: ResolveViewModel) {
                                             },
                                             label = { Text(tab.label) },
                                             colors = NavigationRailItemDefaults.colors(
-                                                selectedIconColor = palette.accent,
-                                                selectedTextColor = palette.accent,
-                                                indicatorColor = palette.accentSoftContainer,
-                                                unselectedIconColor = palette.textSecondary,
-                                                unselectedTextColor = palette.textSecondary
+                                                selectedIconColor = palette.accentStrong,
+                                                selectedTextColor = palette.accentStrong,
+                                                indicatorColor = palette.surfaceElevated,
+                                                unselectedIconColor = palette.textMuted,
+                                                unselectedTextColor = palette.textMuted
                                             )
                                         )
                                     }
@@ -369,43 +396,76 @@ fun ResolveAppShell(viewModel: ResolveViewModel) {
                                 navController = navController,
                                 startDestination = ResolveRoutes.HOME,
                                 enterTransition = {
-                                    val route = targetState.destination.route.orEmpty()
-                                    val isSubScreen = route.contains("setup") ||
-                                        route == ResolveRoutes.SETTINGS ||
-                                        route.startsWith("device_analysis") ||
-                                        route == ResolveRoutes.ABOUT_RESOLVE
+                                    val fromRoute = initialState.destination.route
+                                    val toRoute = targetState.destination.route
+                                    val fromTab = tabIndexForRoute(fromRoute)
+                                    val toTab = tabIndexForRoute(toRoute)
                                     when {
-                                        reducedMotion -> fadeIn(tween(120))
-                                        isSubScreen -> slideInHorizontally(
-                                            animationSpec = tween(260, easing = FastOutSlowInEasing)
-                                        ) { it / 4 } + fadeIn(tween(240))
-                                        else -> fadeIn(tween(230, easing = FastOutSlowInEasing)) +
-                                            scaleIn(
-                                                initialScale = 0.975f,
-                                                animationSpec = tween(230, easing = FastOutSlowInEasing)
-                                            )
+                                        reducedMotion -> fadeIn(ResolveMotion.fastTween(true))
+                                        isSubScreenRoute(toRoute) ->
+                                            slideInHorizontally(ResolveMotion.intOffsetSlideTween(false)) { it / 5 } +
+                                                fadeIn(ResolveMotion.subScreenTween(false)) +
+                                                scaleIn(
+                                                    initialScale = 0.97f,
+                                                    animationSpec = ResolveMotion.subScreenTween(false)
+                                                )
+                                        fromTab >= 0 && toTab >= 0 && fromTab != toTab -> {
+                                            val direction = if (toTab > fromTab) 1 else -1
+                                            slideInHorizontally(ResolveMotion.intOffsetSlideTween(false)) {
+                                                direction * (it / 10)
+                                            } +
+                                                fadeIn(ResolveMotion.standardTween(false)) +
+                                                scaleIn(
+                                                    initialScale = 0.975f,
+                                                    animationSpec = ResolveMotion.standardTween(false)
+                                                )
+                                        }
+                                        else ->
+                                            fadeIn(ResolveMotion.standardTween(false)) +
+                                                scaleIn(
+                                                    initialScale = 0.975f,
+                                                    animationSpec = ResolveMotion.standardTween(false)
+                                                )
                                     }
                                 },
                                 exitTransition = {
-                                    if (reducedMotion) {
-                                        fadeOut(tween(90))
-                                    } else {
-                                        fadeOut(tween(170, easing = FastOutSlowInEasing))
+                                    val fromRoute = initialState.destination.route
+                                    val toRoute = targetState.destination.route
+                                    val fromTab = tabIndexForRoute(fromRoute)
+                                    val toTab = tabIndexForRoute(toRoute)
+                                    when {
+                                        reducedMotion -> fadeOut(ResolveMotion.exitTween(true))
+                                        isSubScreenRoute(toRoute) ->
+                                            slideOutHorizontally(ResolveMotion.intOffsetSlideTween(false)) { -it / 10 } +
+                                                fadeOut(ResolveMotion.exitTween(false))
+                                        fromTab >= 0 && toTab >= 0 && fromTab != toTab -> {
+                                            val direction = if (toTab > fromTab) -1 else 1
+                                            slideOutHorizontally(ResolveMotion.intOffsetSlideTween(false)) {
+                                                direction * (it / 10)
+                                            } +
+                                                fadeOut(ResolveMotion.exitTween(false))
+                                        }
+                                        else -> fadeOut(ResolveMotion.exitTween(false))
                                     }
                                 },
                                 popEnterTransition = {
                                     if (reducedMotion) {
-                                        fadeIn(tween(120))
+                                        fadeIn(ResolveMotion.fastTween(true))
                                     } else {
-                                        fadeIn(tween(230, easing = FastOutSlowInEasing))
+                                        slideInHorizontally(ResolveMotion.intOffsetSlideTween(false)) { -it / 10 } +
+                                            fadeIn(ResolveMotion.subScreenTween(false))
                                     }
                                 },
                                 popExitTransition = {
-                                    when {
-                                        reducedMotion -> fadeOut(tween(90))
-                                        else -> slideOutHorizontally(
-                                            animationSpec = tween(240, easing = FastOutSlowInEasing)
-                                        ) { it / 4 } + fadeOut(tween(190))
+                                    if (reducedMotion) {
+                                        fadeOut(ResolveMotion.exitTween(true))
+                                    } else {
+                                        slideOutHorizontally(ResolveMotion.intOffsetSlideTween(false)) { it / 5 } +
+                                            fadeOut(ResolveMotion.exitTween(false)) +
+                                            scaleOut(
+                                                targetScale = 0.975f,
+                                                animationSpec = ResolveMotion.exitTween(false)
+                                            )
                                     }
                                 },
                                 modifier = Modifier.fillMaxSize()
@@ -435,7 +495,7 @@ fun ResolveAppShell(viewModel: ResolveViewModel) {
                                         mascotType = mascotPreferences.selectedMascot,
                                         bunnyPeekEntranceSeen = mascotPreferences.bunnyPeekEntranceSeen,
                                         onBunnyPeekEntranceSeen = { viewModel.markBunnyPeekEntranceSeen() },
-                                        reducedMotion = mascotPreferences.reducedMotionEnabled,
+                                        reducedMotion = reducedMotion,
                                         accountSyncState = accountSyncState,
                                         syncPromoDismissed = syncPromoDismissed,
                                         onConnectGoogleAccount = { viewModel.signInWithGoogle(context) },
@@ -471,7 +531,6 @@ fun ResolveAppShell(viewModel: ResolveViewModel) {
                                         report = forceDarkReport,
                                         installedApps = installedApps,
                                         darkModeAppPrefs = darkModeAppPrefs,
-                                        colorInversionAppPrefs = colorInversionAppPrefs,
                                         loadAppIcon = { viewModel.loadAppIcon(it) },
                                         onEnterFlipClock = {
                                             context.startActivity(
@@ -485,23 +544,10 @@ fun ResolveAppShell(viewModel: ResolveViewModel) {
                                         onAttemptAppDarkMode = { pkg, enable ->
                                             viewModel.attemptAppDarkMode(pkg, enable)
                                         },
-                                        onAttemptAppColorInversion = { pkg, enable ->
-                                            viewModel.attemptAppColorInversion(pkg, enable)
-                                        },
                                         onOpenDisplaySettings = {
                                             viewModel.openDisplayDarkSettings()
                                         },
-                                        onOpenAccessibilitySettings = {
-                                            viewModel.grantColorInversionConsentAndOpenAccessibility()
-                                        },
-                                        onResetAllModes = { viewModel.resetAllModes() },
-                                        inAppColorInversionEnabled = inAppColorInversionEnabled,
-                                        colorInversionConsentGranted = colorInversionConsentGranted,
-                                        priorOsColorInversionState = priorOsColorInversionState,
-                                        onToggleInAppColorInversion = { viewModel.setInAppColorInversionEnabled(it) },
-                                        onGrantConsentAndOpenAccessibility = {
-                                            viewModel.grantColorInversionConsentAndOpenAccessibility()
-                                        }
+                                        onResetAllModes = { viewModel.resetAllModes() }
                                     )
                                 }
 
@@ -810,6 +856,13 @@ fun ResolveAppShell(viewModel: ResolveViewModel) {
                             }
                         }
                     }
+
+                    ResolveNotificationHost(
+                        controller = notificationController,
+                        reducedMotion = reducedMotion,
+                        bottomClearance = if (isTopLevelDestination && !useNavigationRail) 92.dp else 16.dp,
+                        modifier = Modifier.align(Alignment.BottomCenter)
+                    )
                 }
             }
         }
@@ -843,24 +896,17 @@ private fun FloatingCapsuleNavDock(
                 .widthIn(max = 520.dp)
                 .fillMaxWidth()
                 .shadow(
-                    elevation = 14.dp,
-                    shape = RoundedCornerShape(28.dp),
-                    ambientColor = palette.accent.copy(alpha = 0.16f),
-                    spotColor = Color.Black.copy(alpha = if (palette.isDark) 0.45f else 0.18f)
+                    elevation = if (palette.isDark) 8.dp else 4.dp,
+                    shape = RoundedCornerShape(22.dp),
+                    ambientColor = Color.Black.copy(alpha = if (palette.isDark) 0.28f else 0.10f),
+                    spotColor = Color.Black.copy(alpha = if (palette.isDark) 0.34f else 0.12f)
                 )
-                .clip(RoundedCornerShape(28.dp))
-                .background(
-                    Brush.verticalGradient(
-                        colors = listOf(
-                            palette.cardTop.copy(alpha = 0.96f),
-                            palette.cardBottom.copy(alpha = 0.96f)
-                        )
-                    )
-                )
+                .clip(RoundedCornerShape(22.dp))
+                .background(palette.surfaceSecondary.copy(alpha = 0.98f))
                 .border(
                     1.dp,
-                    palette.accent.copy(alpha = 0.22f),
-                    RoundedCornerShape(28.dp)
+                    palette.cardBorder,
+                    RoundedCornerShape(22.dp)
                 )
                 .padding(horizontal = 6.dp, vertical = 6.dp)
                 .testTag("bottom_nav_dock"),
@@ -871,24 +917,25 @@ private fun FloatingCapsuleNavDock(
                 val selected = currentRoute == tab.route
                 val pillColor by animateColorAsState(
                     targetValue = if (selected) {
-                        palette.accentSoftContainer.copy(alpha = 0.94f)
+                        palette.surfaceElevated
                     } else {
                         Color.Transparent
                     },
-                    animationSpec = tween(durationMillis = if (reducedMotion) 90 else 220),
+                    animationSpec = ResolveMotion.fastTween(reducedMotion),
                     label = "nav_pill_color_${tab.route}"
                 )
                 val contentColor by animateColorAsState(
-                    targetValue = if (selected) palette.accent else palette.textSecondary,
-                    animationSpec = tween(durationMillis = if (reducedMotion) 90 else 200),
+                    targetValue = if (selected) palette.accentStrong else palette.textMuted,
+                    animationSpec = ResolveMotion.fastTween(reducedMotion),
                     label = "nav_content_color_${tab.route}"
                 )
                 val iconScale by animateFloatAsState(
                     targetValue = if (selected && !reducedMotion) 1.08f else 1f,
-                    animationSpec = spring(
-                        dampingRatio = Spring.DampingRatioMediumBouncy,
-                        stiffness = Spring.StiffnessMediumLow
-                    ),
+                    animationSpec = if (reducedMotion) {
+                        ResolveMotion.fastTween(true)
+                    } else {
+                        ResolveMotion.gentleSpring()
+                    },
                     label = "nav_icon_scale_${tab.route}"
                 )
 
@@ -896,16 +943,16 @@ private fun FloatingCapsuleNavDock(
                     modifier = Modifier
                         .weight(1f)
                         .minimumInteractiveComponentSize()
-                        .clip(RoundedCornerShape(22.dp))
+                        .clip(RoundedCornerShape(16.dp))
                         .background(pillColor)
                         .border(
                             width = if (selected) 1.dp else 0.dp,
                             color = if (selected) {
-                                palette.accent.copy(alpha = 0.28f)
+                                palette.accentSecondary.copy(alpha = 0.38f)
                             } else {
                                 Color.Transparent
                             },
-                            shape = RoundedCornerShape(22.dp)
+                            shape = RoundedCornerShape(16.dp)
                         )
                         .clickable(
                             role = Role.Tab,

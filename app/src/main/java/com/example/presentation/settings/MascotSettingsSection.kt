@@ -51,7 +51,6 @@ import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.OutlinedTextFieldDefaults
 import androidx.compose.material3.Switch
-import androidx.compose.material3.SwitchDefaults
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.material3.minimumInteractiveComponentSize
@@ -81,7 +80,6 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.example.designsystem.LocalResolveExtendedPalette
-import com.example.designsystem.ResolveColors
 import com.example.domain.model.DefaultFocusMessages
 import com.example.domain.model.DefaultLockReminders
 import com.example.domain.model.FocusMessageFrequency
@@ -96,6 +94,7 @@ import com.example.presentation.components.MascotRenderer
 import com.example.presentation.components.ProvideSafeTextToolbar
 import com.example.presentation.components.dismissTextInteractions
 import com.example.presentation.components.resolveGlassCard
+import com.example.presentation.components.resolveSwitchColors
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 
@@ -178,7 +177,7 @@ fun MascotAppearanceCard(
     Column(
         modifier = modifier
             .fillMaxWidth()
-            .resolveGlassCard(cornerRadius = 22.dp)
+            .resolveGlassCard(cornerRadius = 16.dp)
             .padding(18.dp),
         verticalArrangement = Arrangement.spacedBy(14.dp)
     ) {
@@ -203,8 +202,8 @@ fun MascotAppearanceCard(
                 modifier = Modifier
                     .size(72.dp)
                     .clip(RoundedCornerShape(18.dp))
-                    .background(ResolveColors.ForestDeep.copy(alpha = 0.85f))
-                    .border(1.dp, palette.accent.copy(alpha = 0.35f), RoundedCornerShape(18.dp))
+                    .background(palette.background)
+                    .border(1.dp, palette.cardBorder, RoundedCornerShape(18.dp))
                     .testTag("mascot_settings_live_preview"),
                 contentAlignment = Alignment.Center
             ) {
@@ -241,7 +240,7 @@ fun MascotAppearanceCard(
             modifier = Modifier
                 .fillMaxWidth()
                 .clip(RoundedCornerShape(16.dp))
-                .background(palette.background.copy(alpha = 0.55f))
+                .background(palette.surfaceSecondary)
                 .border(1.dp, palette.cardBorder, RoundedCornerShape(16.dp))
                 .padding(horizontal = 12.dp, vertical = 10.dp),
             verticalArrangement = Arrangement.spacedBy(6.dp)
@@ -249,7 +248,7 @@ fun MascotAppearanceCard(
             Text(
                 text = "PREVIEW ANIMATIONS",
                 style = MaterialTheme.typography.labelSmall.copy(letterSpacing = 1.0.sp),
-                color = palette.accent
+                color = palette.accentStrong
             )
             FlowRow(
                 horizontalArrangement = Arrangement.spacedBy(8.dp),
@@ -346,7 +345,7 @@ fun MascotAppearanceCard(
             modifier = Modifier
                 .fillMaxWidth()
                 .clip(RoundedCornerShape(16.dp))
-                .background(palette.background.copy(alpha = 0.55f))
+                .background(palette.surfaceSecondary)
                 .border(1.dp, palette.cardBorder, RoundedCornerShape(16.dp))
                 .padding(horizontal = 14.dp, vertical = 10.dp),
             verticalAlignment = Alignment.CenterVertically,
@@ -367,12 +366,7 @@ fun MascotAppearanceCard(
             Switch(
                 checked = preferences.reducedMotionEnabled,
                 onCheckedChange = onToggleReducedMotion,
-                colors = SwitchDefaults.colors(
-                    checkedThumbColor = palette.onAccent,
-                    checkedTrackColor = palette.accent,
-                    uncheckedThumbColor = palette.textSecondary,
-                    uncheckedTrackColor = palette.cardBottom
-                ),
+                colors = resolveSwitchColors(),
                 modifier = Modifier.testTag("settings_reduced_motion_switch")
             )
         }
@@ -387,8 +381,11 @@ fun MascotAppearanceCard(
 
         OutlinedButton(
             onClick = onOpenFocusMessagesManager,
-            colors = ButtonDefaults.outlinedButtonColors(contentColor = palette.accent),
-            border = BorderStroke(1.dp, palette.accent.copy(alpha = 0.55f)),
+            colors = ButtonDefaults.outlinedButtonColors(
+                containerColor = palette.controlSurface,
+                contentColor = palette.slateTealStrong
+            ),
+            border = BorderStroke(1.dp, palette.slateTeal.copy(alpha = 0.42f)),
             shape = RoundedCornerShape(14.dp),
             contentPadding = PaddingValues(horizontal = 16.dp, vertical = 12.dp),
             modifier = Modifier
@@ -405,7 +402,7 @@ fun MascotAppearanceCard(
                     Text(
                         text = "Focus Messages",
                         style = MaterialTheme.typography.titleSmall,
-                        color = palette.accent
+                        color = palette.textPrimary
                     )
                     Text(
                         text = freqSummary,
@@ -416,7 +413,7 @@ fun MascotAppearanceCard(
                 Text(
                     text = "Customize",
                     style = MaterialTheme.typography.labelLarge,
-                    color = palette.accentStrong
+                    color = palette.slateTealStrong
                 )
             }
         }
@@ -426,7 +423,7 @@ fun MascotAppearanceCard(
             modifier = Modifier
                 .fillMaxWidth()
                 .clip(RoundedCornerShape(16.dp))
-                .background(palette.background.copy(alpha = 0.55f))
+                .background(palette.surfaceSecondary)
                 .border(1.dp, palette.cardBorder, RoundedCornerShape(16.dp))
                 .padding(horizontal = 14.dp, vertical = 10.dp),
             verticalArrangement = Arrangement.spacedBy(10.dp)
@@ -451,12 +448,7 @@ fun MascotAppearanceCard(
                 Switch(
                     checked = preferences.lockReminderEnabled,
                     onCheckedChange = onToggleLockReminderEnabled,
-                    colors = SwitchDefaults.colors(
-                        checkedThumbColor = palette.onAccent,
-                        checkedTrackColor = palette.accent,
-                        uncheckedThumbColor = palette.textSecondary,
-                        uncheckedTrackColor = palette.cardBottom
-                    ),
+                    colors = resolveSwitchColors(),
                     modifier = Modifier.testTag("settings_lock_reminder_switch")
                 )
             }
@@ -468,8 +460,11 @@ fun MascotAppearanceCard(
             ) {
                 OutlinedButton(
                     onClick = onOpenLockReminderEditor,
-                    colors = ButtonDefaults.outlinedButtonColors(contentColor = palette.accent),
-                    border = BorderStroke(1.dp, palette.accent.copy(alpha = 0.45f)),
+                    colors = ButtonDefaults.outlinedButtonColors(
+                        containerColor = palette.controlSurface,
+                        contentColor = palette.champagneStrong
+                    ),
+                    border = BorderStroke(1.dp, palette.champagne.copy(alpha = 0.42f)),
                     shape = RoundedCornerShape(12.dp),
                     contentPadding = PaddingValues(horizontal = 14.dp, vertical = 10.dp),
                     modifier = Modifier
@@ -499,7 +494,7 @@ fun MascotAppearanceCard(
                         Text(
                             text = "Edit",
                             style = MaterialTheme.typography.labelLarge,
-                            color = palette.accentStrong
+                            color = palette.champagneStrong
                         )
                     }
                 }
@@ -533,7 +528,7 @@ private fun PreviewActionChip(
             )
         },
         colors = FilterChipDefaults.filterChipColors(
-            selectedContainerColor = palette.accentSoftContainer,
+            selectedContainerColor = palette.surfaceElevated,
             selectedLabelColor = palette.accentStrong,
             selectedLeadingIconColor = palette.accentStrong,
             containerColor = palette.cardBottom,
@@ -544,7 +539,7 @@ private fun PreviewActionChip(
             enabled = true,
             selected = active,
             borderColor = palette.cardBorder,
-            selectedBorderColor = palette.accent
+            selectedBorderColor = palette.accentSecondary
         ),
         modifier = Modifier.testTag(testTag)
     )
@@ -558,11 +553,11 @@ private fun MascotOptionRow(
     onClick: () -> Unit
 ) {
     val palette = LocalResolveExtendedPalette.current
-    val borderColor = if (selected) palette.accent else palette.cardBorder
+    val borderColor = if (selected) palette.accentSecondary else palette.cardBorder
     val bgColor = if (selected) {
-        palette.accentSoftContainer.copy(alpha = 0.72f)
+        palette.surfaceElevated
     } else {
-        palette.background.copy(alpha = 0.55f)
+        palette.surfaceSecondary
     }
 
     Row(
@@ -588,7 +583,7 @@ private fun MascotOptionRow(
             modifier = Modifier
                 .size(44.dp)
                 .clip(RoundedCornerShape(12.dp))
-                .background(ResolveColors.ForestSurface.copy(alpha = 0.88f))
+                .background(palette.surfaceElevated)
                 .border(1.dp, palette.cardBorder, RoundedCornerShape(12.dp)),
             contentAlignment = Alignment.Center
         ) {
@@ -618,14 +613,14 @@ private fun MascotOptionRow(
             modifier = Modifier
                 .size(24.dp)
                 .clip(CircleShape)
-                .background(if (selected) palette.accent else palette.cardBottom),
+                .background(if (selected) palette.primaryButton else palette.cardBottom),
             contentAlignment = Alignment.Center
         ) {
             if (selected) {
                 Icon(
                     imageVector = Icons.Outlined.Check,
                     contentDescription = "Selected",
-                    tint = palette.onAccent,
+                    tint = palette.onPrimaryButton,
                     modifier = Modifier.size(16.dp)
                 )
             }
@@ -655,7 +650,7 @@ fun FocusMessagesManagerSheet(
     ModalBottomSheet(
         onDismissRequest = onDismiss,
         sheetState = sheetState,
-        containerColor = palette.cardBottom
+        containerColor = palette.surfaceSecondary
     ) {
         ProvideSafeTextToolbar {
             Column(
@@ -685,12 +680,7 @@ fun FocusMessagesManagerSheet(
                     Switch(
                         checked = preferences.focusMessagesEnabled,
                         onCheckedChange = onToggleMessagesEnabled,
-                        colors = SwitchDefaults.colors(
-                            checkedThumbColor = palette.onAccent,
-                            checkedTrackColor = palette.accent,
-                            uncheckedThumbColor = palette.textSecondary,
-                            uncheckedTrackColor = palette.cardBottom
-                        ),
+                        colors = resolveSwitchColors(),
                         modifier = Modifier.testTag("focus_messages_enable_switch")
                     )
                 }
@@ -699,7 +689,7 @@ fun FocusMessagesManagerSheet(
                     Text(
                         text = "MESSAGE FREQUENCY",
                         style = MaterialTheme.typography.labelSmall.copy(letterSpacing = 1.1.sp),
-                        color = palette.accent
+                        color = palette.accentStrong
                     )
                     FlowRow(
                         horizontalArrangement = Arrangement.spacedBy(8.dp),
@@ -712,16 +702,16 @@ fun FocusMessagesManagerSheet(
                                 onClick = { onSelectFrequency(freq) },
                                 label = { Text(freq.label) },
                                 colors = FilterChipDefaults.filterChipColors(
-                                    selectedContainerColor = palette.accentSoftContainer,
+                                    selectedContainerColor = palette.surfaceElevated,
                                     selectedLabelColor = palette.accentStrong,
-                                    containerColor = palette.background,
+                                    containerColor = palette.cardBottom,
                                     labelColor = palette.textSecondary
                                 ),
                                 border = FilterChipDefaults.filterChipBorder(
                                     enabled = true,
                                     selected = selected,
                                     borderColor = palette.cardBorder,
-                                    selectedBorderColor = palette.accent
+                                    selectedBorderColor = palette.accentSecondary
                                 ),
                                 modifier = Modifier.testTag("focus_message_frequency_${freq.storageKey}")
                             )
@@ -736,8 +726,8 @@ fun FocusMessagesManagerSheet(
                     Button(
                         onClick = { showAddDialog = true },
                         colors = ButtonDefaults.buttonColors(
-                            containerColor = palette.accent,
-                            contentColor = palette.onAccent
+                            containerColor = palette.primaryButton,
+                            contentColor = palette.onPrimaryButton
                         ),
                         shape = RoundedCornerShape(12.dp),
                         modifier = Modifier
@@ -755,7 +745,7 @@ fun FocusMessagesManagerSheet(
 
                     OutlinedButton(
                         onClick = onRestoreDefaults,
-                        colors = ButtonDefaults.outlinedButtonColors(contentColor = palette.accent),
+                        colors = ButtonDefaults.outlinedButtonColors(contentColor = palette.accentStrong),
                         border = BorderStroke(1.dp, palette.cardBorder),
                         shape = RoundedCornerShape(12.dp),
                         modifier = Modifier.testTag("focus_message_restore_defaults_button")
@@ -775,7 +765,7 @@ fun FocusMessagesManagerSheet(
                         modifier = Modifier
                             .fillMaxWidth()
                             .clip(RoundedCornerShape(16.dp))
-                            .background(palette.background.copy(alpha = 0.65f))
+                            .background(palette.cardBottom)
                             .border(1.dp, palette.cardBorder, RoundedCornerShape(16.dp))
                             .padding(18.dp),
                         contentAlignment = Alignment.Center
@@ -799,7 +789,7 @@ fun FocusMessagesManagerSheet(
                                 modifier = Modifier
                                     .fillMaxWidth()
                                     .clip(RoundedCornerShape(14.dp))
-                                    .background(palette.background.copy(alpha = 0.65f))
+                                    .background(palette.cardBottom)
                                     .border(1.dp, palette.cardBorder, RoundedCornerShape(14.dp))
                                     .padding(start = 14.dp, end = 6.dp, top = 8.dp, bottom = 8.dp),
                                 verticalAlignment = Alignment.CenterVertically
@@ -885,7 +875,7 @@ private fun FocusMessageEditorDialog(
 
     AlertDialog(
         onDismissRequest = onDismiss,
-        containerColor = palette.cardBottom,
+        containerColor = palette.surfaceSecondary,
         title = {
             Text(
                 text = title,
@@ -947,8 +937,8 @@ private fun FocusMessageEditorDialog(
                                 onConfirm(trimmed)
                             },
                             colors = ButtonDefaults.buttonColors(
-                                containerColor = palette.accent,
-                                contentColor = palette.onAccent
+                                containerColor = palette.primaryButton,
+                                contentColor = palette.onPrimaryButton
                             ),
                             modifier = Modifier.testTag("focus_message_save_button")
                         ) {
@@ -986,7 +976,7 @@ fun LockReminderEditorSheet(
     ModalBottomSheet(
         onDismissRequest = onDismiss,
         sheetState = sheetState,
-        containerColor = palette.cardBottom
+        containerColor = palette.surfaceSecondary
     ) {
         ProvideSafeTextToolbar {
             val focusManager = LocalFocusManager.current
@@ -1023,7 +1013,7 @@ fun LockReminderEditorSheet(
                         Text(
                             text = "DISPLAY STYLE",
                             style = MaterialTheme.typography.labelSmall.copy(letterSpacing = 1.1.sp),
-                            color = palette.accent
+                            color = palette.accentStrong
                         )
                         FlowRow(
                             horizontalArrangement = Arrangement.spacedBy(8.dp),
@@ -1039,16 +1029,16 @@ fun LockReminderEditorSheet(
                                     },
                                     label = { Text(styleOption.label) },
                                     colors = FilterChipDefaults.filterChipColors(
-                                        selectedContainerColor = palette.accentSoftContainer,
+                                        selectedContainerColor = palette.surfaceElevated,
                                         selectedLabelColor = palette.accentStrong,
-                                        containerColor = palette.background,
+                                        containerColor = palette.cardBottom,
                                         labelColor = palette.textSecondary
                                     ),
                                     border = FilterChipDefaults.filterChipBorder(
                                         enabled = true,
                                         selected = selected,
                                         borderColor = palette.cardBorder,
-                                        selectedBorderColor = palette.accent
+                                        selectedBorderColor = palette.accentSecondary
                                     ),
                                     modifier = Modifier.testTag("lock_reminder_style_${styleOption.storageKey}")
                                 )
@@ -1089,13 +1079,13 @@ fun LockReminderEditorSheet(
                         Text(
                             text = "PREVIEW ON LOCK SCREEN",
                             style = MaterialTheme.typography.labelSmall.copy(letterSpacing = 1.1.sp),
-                            color = ResolveColors.MintAccent
+                            color = palette.accentStrong
                         )
                         Box(
                             modifier = Modifier
                                 .fillMaxWidth()
                                 .clip(RoundedCornerShape(16.dp))
-                                .background(ResolveColors.ForestDeep)
+                                .background(palette.background)
                                 .padding(horizontal = 16.dp, vertical = 12.dp),
                             contentAlignment = Alignment.Center
                         ) {
@@ -1105,10 +1095,10 @@ fun LockReminderEditorSheet(
                                     modifier = Modifier
                                         .fillMaxWidth()
                                         .clip(RoundedCornerShape(14.dp))
-                                        .background(ResolveColors.ForestSurface.copy(alpha = 0.78f))
+                                        .background(palette.surfaceElevated)
                                         .border(
                                             1.dp,
-                                            ResolveColors.MintAccent.copy(alpha = 0.25f),
+                                            palette.cardBorder,
                                             RoundedCornerShape(14.dp)
                                         )
                                         .padding(horizontal = 14.dp, vertical = 10.dp),
@@ -1120,7 +1110,7 @@ fun LockReminderEditorSheet(
                                             fontStyle = FontStyle.Italic,
                                             fontWeight = FontWeight.Medium
                                         ),
-                                        color = ResolveColors.TextPrimary,
+                                        color = palette.textPrimary,
                                         textAlign = TextAlign.Center
                                     )
                                 }
@@ -1131,7 +1121,7 @@ fun LockReminderEditorSheet(
                                         fontStyle = FontStyle.Italic,
                                         fontWeight = FontWeight.Medium
                                     ),
-                                    color = ResolveColors.MintBright,
+                                    color = palette.accentStrong,
                                     textAlign = TextAlign.Center
                                 )
                             }
@@ -1143,7 +1133,7 @@ fun LockReminderEditorSheet(
                         Text(
                             text = "EFFECTIVE PRESETS",
                             style = MaterialTheme.typography.labelSmall.copy(letterSpacing = 1.1.sp),
-                            color = palette.accent
+                            color = palette.accentStrong
                         )
                         DefaultLockReminders.presets.forEachIndexed { idx, preset ->
                             val isSelected = trimmed == preset
@@ -1152,12 +1142,12 @@ fun LockReminderEditorSheet(
                                     .fillMaxWidth()
                                     .clip(RoundedCornerShape(12.dp))
                                     .background(
-                                        if (isSelected) palette.accentSoftContainer.copy(alpha = 0.65f)
-                                        else palette.background.copy(alpha = 0.65f)
+                                        if (isSelected) palette.surfaceElevated
+                                        else palette.cardBottom
                                     )
                                     .border(
                                         1.dp,
-                                        if (isSelected) palette.accent else palette.cardBorder,
+                                        if (isSelected) palette.accentSecondary else palette.cardBorder,
                                         RoundedCornerShape(12.dp)
                                     )
                                     .clickable { draftText = preset }
@@ -1196,8 +1186,8 @@ fun LockReminderEditorSheet(
                             onDismiss()
                         },
                         colors = ButtonDefaults.buttonColors(
-                            containerColor = palette.accent,
-                            contentColor = palette.onAccent
+                            containerColor = palette.primaryButton,
+                            contentColor = palette.onPrimaryButton
                         ),
                         modifier = Modifier.testTag("lock_reminder_save_button")
                     ) {

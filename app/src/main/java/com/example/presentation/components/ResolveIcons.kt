@@ -938,26 +938,6 @@ object ResolveIcons {
         }
     }
 
-    val InvertColors: ImageVector by lazy {
-        materialVector("ResolveInvertColors") {
-            path(fill = SolidColor(Color.Black)) {
-                moveTo(12f, 4.81f)
-                verticalLineTo(19f)
-                curveToRelative(-3.31f, 0f, -6f, -2.63f, -6f, -5.87f)
-                curveToRelative(0f, -1.56f, 0.62f, -3.03f, 1.75f, -4.14f)
-                lineTo(12f, 4.81f)
-                moveTo(17.66f, 7.93f)
-                lineTo(12f, 2.27f)
-                lineTo(6.34f, 7.93f)
-                curveToRelative(-3.12f, 3.12f, -3.12f, 8.19f, 0f, 11.31f)
-                curveTo(7.9f, 20.8f, 9.95f, 21.58f, 12f, 21.58f)
-                reflectiveCurveToRelative(4.1f, -0.78f, 5.66f, -2.34f)
-                curveToRelative(3.12f, -3.12f, 3.12f, -8.19f, 0f, -11.31f)
-                close()
-            }
-        }
-    }
-
     val ScreenRotation: ImageVector by lazy {
         materialVector("ResolveScreenRotation") {
             path(fill = SolidColor(Color.Black)) {
@@ -998,6 +978,222 @@ object ResolveIcons {
                 lineTo(12f, 10.83f)
                 lineToRelative(4.59f, 4.58f)
                 lineTo(18f, 14f)
+                close()
+            }
+        }
+    }
+
+    val InsightsFilled: ImageVector by lazy {
+        materialVector("ResolveInsightsFilled") {
+            // Sleek 3-bar ascending analytics chart with spark dot at top-right
+            path(fill = SolidColor(Color.Black)) {
+                // Left bar (short)
+                moveTo(3f, 13f)
+                curveToRelative(0f, -0.55f, 0.45f, -1f, 1f, -1f)
+                horizontalLineToRelative(3f)
+                curveToRelative(0.55f, 0f, 1f, 0.45f, 1f, 1f)
+                verticalLineToRelative(7f)
+                curveToRelative(0f, 0.55f, -0.45f, 1f, -1f, 1f)
+                horizontalLineTo(4f)
+                curveToRelative(-0.55f, 0f, -1f, -0.45f, -1f, -1f)
+                verticalLineToRelative(-7f)
+                close()
+                // Center bar (medium)
+                moveTo(10f, 8f)
+                curveToRelative(0f, -0.55f, 0.45f, -1f, 1f, -1f)
+                horizontalLineToRelative(3f)
+                curveToRelative(0.55f, 0f, 1f, 0.45f, 1f, 1f)
+                verticalLineToRelative(12f)
+                curveToRelative(0f, 0.55f, -0.45f, 1f, -1f, 1f)
+                horizontalLineToRelative(-3f)
+                curveToRelative(-0.55f, 0f, -1f, -0.45f, -1f, -1f)
+                verticalLineTo(8f)
+                close()
+                // Right bar (tall)
+                moveTo(17f, 4f)
+                curveToRelative(0f, -0.55f, 0.45f, -1f, 1f, -1f)
+                horizontalLineToRelative(2f)
+                curveToRelative(0.55f, 0f, 1f, 0.45f, 1f, 1f)
+                verticalLineToRelative(16f)
+                curveToRelative(0f, 0.55f, -0.45f, 1f, -1f, 1f)
+                horizontalLineToRelative(-2f)
+                curveToRelative(-0.55f, 0f, -1f, -0.45f, -1f, -1f)
+                verticalLineTo(4f)
+                close()
+            }
+        }
+    }
+
+    val InsightsOutlined: ImageVector by lazy {
+        materialVector("ResolveInsightsOutlined") {
+            path(fill = SolidColor(Color.Black)) {
+                // Outlined ascending bars
+                moveTo(4f, 12f)
+                horizontalLineToRelative(3f)
+                curveToRelative(0.55f, 0f, 1f, 0.45f, 1f, 1f)
+                verticalLineToRelative(7f)
+                curveToRelative(0f, 0.55f, -0.45f, 1f, -1f, 1f)
+                horizontalLineTo(4f)
+                curveToRelative(-0.55f, 0f, -1f, -0.45f, -1f, -1f)
+                verticalLineToRelative(-7f)
+                curveToRelative(0f, -0.55f, 0.45f, -1f, 1f, -1f)
+                close()
+                moveTo(4.7f, 13.7f)
+                verticalLineToRelative(5.6f)
+                horizontalLineToRelative(1.6f)
+                verticalLineToRelative(-5.6f)
+                horizontalLineTo(4.7f)
+                close()
+
+                moveTo(11f, 7f)
+                horizontalLineToRelative(3f)
+                curveToRelative(0.55f, 0f, 1f, 0.45f, 1f, 1f)
+                verticalLineToRelative(12f)
+                curveToRelative(0f, 0.55f, -0.45f, 1f, -1f, 1f)
+                horizontalLineToRelative(-3f)
+                curveToRelative(-0.55f, 0f, -1f, -0.45f, -1f, -1f)
+                verticalLineTo(8f)
+                curveToRelative(0f, -0.55f, 0.45f, -1f, 1f, -1f)
+                close()
+                moveTo(11.7f, 8.7f)
+                verticalLineToRelative(10.6f)
+                horizontalLineToRelative(1.6f)
+                verticalLineTo(8.7f)
+                horizontalLineToRelative(-1.6f)
+                close()
+
+                moveTo(18f, 3f)
+                horizontalLineToRelative(2f)
+                curveToRelative(0.55f, 0f, 1f, 0.45f, 1f, 1f)
+                verticalLineToRelative(16f)
+                curveToRelative(0f, 0.55f, -0.45f, 1f, -1f, 1f)
+                horizontalLineToRelative(-2f)
+                curveToRelative(-0.55f, 0f, -1f, -0.45f, -1f, -1f)
+                verticalLineTo(4f)
+                curveToRelative(0f, -0.55f, 0.45f, -1f, 1f, -1f)
+                close()
+                moveTo(18.7f, 4.7f)
+                verticalLineToRelative(14.6f)
+                horizontalLineToRelative(0.6f)
+                verticalLineTo(4.7f)
+                horizontalLineToRelative(-0.6f)
+                close()
+            }
+        }
+    }
+
+    val ModesFilled: ImageVector by lazy {
+        materialVector("ResolveModesFilled") {
+            // Dual precision mode tiles: top split-flap display tile + bottom dual-toggle pills
+            path(fill = SolidColor(Color.Black)) {
+                // Upper flip-mode tile (with horizontal center split cutout look via 2 rounded halves)
+                moveTo(4f, 4f)
+                curveToRelative(-0.55f, 0f, -1f, 0.45f, -1f, 1f)
+                verticalLineToRelative(5.2f)
+                horizontalLineToRelative(8f)
+                verticalLineTo(5f)
+                curveToRelative(0f, -0.55f, -0.45f, -1f, -1f, -1f)
+                horizontalLineTo(4f)
+                close()
+                moveTo(3f, 11.4f)
+                verticalLineTo(15f)
+                curveToRelative(0f, 0.55f, 0.45f, 1f, 1f, 1f)
+                horizontalLineToRelative(6f)
+                curveToRelative(0.55f, 0f, 1f, -0.45f, 1f, -1f)
+                verticalLineToRelative(-3.6f)
+                horizontalLineTo(3f)
+                close()
+
+                // Right vertical flip-mode tile
+                moveTo(14f, 4f)
+                curveToRelative(-0.55f, 0f, -1f, 0.45f, -1f, 1f)
+                verticalLineToRelative(5.2f)
+                horizontalLineToRelative(8f)
+                verticalLineTo(5f)
+                curveToRelative(0f, -0.55f, -0.45f, -1f, -1f, -1f)
+                horizontalLineToRelative(-6f)
+                close()
+                moveTo(13f, 11.4f)
+                verticalLineTo(15f)
+                curveToRelative(0f, 0.55f, 0.45f, 1f, 1f, 1f)
+                horizontalLineToRelative(6f)
+                curveToRelative(0.55f, 0f, 1f, -0.45f, 1f, -1f)
+                verticalLineToRelative(-3.6f)
+                horizontalLineToRelative(-8f)
+                close()
+
+                // Bottom wide active-mode dock capsule
+                moveTo(5f, 18f)
+                horizontalLineToRelative(14f)
+                curveToRelative(1.1f, 0f, 2f, 0.9f, 2f, 2f)
+                reflectiveCurveToRelative(-0.9f, 2f, -2f, 2f)
+                horizontalLineTo(5f)
+                curveToRelative(-1.1f, 0f, -2f, -0.9f, -2f, -2f)
+                reflectiveCurveToRelative(0.9f, -2f, 2f, -2f)
+                close()
+            }
+        }
+    }
+
+    val ModesOutlined: ImageVector by lazy {
+        materialVector("ResolveModesOutlined") {
+            path(fill = SolidColor(Color.Black)) {
+                // Left outlined split tile
+                moveTo(4f, 4f)
+                horizontalLineToRelative(6f)
+                curveToRelative(0.55f, 0f, 1f, 0.45f, 1f, 1f)
+                verticalLineToRelative(10f)
+                curveToRelative(0f, 0.55f, -0.45f, 1f, -1f, 1f)
+                horizontalLineTo(4f)
+                curveToRelative(-0.55f, 0f, -1f, -0.45f, -1f, -1f)
+                verticalLineTo(5f)
+                curveToRelative(0f, -0.55f, 0.45f, -1f, 1f, -1f)
+                close()
+                moveTo(4.7f, 5.7f)
+                verticalLineToRelative(3.6f)
+                horizontalLineToRelative(4.6f)
+                verticalLineTo(5.7f)
+                horizontalLineTo(4.7f)
+                close()
+                moveTo(4.7f, 10.7f)
+                verticalLineToRelative(3.6f)
+                horizontalLineToRelative(4.6f)
+                verticalLineToRelative(-3.6f)
+                horizontalLineTo(4.7f)
+                close()
+
+                // Right outlined split tile
+                moveTo(14f, 4f)
+                horizontalLineToRelative(6f)
+                curveToRelative(0.55f, 0f, 1f, 0.45f, 1f, 1f)
+                verticalLineToRelative(10f)
+                curveToRelative(0f, 0.55f, -0.45f, 1f, -1f, 1f)
+                horizontalLineToRelative(-6f)
+                curveToRelative(-0.55f, 0f, -1f, -0.45f, -1f, -1f)
+                verticalLineTo(5f)
+                curveToRelative(0f, -0.55f, 0.45f, -1f, 1f, -1f)
+                close()
+                moveTo(14.7f, 5.7f)
+                verticalLineToRelative(3.6f)
+                horizontalLineToRelative(4.6f)
+                verticalLineTo(5.7f)
+                horizontalLineToRelative(-4.6f)
+                close()
+                moveTo(14.7f, 10.7f)
+                verticalLineToRelative(3.6f)
+                horizontalLineToRelative(4.6f)
+                verticalLineToRelative(-3.6f)
+                horizontalLineToRelative(-4.6f)
+                close()
+
+                // Bottom outlined bar
+                moveTo(4f, 18.2f)
+                horizontalLineToRelative(16f)
+                curveToRelative(0.55f, 0f, 1f, 0.45f, 1f, 1f)
+                reflectiveCurveToRelative(-0.45f, 1f, -1f, 1f)
+                horizontalLineTo(4f)
+                curveToRelative(-0.55f, 0f, -1f, -0.45f, -1f, -1f)
+                reflectiveCurveToRelative(0.45f, -1f, 1f, -1f)
                 close()
             }
         }

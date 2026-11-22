@@ -76,6 +76,7 @@ fun ResolveRunnerLogo(
     testTagName: String = "resolve_runner_logo",
     modifier: Modifier = Modifier
 ) {
+    val palette = LocalResolveExtendedPalette.current
     val transition = rememberInfiniteTransition(label = "resolve_runner_logo")
     val rawPhase by transition.animateFloat(
         initialValue = 0f,
@@ -92,19 +93,12 @@ fun ResolveRunnerLogo(
     Box(
         modifier = modifier
             .size(size)
-            .clip(RoundedCornerShape(15.dp))
-            .background(
-                Brush.linearGradient(
-                    colors = listOf(
-                        ResolveColors.ForestBrandDeep,
-                        ResolveColors.ForestSurface
-                    )
-                )
-            )
+            .clip(RoundedCornerShape(14.dp))
+            .background(palette.surfaceElevated)
             .border(
                 1.dp,
-                ResolveColors.MintAccent.copy(alpha = 0.36f),
-                RoundedCornerShape(15.dp)
+                palette.cardBorder,
+                RoundedCornerShape(14.dp)
             )
             .testTag(testTagName),
         contentAlignment = Alignment.Center
@@ -120,7 +114,7 @@ fun ResolveRunnerLogo(
 
             // Subtle single horizontal baseline centered underneath the runner
             drawLine(
-                color = ResolveColors.MintAccent.copy(alpha = 0.42f),
+                color = palette.accent.copy(alpha = 0.55f),
                 start = Offset(w * 0.16f, h * 0.80f),
                 end = Offset(w * 0.84f, h * 0.80f),
                 strokeWidth = stroke * 0.48f,
@@ -132,9 +126,9 @@ fun ResolveRunnerLogo(
             val shoulder = Offset(w * 0.52f, h * 0.35f - bob)
             val hip = Offset(w * 0.45f, h * 0.55f - bob)
 
-            // Subtle speed accent trail behind shoulder
+            // Subtle Champagne speed accent trail behind shoulder
             drawLine(
-                color = ResolveColors.MintAccent.copy(alpha = 0.50f),
+                color = palette.champagne.copy(alpha = 0.72f),
                 start = Offset(w * 0.20f, h * 0.40f - bob),
                 end = Offset(w * 0.34f, h * 0.40f - bob),
                 strokeWidth = stroke * 0.52f,
@@ -143,14 +137,14 @@ fun ResolveRunnerLogo(
 
             // Head
             drawCircle(
-                color = ResolveColors.MintBright,
+                color = palette.textPrimary,
                 radius = w * 0.085f,
                 center = headCenter
             )
 
             // Torso leaning subtly forward into focus momentum
             drawLine(
-                color = ResolveColors.MintBright,
+                color = palette.textPrimary,
                 start = shoulder,
                 end = hip,
                 strokeWidth = stroke,
@@ -167,14 +161,14 @@ fun ResolveRunnerLogo(
                 h * (0.49f - oppSwing * 0.04f) - bob
             )
             drawLine(
-                color = ResolveColors.MintAccent,
+                color = palette.accent,
                 start = shoulder,
                 end = backElbow,
                 strokeWidth = stroke * 0.78f,
                 cap = StrokeCap.Round
             )
             drawLine(
-                color = ResolveColors.MintAccent,
+                color = palette.accent,
                 start = backElbow,
                 end = backHand,
                 strokeWidth = stroke * 0.72f,
@@ -191,14 +185,14 @@ fun ResolveRunnerLogo(
                 h * (0.37f - swing * 0.05f) - bob
             )
             drawLine(
-                color = Color(0xFFEAF7F1),
+                color = palette.textPrimary,
                 start = shoulder,
                 end = frontElbow,
                 strokeWidth = stroke * 0.80f,
                 cap = StrokeCap.Round
             )
             drawLine(
-                color = Color(0xFFEAF7F1),
+                color = palette.textPrimary,
                 start = frontElbow,
                 end = frontHand,
                 strokeWidth = stroke * 0.74f,
@@ -215,14 +209,14 @@ fun ResolveRunnerLogo(
                 h * (0.76f + (if (oppSwing < 0f) oppSwing * 0.03f else 0f)) - bob * 0.5f
             )
             drawLine(
-                color = ResolveColors.MintAccent,
+                color = palette.accent,
                 start = hip,
                 end = backKnee,
                 strokeWidth = stroke * 0.88f,
                 cap = StrokeCap.Round
             )
             drawLine(
-                color = ResolveColors.MintAccent,
+                color = palette.accent,
                 start = backKnee,
                 end = backFoot,
                 strokeWidth = stroke * 0.80f,
@@ -239,14 +233,14 @@ fun ResolveRunnerLogo(
                 h * (0.76f + (if (swing < 0f) swing * 0.03f else 0f)) - bob * 0.5f
             )
             drawLine(
-                color = ResolveColors.MintBright,
+                color = palette.textPrimary,
                 start = hip,
                 end = frontKnee,
                 strokeWidth = stroke * 0.90f,
                 cap = StrokeCap.Round
             )
             drawLine(
-                color = ResolveColors.MintBright,
+                color = palette.textPrimary,
                 start = frontKnee,
                 end = frontFoot,
                 strokeWidth = stroke * 0.82f,
@@ -365,9 +359,9 @@ fun ProtectionStatusCard(
     val palette = LocalResolveExtendedPalette.current
     val (accentColor, bgContainer, icon) = when (status) {
         is ProtectionStatus.ProtectionActive ->
-            Triple(palette.accent, palette.accentSoftContainer, Icons.Outlined.CheckCircle)
+            Triple(palette.success, palette.successContainer, Icons.Outlined.CheckCircle)
         is ProtectionStatus.SessionCompleted ->
-            Triple(palette.accent, palette.accentSoftContainer, Icons.Outlined.CheckCircle)
+            Triple(palette.success, palette.successContainer, Icons.Outlined.CheckCircle)
         is ProtectionStatus.ProtectionLimited ->
             Triple(palette.warn, palette.warnContainer, Icons.Outlined.Info)
         is ProtectionStatus.Recovering ->
@@ -380,7 +374,7 @@ fun ProtectionStatusCard(
         modifier = modifier
             .fillMaxWidth()
             .resolveGlassCard(
-                cornerRadius = 20.dp,
+                cornerRadius = 16.dp,
                 borderColor = accentColor.copy(alpha = 0.42f)
             )
             .padding(14.dp)

@@ -95,8 +95,8 @@ fun AboutResolveScreen(
                     modifier = Modifier
                         .fillMaxWidth()
                         .resolveGlassCard(
-                            cornerRadius = 24.dp,
-                            borderColor = palette.accent.copy(alpha = 0.38f)
+                            cornerRadius = 16.dp,
+                            borderColor = palette.cardBorder
                         )
                         .padding(20.dp),
                     verticalArrangement = Arrangement.spacedBy(12.dp)
@@ -132,7 +132,7 @@ fun AboutResolveScreen(
                                         fontStyle = FontStyle.Italic,
                                         fontWeight = FontWeight.Medium
                                     ),
-                                    color = palette.accent,
+                                    color = palette.accentStrong,
                                     startTyping = true,
                                     startDelayMillis = 80,
                                     typingDurationMillis = 820,
@@ -147,11 +147,11 @@ fun AboutResolveScreen(
                                 fontFamily = JetBrainsMonoFamily,
                                 fontWeight = FontWeight.SemiBold
                             ),
-                            color = palette.accent,
+                            color = palette.champagneStrong,
                             modifier = Modifier
                                 .clip(CircleShape)
-                                .background(palette.accentSoftContainer)
-                                .border(1.dp, palette.accent.copy(alpha = 0.30f), CircleShape)
+                                .background(palette.champagneContainer)
+                                .border(1.dp, palette.champagne.copy(alpha = 0.35f), CircleShape)
                                 .padding(horizontal = 10.dp, vertical = 4.dp)
                         )
                     }
@@ -234,7 +234,7 @@ private fun AboutInfoCard(
     Column(
         modifier = Modifier
             .fillMaxWidth()
-            .resolveGlassCard(cornerRadius = 20.dp)
+            .resolveGlassCard(cornerRadius = 16.dp)
             .padding(16.dp),
         verticalArrangement = Arrangement.spacedBy(6.dp)
     ) {

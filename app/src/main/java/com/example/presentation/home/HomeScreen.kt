@@ -33,7 +33,7 @@ import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.automirrored.outlined.ArrowForward
+import androidx.compose.material.icons.automirrored.outlined.KeyboardArrowRight
 import androidx.compose.material.icons.outlined.Call
 import androidx.compose.material.icons.outlined.Info
 import androidx.compose.material.icons.outlined.Lock
@@ -73,7 +73,6 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.example.designsystem.JetBrainsMonoFamily
 import com.example.designsystem.LocalResolveExtendedPalette
-import com.example.designsystem.ResolveColors
 import com.example.domain.model.ActiveSession
 import com.example.domain.model.DailyAppUsageItem
 import com.example.domain.model.DailyAppUsageSummary
@@ -211,12 +210,13 @@ fun HomeScreen(
                                 .size(50.dp)
                                 .clip(RoundedCornerShape(16.dp))
                                 .background(
-                                    if (palette.isDark) ResolveColors.MintSoftContainer.copy(alpha = 0.7f)
-                                    else ResolveColors.ForestBrandDeep.copy(alpha = 0.90f)
+                                    Brush.verticalGradient(
+                                        listOf(palette.surfaceElevated, palette.cardBottom)
+                                    )
                                 )
                                 .border(
                                     1.dp,
-                                    palette.accent.copy(alpha = 0.30f),
+                                    palette.accent.copy(alpha = 0.28f),
                                     RoundedCornerShape(16.dp)
                                 )
                                 .clickable {
@@ -367,6 +367,8 @@ fun HomeScreen(
                                 description = "Lock immediately for a chosen period.",
                                 icon = Icons.Outlined.Lock,
                                 accentBadge = "Immediate",
+                                accentColor = palette.onAccent,
+                                accentContainerColor = palette.accent,
                                 onClick = onOpenInstantSetup,
                                 testTag = "mode_card_instant",
                                 modifier = Modifier
@@ -378,6 +380,8 @@ fun HomeScreen(
                                 description = "Free use window, then auto lock.",
                                 icon = ResolveIcons.HourglassTop,
                                 accentBadge = "2-Stage",
+                                accentColor = palette.slateTealStrong,
+                                accentContainerColor = palette.slateTealContainer,
                                 onClick = onOpenDelayedSetup,
                                 testTag = "mode_card_delayed",
                                 modifier = Modifier
@@ -389,6 +393,8 @@ fun HomeScreen(
                                 description = "Auto restriction on set dates/times.",
                                 icon = ResolveIcons.Event,
                                 accentBadge = "Automated",
+                                accentColor = palette.champagneStrong,
+                                accentContainerColor = palette.champagneContainer,
                                 onClick = onOpenScheduleSetup,
                                 testTag = "mode_card_schedule",
                                 modifier = Modifier
@@ -400,6 +406,8 @@ fun HomeScreen(
                                 description = "Protect specific apps with a code.",
                                 icon = ResolveIcons.Shield,
                                 accentBadge = "App Guard",
+                                accentColor = palette.cobaltStrong,
+                                accentContainerColor = palette.cobaltContainer,
                                 onClick = onOpenAppLockSetup,
                                 testTag = "mode_card_applock",
                                 modifier = Modifier
@@ -423,6 +431,8 @@ fun HomeScreen(
                                     description = "Restrict now for a chosen timer.",
                                     icon = Icons.Outlined.Lock,
                                     accentBadge = "Immediate",
+                                    accentColor = palette.onAccent,
+                                    accentContainerColor = palette.accent,
                                     onClick = onOpenInstantSetup,
                                     testTag = "mode_card_instant",
                                     modifier = Modifier
@@ -434,6 +444,8 @@ fun HomeScreen(
                                     description = "Free use first, then auto Lock.",
                                     icon = ResolveIcons.HourglassTop,
                                     accentBadge = "2-Stage",
+                                    accentColor = palette.slateTealStrong,
+                                    accentContainerColor = palette.slateTealContainer,
                                     onClick = onOpenDelayedSetup,
                                     testTag = "mode_card_delayed",
                                     modifier = Modifier
@@ -452,6 +464,8 @@ fun HomeScreen(
                                     description = "Start automatically on schedule.",
                                     icon = ResolveIcons.Event,
                                     accentBadge = "Automated",
+                                    accentColor = palette.champagneStrong,
+                                    accentContainerColor = palette.champagneContainer,
                                     onClick = onOpenScheduleSetup,
                                     testTag = "mode_card_schedule",
                                     modifier = Modifier
@@ -463,6 +477,8 @@ fun HomeScreen(
                                     description = "Guard selected apps securely.",
                                     icon = ResolveIcons.Shield,
                                     accentBadge = "App Guard",
+                                    accentColor = palette.cobaltStrong,
+                                    accentContainerColor = palette.cobaltContainer,
                                     onClick = onOpenAppLockSetup,
                                     testTag = "mode_card_applock",
                                     modifier = Modifier
@@ -507,18 +523,22 @@ private fun ModeFeatureCard(
     accentBadge: String,
     onClick: () -> Unit,
     testTag: String,
-    modifier: Modifier = Modifier
+    modifier: Modifier = Modifier,
+    accentColor: Color = Color.Unspecified,
+    accentContainerColor: Color = Color.Unspecified
 ) {
     val palette = LocalResolveExtendedPalette.current
     val haptic = LocalHapticFeedback.current
     val interactionSource = remember { MutableInteractionSource() }
+    val resolvedAccent = if (accentColor == Color.Unspecified) palette.accent else accentColor
+    val resolvedContainer = if (accentContainerColor == Color.Unspecified) palette.surfaceElevated else accentContainerColor
 
     Column(
         modifier = modifier
             .pressScale(interactionSource, pressedScale = 0.97f)
             .resolveGlassCard(
-                cornerRadius = 22.dp,
-                borderColor = palette.accent.copy(alpha = 0.28f)
+                cornerRadius = 18.dp,
+                borderColor = palette.cardBorder
             )
             .clickable(
                 interactionSource = interactionSource,
@@ -539,27 +559,26 @@ private fun ModeFeatureCard(
             Box(
                 modifier = Modifier
                     .size(42.dp)
-                    .clip(RoundedCornerShape(13.dp))
-                    .background(palette.accentSoftContainer)
-                    .border(1.dp, palette.accent.copy(alpha = 0.28f), RoundedCornerShape(13.dp)),
+                    .clip(RoundedCornerShape(12.dp))
+                    .background(resolvedContainer)
+                    .border(1.dp, resolvedAccent.copy(alpha = 0.24f), RoundedCornerShape(12.dp)),
                 contentAlignment = Alignment.Center
             ) {
                 Icon(
                     imageVector = icon,
                     contentDescription = title,
-                    tint = palette.accent,
+                    tint = resolvedAccent,
                     modifier = Modifier.size(21.dp)
                 )
             }
 
             Text(
                 text = accentBadge,
-                style = MaterialTheme.typography.labelSmall.copy(fontSize = 10.sp),
-                color = palette.accent,
+                style = MaterialTheme.typography.labelSmall.copy(fontSize = 10.sp, fontWeight = FontWeight.SemiBold),
+                color = resolvedAccent,
                 modifier = Modifier
                     .clip(CircleShape)
-                    .background(palette.accentSoftContainer)
-                    .border(1.dp, palette.accent.copy(alpha = 0.25f), CircleShape)
+                    .background(resolvedContainer)
                     .padding(horizontal = 8.dp, vertical = 3.dp)
             )
         }
@@ -567,26 +586,13 @@ private fun ModeFeatureCard(
         Spacer(modifier = Modifier.height(12.dp))
 
         Column(verticalArrangement = Arrangement.spacedBy(3.dp)) {
-            Row(
-                modifier = Modifier.fillMaxWidth(),
-                horizontalArrangement = Arrangement.SpaceBetween,
-                verticalAlignment = Alignment.CenterVertically
-            ) {
-                Text(
-                    text = title,
-                    style = MaterialTheme.typography.titleMedium.copy(fontWeight = FontWeight.SemiBold),
-                    color = palette.textPrimary,
-                    maxLines = 1,
-                    overflow = TextOverflow.Ellipsis,
-                    modifier = Modifier.weight(1f)
-                )
-                Icon(
-                    imageVector = Icons.AutoMirrored.Outlined.ArrowForward,
-                    contentDescription = "Open $title",
-                    tint = palette.accent,
-                    modifier = Modifier.size(16.dp)
-                )
-            }
+            Text(
+                text = title,
+                style = MaterialTheme.typography.titleMedium.copy(fontWeight = FontWeight.SemiBold),
+                color = palette.textPrimary,
+                maxLines = 1,
+                overflow = TextOverflow.Ellipsis
+            )
             Text(
                 text = description,
                 style = MaterialTheme.typography.bodySmall,
@@ -628,8 +634,8 @@ private fun ProgressOverviewCard(
         modifier = Modifier
             .fillMaxWidth()
             .resolveGlassCard(
-                cornerRadius = 20.dp,
-                borderColor = palette.accent.copy(alpha = 0.24f)
+                cornerRadius = 18.dp,
+                borderColor = palette.cardBorder
             )
             .padding(16.dp)
             .testTag("home_progress_overview_card"),
@@ -655,14 +661,14 @@ private fun ProgressOverviewCard(
                     fontFamily = JetBrainsMonoFamily,
                     fontWeight = FontWeight.SemiBold
                 ),
-                color = palette.accent
+                color = palette.accentStrong
             )
         }
 
         LinearProgressIndicator(
             progress = { animatedRatio },
-            color = palette.accent,
-            trackColor = palette.background.copy(alpha = 0.85f),
+            color = palette.accentStrong,
+            trackColor = palette.divider,
             strokeCap = StrokeCap.Round,
             modifier = Modifier
                 .fillMaxWidth()
@@ -724,7 +730,7 @@ private fun AppUsageDashboardCard(
                         fontFamily = JetBrainsMonoFamily,
                         fontWeight = FontWeight.SemiBold
                     ),
-                    color = palette.accent
+                    color = palette.slateTealStrong
                 )
             }
         }
@@ -739,8 +745,11 @@ private fun AppUsageDashboardCard(
                 onClick = onGrantUsageAccess,
                 contentPadding = PaddingValues(horizontal = 12.dp, vertical = 6.dp),
                 shape = RoundedCornerShape(10.dp),
-                border = androidx.compose.foundation.BorderStroke(1.dp, palette.accent.copy(alpha = 0.55f)),
-                colors = ButtonDefaults.outlinedButtonColors(contentColor = palette.accent),
+                border = androidx.compose.foundation.BorderStroke(1.dp, palette.slateTeal.copy(alpha = 0.42f)),
+                colors = ButtonDefaults.outlinedButtonColors(
+                    containerColor = palette.slateTealContainer.copy(alpha = 0.65f),
+                    contentColor = palette.slateTealStrong
+                ),
                 modifier = Modifier.testTag("home_grant_usage_button")
             ) {
                 Text("Grant Usage Access", style = MaterialTheme.typography.labelMedium)
@@ -806,13 +815,13 @@ private fun UsageAppRow(
                 modifier = Modifier
                     .size(22.dp)
                     .clip(RoundedCornerShape(6.dp))
-                    .background(palette.accentSoftContainer),
+                    .background(palette.surfaceElevated),
                 contentAlignment = Alignment.Center
             ) {
                 Icon(
                     imageVector = ResolveIcons.Apps,
                     contentDescription = null,
-                    tint = palette.accent,
+                    tint = palette.accentStrong,
                     modifier = Modifier.size(13.dp)
                 )
             }
@@ -839,13 +848,13 @@ private fun UsageAppRow(
                 Text(
                     text = formatUsageDuration(item.foregroundTimeMs),
                     style = MaterialTheme.typography.labelSmall.copy(fontFamily = JetBrainsMonoFamily),
-                    color = palette.accent
+                    color = palette.slateTealStrong
                 )
             }
             LinearProgressIndicator(
                 progress = { animatedFraction },
-                color = palette.accent,
-                trackColor = palette.background.copy(alpha = 0.8f),
+                color = palette.slateTeal,
+                trackColor = palette.divider,
                 strokeCap = StrokeCap.Round,
                 modifier = Modifier
                     .fillMaxWidth()
@@ -874,8 +883,8 @@ private fun EnforcementStatusPill(
 ) {
     val palette = LocalResolveExtendedPalette.current
     val isReady = capabilities.canEnforceRealLock
-    val bgColor = if (isReady) palette.accentSoftContainer else palette.warnContainer
-    val fgColor = if (isReady) palette.accent else palette.warn
+    val bgColor = if (isReady) palette.success else palette.warnContainer
+    val fgColor = if (isReady) palette.onAccent else palette.warn
     val label = when (capabilities.activeEnforcementMode) {
         EnforcementMode.DEVICE_OWNER_LOCK_TASK -> "Device Owner"
         EnforcementMode.ACCESSIBILITY_GUARD -> "Guard Active"
@@ -919,16 +928,9 @@ private fun SetupReadinessCallout(onClick: () -> Unit) {
         modifier = Modifier
             .fillMaxWidth()
             .pressScale(interactionSource, 0.98f)
-            .clip(RoundedCornerShape(20.dp))
-            .background(
-                Brush.horizontalGradient(
-                    colors = listOf(
-                        palette.warnContainer.copy(alpha = 0.78f),
-                        palette.cardBottom
-                    )
-                )
-            )
-            .border(1.dp, palette.warn.copy(alpha = 0.4f), RoundedCornerShape(20.dp))
+            .clip(RoundedCornerShape(18.dp))
+            .background(palette.warnContainer.copy(alpha = 0.72f))
+            .border(1.dp, palette.warn.copy(alpha = 0.35f), RoundedCornerShape(18.dp))
             .clickable(
                 interactionSource = interactionSource,
                 indication = androidx.compose.material3.ripple(),
@@ -965,7 +967,7 @@ private fun SetupReadinessCallout(onClick: () -> Unit) {
             )
         }
         Icon(
-            imageVector = Icons.AutoMirrored.Outlined.ArrowForward,
+            imageVector = Icons.AutoMirrored.Outlined.KeyboardArrowRight,
             contentDescription = "Open Settings",
             tint = palette.warn,
             modifier = Modifier.size(18.dp)
@@ -987,7 +989,7 @@ private fun ActiveSessionBanner(
     Column(
         modifier = Modifier
             .fillMaxWidth()
-            .clip(RoundedCornerShape(24.dp))
+            .clip(RoundedCornerShape(18.dp))
             .background(
                 if (isWarning) {
                     Brush.verticalGradient(
@@ -995,15 +997,15 @@ private fun ActiveSessionBanner(
                     )
                 } else {
                     Brush.verticalGradient(
-                        listOf(palette.accentSoftContainer.copy(alpha = 0.78f), palette.cardBottom)
+                        listOf(palette.surfaceElevated, palette.cardBottom)
                     )
                 }
             )
             .border(
                 1.dp,
-                if (isWarning) palette.error.copy(alpha = 0.55f)
-                else palette.accent.copy(alpha = 0.50f),
-                RoundedCornerShape(24.dp)
+                if (isWarning) palette.error.copy(alpha = 0.50f)
+                else palette.accentSecondary.copy(alpha = 0.45f),
+                RoundedCornerShape(18.dp)
             )
             .padding(20.dp),
         verticalArrangement = Arrangement.spacedBy(10.dp)
@@ -1016,11 +1018,11 @@ private fun ActiveSessionBanner(
                     verticalAlignment = Alignment.CenterVertically,
                     horizontalArrangement = Arrangement.spacedBy(8.dp)
                 ) {
-                    PulsingStatusDot(color = palette.accent, size = 7.dp)
+                    PulsingStatusDot(color = palette.accentStrong, size = 7.dp)
                     Text(
                         text = "DELAYED LOCK — FREE USE WINDOW",
                         style = MaterialTheme.typography.labelSmall.copy(letterSpacing = 1.sp),
-                        color = palette.accent
+                        color = palette.accentStrong
                     )
                 }
                 Text(
@@ -1034,7 +1036,7 @@ private fun ActiveSessionBanner(
                 LinearProgressIndicator(
                     progress = { freeProgress },
                     color = palette.accent,
-                    trackColor = palette.background,
+                    trackColor = palette.divider,
                     strokeCap = StrokeCap.Round,
                     modifier = Modifier
                         .fillMaxWidth()
@@ -1073,7 +1075,7 @@ private fun ActiveSessionBanner(
                 LinearProgressIndicator(
                     progress = { lockProgress },
                     color = palette.accent,
-                    trackColor = palette.background,
+                    trackColor = palette.divider,
                     strokeCap = StrokeCap.Round,
                     modifier = Modifier
                         .fillMaxWidth()
@@ -1118,7 +1120,7 @@ private fun ActiveSessionBanner(
                     Text(
                         text = label,
                         style = MaterialTheme.typography.titleMedium,
-                        color = palette.accent
+                        color = palette.accentStrong
                     )
                     TextButton(onClick = onDismiss) {
                         Text("Clear", color = palette.textSecondary)

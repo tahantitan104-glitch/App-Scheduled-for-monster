@@ -88,10 +88,6 @@ class ResolvePreferencesRepository(private val context: Context) {
         val FORCE_DARK_APPROACH = stringPreferencesKey("force_dark_approach")
         val FORCE_DARK_APP_OVERRIDES_JSON = stringPreferencesKey("force_dark_app_overrides_json")
         val DARK_MODE_APP_PREFS_JSON = stringPreferencesKey("mode_dark_app_prefs_json")
-        val COLOR_INVERSION_APP_PREFS_JSON = stringPreferencesKey("mode_color_inversion_app_prefs_json")
-        val IN_APP_COLOR_INVERSION_ENABLED = booleanPreferencesKey("mode_in_app_color_inversion_enabled")
-        val COLOR_INVERSION_CONSENT_GRANTED = booleanPreferencesKey("mode_color_inversion_consent_granted")
-        val PRIOR_OS_COLOR_INVERSION_STATE = intPreferencesKey("mode_prior_os_color_inversion_state")
 
         // Focus Guard Landscape Tilt Mode & Offline Profile customization
         val LANDSCAPE_TILT_MODE = booleanPreferencesKey("lock_screen_landscape_tilt_mode")
@@ -111,10 +107,23 @@ class ResolvePreferencesRepository(private val context: Context) {
         val NOTIF_ACTIVE_ZEN_RULE_ID = stringPreferencesKey("notif_active_zen_rule_id")
         val LAST_RECOVERY_TIMESTAMP_WALL_MS = longPreferencesKey("last_recovery_timestamp_wall_ms")
 
-        // Flip Clock Settings (synced + local hardware brightness)
+        // Flip Clock Settings (synced + local hardware brightness & sleep timer)
         val FLIP_USE_24H = booleanPreferencesKey("flip_clock_use_24h")
+        val FLIP_USE_SYSTEM_TIME_FORMAT = booleanPreferencesKey("flip_clock_use_system_time_format")
+        val FLIP_HOUR_LEADING_ZERO = booleanPreferencesKey("flip_clock_hour_leading_zero")
+        val FLIP_DATE_FORMAT_PATTERN = stringPreferencesKey("flip_clock_date_format_pattern")
         val FLIP_KEEP_AWAKE = booleanPreferencesKey("flip_clock_keep_awake")
         val FLIP_SHOW_DATE = booleanPreferencesKey("flip_clock_show_date")
+        val FLIP_SHOW_WEEKDAY = booleanPreferencesKey("flip_clock_show_weekday")
+        val FLIP_SHOW_SECONDS = booleanPreferencesKey("flip_clock_show_seconds")
+        val FLIP_SHOW_AXIS = booleanPreferencesKey("flip_clock_show_axis")
+        val FLIP_SHOW_UPCOMING_ALARM = booleanPreferencesKey("flip_clock_show_upcoming_alarm")
+        val FLIP_SHOW_BATTERY = booleanPreferencesKey("flip_clock_show_battery")
+        val FLIP_SHOW_WEATHER = booleanPreferencesKey("flip_clock_show_weather")
+        val FLIP_WEATHER_CITY = stringPreferencesKey("flip_clock_weather_city")
+        val FLIP_SLEEP_TIMER_MINUTES = intPreferencesKey("flip_clock_sleep_timer_minutes")
+        val FLIP_CLOCK_TICKER_SOUND = booleanPreferencesKey("flip_clock_ticker_sound")
+        val FLIP_CUSTOM_TAG = stringPreferencesKey("flip_clock_custom_tag")
         val FLIP_AUTO_REPEAT = booleanPreferencesKey("flip_clock_auto_repeat")
         val FLIP_ZOOM_FRACTION = floatPreferencesKey("flip_clock_zoom_fraction")
         val FLIP_BRIGHTNESS_PERCENT = floatPreferencesKey("flip_clock_brightness_percent")
@@ -211,10 +220,6 @@ class ResolvePreferencesRepository(private val context: Context) {
         decodeBooleanMap(prefs[Keys.DARK_MODE_APP_PREFS_JSON].orEmpty())
     }
 
-    val colorInversionAppPrefsFlow: Flow<Map<String, Boolean>> = context.resolveDataStore.data.map { prefs ->
-        decodeBooleanMap(prefs[Keys.COLOR_INVERSION_APP_PREFS_JSON].orEmpty())
-    }
-
     val landscapeTiltModeFlow: Flow<Boolean> = context.resolveDataStore.data.map { prefs ->
         prefs[Keys.LANDSCAPE_TILT_MODE] ?: false
     }
@@ -225,18 +230,6 @@ class ResolvePreferencesRepository(private val context: Context) {
 
     val localAvatarBase64Flow: Flow<String> = context.resolveDataStore.data.map { prefs ->
         prefs[Keys.LOCAL_AVATAR_BASE64].orEmpty()
-    }
-
-    val inAppColorInversionEnabledFlow: Flow<Boolean> = context.resolveDataStore.data.map { prefs ->
-        prefs[Keys.IN_APP_COLOR_INVERSION_ENABLED] ?: false
-    }
-
-    val colorInversionConsentGrantedFlow: Flow<Boolean> = context.resolveDataStore.data.map { prefs ->
-        prefs[Keys.COLOR_INVERSION_CONSENT_GRANTED] ?: false
-    }
-
-    val priorOsColorInversionStateFlow: Flow<Int> = context.resolveDataStore.data.map { prefs ->
-        prefs[Keys.PRIOR_OS_COLOR_INVERSION_STATE] ?: -1
     }
 
     val flipClockSettingsFlow: Flow<FlipClockSettings> = context.resolveDataStore.data.map { prefs ->
@@ -522,8 +515,21 @@ class ResolvePreferencesRepository(private val context: Context) {
     suspend fun saveFlipClockSettings(settings: FlipClockSettings) {
         context.resolveDataStore.edit { prefs ->
             prefs[Keys.FLIP_USE_24H] = settings.use24HourFormat
+            prefs[Keys.FLIP_USE_SYSTEM_TIME_FORMAT] = settings.useSystemTimeFormat
+            prefs[Keys.FLIP_HOUR_LEADING_ZERO] = settings.hourLeadingZero
+            prefs[Keys.FLIP_DATE_FORMAT_PATTERN] = settings.resolvedDateFormat.pattern
             prefs[Keys.FLIP_KEEP_AWAKE] = settings.keepScreenAwake
             prefs[Keys.FLIP_SHOW_DATE] = settings.showDate
+            prefs[Keys.FLIP_SHOW_WEEKDAY] = settings.showWeekday
+            prefs[Keys.FLIP_SHOW_SECONDS] = settings.showSeconds
+            prefs[Keys.FLIP_SHOW_AXIS] = settings.showFlipAxis
+            prefs[Keys.FLIP_SHOW_UPCOMING_ALARM] = settings.showUpcomingAlarm
+            prefs[Keys.FLIP_SHOW_BATTERY] = settings.showBattery
+            prefs[Keys.FLIP_SHOW_WEATHER] = settings.showWeather
+            prefs[Keys.FLIP_WEATHER_CITY] = settings.weatherLocationQuery.trim().take(48)
+            prefs[Keys.FLIP_SLEEP_TIMER_MINUTES] = settings.sleepTimerMinutes.coerceIn(0, 240)
+            prefs[Keys.FLIP_CLOCK_TICKER_SOUND] = settings.clockTickerSoundEnabled
+            prefs[Keys.FLIP_CUSTOM_TAG] = settings.customTag.take(28)
             prefs[Keys.FLIP_AUTO_REPEAT] = settings.autoRepeat
             prefs[Keys.FLIP_ZOOM_FRACTION] = settings.clampedZoomFraction
             if (settings.lastBrightnessPercent != null) {
@@ -541,8 +547,21 @@ class ResolvePreferencesRepository(private val context: Context) {
     suspend fun resetFlipClockSettingsOnly(nowWallMs: Long) {
         context.resolveDataStore.edit { prefs ->
             prefs[Keys.FLIP_USE_24H] = false
+            prefs[Keys.FLIP_USE_SYSTEM_TIME_FORMAT] = false
+            prefs[Keys.FLIP_HOUR_LEADING_ZERO] = false
+            prefs[Keys.FLIP_DATE_FORMAT_PATTERN] = com.example.domain.model.FlipDateFormat.DD_MM_YY.pattern
             prefs[Keys.FLIP_KEEP_AWAKE] = false
             prefs[Keys.FLIP_SHOW_DATE] = false
+            prefs[Keys.FLIP_SHOW_WEEKDAY] = true
+            prefs[Keys.FLIP_SHOW_SECONDS] = true
+            prefs[Keys.FLIP_SHOW_AXIS] = true
+            prefs[Keys.FLIP_SHOW_UPCOMING_ALARM] = false
+            prefs[Keys.FLIP_SHOW_BATTERY] = false
+            prefs[Keys.FLIP_SHOW_WEATHER] = false
+            prefs[Keys.FLIP_WEATHER_CITY] = ""
+            prefs[Keys.FLIP_SLEEP_TIMER_MINUTES] = 0
+            prefs[Keys.FLIP_CLOCK_TICKER_SOUND] = false
+            prefs[Keys.FLIP_CUSTOM_TAG] = ""
             prefs[Keys.FLIP_AUTO_REPEAT] = false
             prefs[Keys.FLIP_ZOOM_FRACTION] = FlipClockSettings.DEFAULT_ZOOM_FRACTION
             prefs[Keys.FLIP_SETTINGS_UPDATED_WALL_MS] = nowWallMs
@@ -653,15 +672,6 @@ class ResolvePreferencesRepository(private val context: Context) {
         }
     }
 
-    suspend fun setAppColorInversionPreference(packageName: String, enabled: Boolean) {
-        if (packageName.isBlank()) return
-        context.resolveDataStore.edit { prefs ->
-            val current = decodeBooleanMap(prefs[Keys.COLOR_INVERSION_APP_PREFS_JSON].orEmpty()).toMutableMap()
-            current[packageName] = enabled
-            prefs[Keys.COLOR_INVERSION_APP_PREFS_JSON] = encodeBooleanMap(current)
-        }
-    }
-
     suspend fun isLandscapeTiltModeSnapshot(): Boolean = landscapeTiltModeFlow.first()
 
     suspend fun setLandscapeTiltMode(enabled: Boolean) {
@@ -690,30 +700,10 @@ class ResolvePreferencesRepository(private val context: Context) {
         }
     }
 
-    suspend fun setInAppColorInversionEnabled(enabled: Boolean) {
-        context.resolveDataStore.edit { prefs ->
-            prefs[Keys.IN_APP_COLOR_INVERSION_ENABLED] = enabled
-        }
-    }
-
-    suspend fun setColorInversionConsentGranted(granted: Boolean) {
-        context.resolveDataStore.edit { prefs ->
-            prefs[Keys.COLOR_INVERSION_CONSENT_GRANTED] = granted
-        }
-    }
-
-    suspend fun setPriorOsColorInversionState(state: Int) {
-        context.resolveDataStore.edit { prefs ->
-            prefs[Keys.PRIOR_OS_COLOR_INVERSION_STATE] = state
-        }
-    }
-
     suspend fun resetAllModeAppPreferences() {
         context.resolveDataStore.edit { prefs ->
             prefs.remove(Keys.DARK_MODE_APP_PREFS_JSON)
-            prefs.remove(Keys.COLOR_INVERSION_APP_PREFS_JSON)
             prefs[Keys.FORCE_DARK_ENABLED] = false
-            prefs[Keys.IN_APP_COLOR_INVERSION_ENABLED] = false
             prefs.remove(Keys.FORCE_DARK_APP_OVERRIDES_JSON)
         }
     }
@@ -905,8 +895,23 @@ class ResolvePreferencesRepository(private val context: Context) {
     private fun mapFlipClockSettings(prefs: Preferences): FlipClockSettings =
         FlipClockSettings(
             use24HourFormat = prefs[Keys.FLIP_USE_24H] ?: false,
+            useSystemTimeFormat = prefs[Keys.FLIP_USE_SYSTEM_TIME_FORMAT] ?: false,
+            hourLeadingZero = prefs[Keys.FLIP_HOUR_LEADING_ZERO] ?: false,
+            dateFormatPattern = com.example.domain.model.FlipDateFormat.fromPattern(
+                prefs[Keys.FLIP_DATE_FORMAT_PATTERN]
+            ).pattern,
             keepScreenAwake = prefs[Keys.FLIP_KEEP_AWAKE] ?: false,
             showDate = prefs[Keys.FLIP_SHOW_DATE] ?: false,
+            showWeekday = prefs[Keys.FLIP_SHOW_WEEKDAY] ?: true,
+            showSeconds = prefs[Keys.FLIP_SHOW_SECONDS] ?: true,
+            showFlipAxis = prefs[Keys.FLIP_SHOW_AXIS] ?: true,
+            showUpcomingAlarm = prefs[Keys.FLIP_SHOW_UPCOMING_ALARM] ?: false,
+            showBattery = prefs[Keys.FLIP_SHOW_BATTERY] ?: false,
+            showWeather = prefs[Keys.FLIP_SHOW_WEATHER] ?: false,
+            weatherLocationQuery = prefs[Keys.FLIP_WEATHER_CITY] ?: "",
+            sleepTimerMinutes = (prefs[Keys.FLIP_SLEEP_TIMER_MINUTES] ?: 0).coerceIn(0, 240),
+            clockTickerSoundEnabled = prefs[Keys.FLIP_CLOCK_TICKER_SOUND] ?: false,
+            customTag = prefs[Keys.FLIP_CUSTOM_TAG] ?: "",
             autoRepeat = prefs[Keys.FLIP_AUTO_REPEAT] ?: false,
             zoomFraction = (prefs[Keys.FLIP_ZOOM_FRACTION] ?: FlipClockSettings.DEFAULT_ZOOM_FRACTION)
                 .coerceIn(FlipClockSettings.MIN_ZOOM_FRACTION, FlipClockSettings.MAX_ZOOM_FRACTION),

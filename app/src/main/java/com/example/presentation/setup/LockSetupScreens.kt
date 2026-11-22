@@ -45,7 +45,6 @@ import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Switch
-import androidx.compose.material3.SwitchDefaults
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.material3.TopAppBar
@@ -88,6 +87,7 @@ import com.example.presentation.components.ResolveIcons
 import com.example.presentation.components.TactilePrimaryButton
 import com.example.presentation.components.dismissTextInteractions
 import com.example.presentation.components.resolveGlassCard
+import com.example.presentation.components.resolveSwitchColors
 import java.time.DayOfWeek
 import java.time.LocalDate
 import java.time.LocalTime
@@ -626,13 +626,13 @@ private fun DelayedPresetsSection(
             OutlinedButton(
                 onClick = onCreatePresetClick,
                 shape = RoundedCornerShape(12.dp),
-                border = androidx.compose.foundation.BorderStroke(1.dp, palette.accent.copy(alpha = 0.55f)),
+                border = androidx.compose.foundation.BorderStroke(1.dp, palette.accentStrong.copy(alpha = 0.55f)),
                 modifier = Modifier.testTag("delayed_new_preset_button")
             ) {
                 Text(
                     text = "+ New",
                     style = MaterialTheme.typography.labelMedium,
-                    color = palette.accent
+                    color = palette.accentStrong
                 )
             }
         }
@@ -647,12 +647,12 @@ private fun DelayedPresetsSection(
                         .fillMaxWidth()
                         .clip(RoundedCornerShape(14.dp))
                         .background(
-                            if (isSelected) palette.accentSoftContainer.copy(alpha = 0.75f)
-                            else palette.background.copy(alpha = 0.55f)
+                            if (isSelected) palette.surfaceElevated
+                            else palette.surfaceSecondary
                         )
                         .border(
                             1.dp,
-                            if (isSelected) palette.accent else palette.cardBorder,
+                            if (isSelected) palette.accentSecondary else palette.cardBorder,
                             RoundedCornerShape(14.dp)
                         )
                         .clickable { onSelectPreset(preset) }
@@ -676,10 +676,10 @@ private fun DelayedPresetsSection(
                                 Text(
                                     text = "Built-in",
                                     style = MaterialTheme.typography.labelSmall,
-                                    color = palette.accent,
+                                    color = palette.onAccent,
                                     modifier = Modifier
                                         .clip(CircleShape)
-                                        .background(palette.accentSoftContainer)
+                                        .background(palette.accent)
                                         .padding(horizontal = 7.dp, vertical = 2.dp)
                                 )
                             }
@@ -745,7 +745,7 @@ private fun DelayedPresetEditorDialog(
 
     AlertDialog(
         onDismissRequest = onDismiss,
-        containerColor = palette.cardBottom,
+        containerColor = palette.surfaceSecondary,
         title = {
             Text(
                 text = if (existing == null) "New Delayed Preset" else "Edit Preset",
@@ -799,8 +799,8 @@ private fun DelayedPresetEditorDialog(
                 },
                 enabled = isValid,
                 colors = ButtonDefaults.buttonColors(
-                    containerColor = palette.accent,
-                    contentColor = palette.onAccent
+                    containerColor = palette.primaryButton,
+                    contentColor = palette.onPrimaryButton
                 ),
                 modifier = Modifier.testTag("preset_save_button")
             ) {
@@ -826,7 +826,7 @@ private fun SyncTargetScopeCard(
     Column(
         modifier = Modifier
             .fillMaxWidth()
-            .resolveGlassCard(cornerRadius = 18.dp)
+            .resolveGlassCard(cornerRadius = 16.dp)
             .padding(16.dp),
         verticalArrangement = Arrangement.spacedBy(10.dp)
     ) {
@@ -838,13 +838,13 @@ private fun SyncTargetScopeCard(
                 modifier = Modifier
                     .size(38.dp)
                     .clip(RoundedCornerShape(11.dp))
-                    .background(palette.accentSoftContainer),
+                    .background(palette.surfaceElevated),
                 contentAlignment = Alignment.Center
             ) {
                 Icon(
                     imageVector = ResolveIcons.Sync,
                     contentDescription = null,
-                    tint = palette.accent,
+                    tint = palette.accentStrong,
                     modifier = Modifier.size(20.dp)
                 )
             }
@@ -858,18 +858,13 @@ private fun SyncTargetScopeCard(
                 Text(
                     text = if (syncAcrossDevices) "Selected: All Linked Devices" else "Selected: This Phone Only",
                     style = MaterialTheme.typography.bodySmall,
-                    color = if (syncAcrossDevices) palette.accent else palette.textSecondary
+                    color = if (syncAcrossDevices) palette.accentStrong else palette.textSecondary
                 )
             }
             Switch(
                 checked = syncAcrossDevices,
                 onCheckedChange = onSyncAcrossDevicesChanged,
-                colors = SwitchDefaults.colors(
-                    checkedThumbColor = palette.onAccent,
-                    checkedTrackColor = palette.accent,
-                    uncheckedThumbColor = palette.textSecondary,
-                    uncheckedTrackColor = palette.cardBottom
-                ),
+                colors = resolveSwitchColors(),
                 modifier = Modifier.testTag(switchTestTag)
             )
         }
@@ -883,9 +878,9 @@ private fun SyncTargetScopeCard(
                 onClick = { onSyncAcrossDevicesChanged(false) },
                 label = { Text("This Phone Only") },
                 colors = FilterChipDefaults.filterChipColors(
-                    selectedContainerColor = palette.accentSoftContainer,
-                    selectedLabelColor = palette.accent,
-                    containerColor = palette.background,
+                    selectedContainerColor = palette.surfaceElevated,
+                    selectedLabelColor = palette.accentStrong,
+                    containerColor = palette.surfaceSecondary,
                     labelColor = palette.textSecondary
                 ),
                 modifier = Modifier.testTag("${scopePrefix}_scope_local_chip")
@@ -895,9 +890,9 @@ private fun SyncTargetScopeCard(
                 onClick = { onSyncAcrossDevicesChanged(true) },
                 label = { Text("All Linked Devices") },
                 colors = FilterChipDefaults.filterChipColors(
-                    selectedContainerColor = palette.accentSoftContainer,
-                    selectedLabelColor = palette.accent,
-                    containerColor = palette.background,
+                    selectedContainerColor = palette.surfaceElevated,
+                    selectedLabelColor = palette.accentStrong,
+                    containerColor = palette.surfaceSecondary,
                     labelColor = palette.textSecondary
                 ),
                 modifier = Modifier.testTag("${scopePrefix}_scope_all_chip")
@@ -1042,7 +1037,7 @@ fun ScheduleLockSetupScreen(
                     Column(
                         modifier = Modifier
                             .fillMaxWidth()
-                            .resolveGlassCard(cornerRadius = 20.dp)
+                            .resolveGlassCard(cornerRadius = 16.dp)
                             .padding(16.dp),
                         verticalArrangement = Arrangement.spacedBy(12.dp)
                     ) {
@@ -1062,9 +1057,9 @@ fun ScheduleLockSetupScreen(
                                     onClick = { scheduleType = type },
                                     label = { Text(label) },
                                     colors = FilterChipDefaults.filterChipColors(
-                                        selectedContainerColor = palette.accentSoftContainer,
-                                        selectedLabelColor = palette.accent,
-                                        containerColor = palette.background,
+                                        selectedContainerColor = palette.surfaceElevated,
+                                        selectedLabelColor = palette.accentStrong,
+                                        containerColor = palette.surfaceSecondary,
                                         labelColor = palette.textSecondary
                                     ),
                                     modifier = Modifier.testTag("schedule_type_${type.name}")
@@ -1107,9 +1102,9 @@ fun ScheduleLockSetupScreen(
                                             Text(day.getDisplayName(TextStyle.SHORT, Locale.getDefault()))
                                         },
                                         colors = FilterChipDefaults.filterChipColors(
-                                            selectedContainerColor = palette.accentSoftContainer,
-                                            selectedLabelColor = palette.accent,
-                                            containerColor = palette.background,
+                                            selectedContainerColor = palette.surfaceElevated,
+                                            selectedLabelColor = palette.accentStrong,
+                                            containerColor = palette.surfaceSecondary,
                                             labelColor = palette.textSecondary
                                         )
                                     )
@@ -1317,7 +1312,7 @@ private fun SetupActionRow(
     Row(
         modifier = Modifier
             .fillMaxWidth()
-            .resolveGlassCard(cornerRadius = 18.dp)
+            .resolveGlassCard(cornerRadius = 16.dp)
             .clickable(onClick = onClick)
             .padding(horizontal = 16.dp, vertical = 14.dp)
             .testTag(testTag),
@@ -1327,7 +1322,7 @@ private fun SetupActionRow(
             modifier = Modifier
                 .size(38.dp)
                 .clip(RoundedCornerShape(11.dp))
-                .background(palette.accentSoftContainer),
+                .background(palette.surfaceElevated),
             contentAlignment = Alignment.Center
         ) {
             Icon(
@@ -1345,7 +1340,7 @@ private fun SetupActionRow(
         Icon(
             imageVector = Icons.AutoMirrored.Outlined.KeyboardArrowRight,
             contentDescription = null,
-            tint = palette.textSecondary
+            tint = palette.textMuted
         )
     }
 }
@@ -1363,7 +1358,7 @@ private fun SetupSwitchRow(
     Row(
         modifier = Modifier
             .fillMaxWidth()
-            .resolveGlassCard(cornerRadius = 18.dp)
+            .resolveGlassCard(cornerRadius = 16.dp)
             .clickable { onCheckedChange(!checked) }
             .padding(horizontal = 16.dp, vertical = 14.dp),
         verticalAlignment = Alignment.CenterVertically
@@ -1372,7 +1367,7 @@ private fun SetupSwitchRow(
             modifier = Modifier
                 .size(38.dp)
                 .clip(RoundedCornerShape(11.dp))
-                .background(palette.accentSoftContainer),
+                .background(palette.surfaceElevated),
             contentAlignment = Alignment.Center
         ) {
             Icon(
@@ -1390,12 +1385,7 @@ private fun SetupSwitchRow(
         Switch(
             checked = checked,
             onCheckedChange = onCheckedChange,
-            colors = SwitchDefaults.colors(
-                checkedThumbColor = palette.onAccent,
-                checkedTrackColor = palette.accent,
-                uncheckedThumbColor = palette.textSecondary,
-                uncheckedTrackColor = palette.cardBottom
-            ),
+            colors = resolveSwitchColors(),
             modifier = Modifier.testTag(testTag)
         )
     }
@@ -1460,13 +1450,13 @@ private fun ScheduleStrictModeRow(
                 modifier = Modifier
                     .size(38.dp)
                     .clip(RoundedCornerShape(11.dp))
-                    .background(if (isStrictMode) palette.warnContainer else palette.accentSoftContainer),
+                    .background(if (isStrictMode) palette.warnContainer else palette.surfaceElevated),
                 contentAlignment = Alignment.Center
             ) {
                 Icon(
                     imageVector = ResolveIcons.Shield,
                     contentDescription = null,
-                    tint = if (isStrictMode) palette.warn else palette.accent,
+                    tint = if (isStrictMode) palette.warn else palette.accentStrong,
                     modifier = Modifier.size(20.dp)
                 )
             }
@@ -1559,7 +1549,7 @@ private fun ReviewSummaryCard(lines: List<String>) {
     Column(
         modifier = Modifier
             .fillMaxWidth()
-            .resolveGlassCard(cornerRadius = 20.dp, borderColor = palette.accent.copy(alpha = 0.35f))
+            .resolveGlassCard(cornerRadius = 18.dp, borderColor = palette.cardBorder)
             .padding(16.dp)
             .testTag("review_summary_card"),
         verticalArrangement = Arrangement.spacedBy(6.dp)
@@ -1567,7 +1557,7 @@ private fun ReviewSummaryCard(lines: List<String>) {
         Text(
             text = "SESSION SUMMARY",
             style = MaterialTheme.typography.labelSmall,
-            color = palette.accent
+            color = palette.accentStrong
         )
         lines.forEach { line ->
             Text(

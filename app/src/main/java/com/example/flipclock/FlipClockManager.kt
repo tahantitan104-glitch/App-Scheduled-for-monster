@@ -467,12 +467,71 @@ class FlipClockManager(
         updateSyncedSettings { it.copy(use24HourFormat = enabled) }
     }
 
+    suspend fun setUseSystemTimeFormat(enabled: Boolean) {
+        updateSyncedSettings { it.copy(useSystemTimeFormat = enabled) }
+    }
+
+    suspend fun setHourLeadingZero(enabled: Boolean) {
+        updateSyncedSettings { it.copy(hourLeadingZero = enabled) }
+    }
+
+    suspend fun setDateFormatPattern(pattern: String) {
+        val resolved = com.example.domain.model.FlipDateFormat.fromPattern(pattern).pattern
+        updateSyncedSettings { it.copy(dateFormatPattern = resolved) }
+    }
+
     suspend fun setKeepScreenAwake(enabled: Boolean) {
         updateSyncedSettings { it.copy(keepScreenAwake = enabled) }
     }
 
     suspend fun setShowDate(enabled: Boolean) {
         updateSyncedSettings { it.copy(showDate = enabled) }
+    }
+
+    suspend fun setShowWeekday(enabled: Boolean) {
+        updateSyncedSettings { it.copy(showWeekday = enabled) }
+    }
+
+    suspend fun setShowSeconds(enabled: Boolean) {
+        updateSyncedSettings { it.copy(showSeconds = enabled) }
+    }
+
+    suspend fun setShowFlipAxis(enabled: Boolean) {
+        updateSyncedSettings { it.copy(showFlipAxis = enabled) }
+    }
+
+    suspend fun setShowUpcomingAlarm(enabled: Boolean) {
+        updateSyncedSettings { it.copy(showUpcomingAlarm = enabled) }
+    }
+
+    suspend fun setShowBattery(enabled: Boolean) {
+        updateSyncedSettings { it.copy(showBattery = enabled) }
+    }
+
+    suspend fun setShowWeather(enabled: Boolean) {
+        updateSyncedSettings { it.copy(showWeather = enabled) }
+    }
+
+    suspend fun setWeatherLocationQuery(query: String) {
+        val cleaned = query.trim().take(48)
+        updateSyncedSettings { it.copy(weatherLocationQuery = cleaned) }
+    }
+
+    suspend fun setSleepTimerMinutes(minutes: Int) {
+        val clamped = minutes.coerceIn(0, 240)
+        mutex.withLock {
+            val current = preferencesRepository.getFlipClockSettingsSnapshot()
+            preferencesRepository.saveFlipClockSettings(current.copy(sleepTimerMinutes = clamped))
+        }
+    }
+
+    suspend fun setClockTickerSoundEnabled(enabled: Boolean) {
+        updateSyncedSettings { it.copy(clockTickerSoundEnabled = enabled) }
+    }
+
+    suspend fun setCustomTag(tag: String) {
+        val cleaned = tag.take(28)
+        updateSyncedSettings { it.copy(customTag = cleaned) }
     }
 
     suspend fun setAutoRepeat(enabled: Boolean) {

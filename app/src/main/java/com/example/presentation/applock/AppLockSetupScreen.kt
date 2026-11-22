@@ -43,7 +43,6 @@ import androidx.compose.material3.ModalBottomSheet
 import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Switch
-import androidx.compose.material3.SwitchDefaults
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.material3.minimumInteractiveComponentSize
@@ -78,6 +77,7 @@ import com.example.presentation.components.ProvideSafeTextToolbar
 import com.example.presentation.components.ResolveIcons
 import com.example.presentation.components.dismissTextInteractions
 import com.example.presentation.components.resolveGlassCard
+import com.example.presentation.components.resolveSwitchColors
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 
@@ -181,7 +181,7 @@ fun AppLockSetupScreen(
                         modifier = Modifier
                             .fillMaxWidth()
                             .resolveGlassCard(
-                                cornerRadius = 24.dp,
+                                cornerRadius = 16.dp,
                                 borderColor = palette.accent.copy(alpha = 0.35f)
                             )
                             .padding(20.dp),
@@ -253,7 +253,7 @@ fun AppLockSetupScreen(
                         modifier = Modifier
                             .fillMaxWidth()
                             .resolveGlassCard(
-                                cornerRadius = 22.dp,
+                                cornerRadius = 16.dp,
                                 borderColor = if (appLockEnabled) {
                                     palette.accent.copy(alpha = 0.45f)
                                 } else {
@@ -279,18 +279,13 @@ fun AppLockSetupScreen(
                                     "Paused • ${protectedPackages.size} apps selected"
                                 },
                                 style = MaterialTheme.typography.bodySmall,
-                                color = if (appLockEnabled) palette.accent else palette.textSecondary
+                                color = if (appLockEnabled) palette.accentStrong else palette.textSecondary
                             )
                         }
                         Switch(
                             checked = appLockEnabled,
                             onCheckedChange = onToggleAppLockEnabled,
-                            colors = SwitchDefaults.colors(
-                                checkedThumbColor = palette.onAccent,
-                                checkedTrackColor = palette.accent,
-                                uncheckedThumbColor = palette.textSecondary,
-                                uncheckedTrackColor = palette.cardBottom
-                            ),
+                            colors = resolveSwitchColors(),
                             modifier = Modifier.testTag("applock_enable_switch")
                         )
                     }
@@ -301,7 +296,7 @@ fun AppLockSetupScreen(
                     Column(
                         modifier = Modifier
                             .fillMaxWidth()
-                            .resolveGlassCard(cornerRadius = 22.dp)
+                            .resolveGlassCard(cornerRadius = 16.dp)
                             .padding(18.dp),
                         verticalArrangement = Arrangement.spacedBy(10.dp)
                     ) {
@@ -324,8 +319,11 @@ fun AppLockSetupScreen(
                             }
                             OutlinedButton(
                                 onClick = { showProtectedAppsPicker = true },
-                                colors = ButtonDefaults.outlinedButtonColors(contentColor = palette.accent),
-                                border = BorderStroke(1.dp, palette.accent.copy(alpha = 0.55f)),
+                                colors = ButtonDefaults.outlinedButtonColors(
+                                    containerColor = palette.cobaltContainer.copy(alpha = 0.72f),
+                                    contentColor = palette.cobaltStrong
+                                ),
+                                border = BorderStroke(1.dp, palette.cobaltSlate.copy(alpha = 0.45f)),
                                 shape = RoundedCornerShape(12.dp),
                                 modifier = Modifier.testTag("applock_choose_apps_button")
                             ) {
@@ -345,10 +343,11 @@ fun AppLockSetupScreen(
                                     Text(
                                         text = nameMap[pkg] ?: pkg.substringAfterLast('.'),
                                         style = MaterialTheme.typography.labelSmall,
-                                        color = palette.accentStrong,
+                                        color = palette.cobaltStrong,
                                         modifier = Modifier
                                             .clip(CircleShape)
-                                            .background(palette.accentSoftContainer.copy(alpha = 0.7f))
+                                            .background(palette.cobaltContainer)
+                                            .border(1.dp, palette.cobaltSlate.copy(alpha = 0.25f), CircleShape)
                                             .padding(horizontal = 10.dp, vertical = 4.dp)
                                     )
                                 }
@@ -370,7 +369,7 @@ fun AppLockSetupScreen(
                     Column(
                         modifier = Modifier
                             .fillMaxWidth()
-                            .resolveGlassCard(cornerRadius = 22.dp)
+                            .resolveGlassCard(cornerRadius = 16.dp)
                             .padding(18.dp),
                         verticalArrangement = Arrangement.spacedBy(12.dp)
                     ) {
@@ -393,7 +392,7 @@ fun AppLockSetupScreen(
                                 Text(
                                     text = if (hasCredential) "Active: $currentLabel" else "Not configured yet",
                                     style = MaterialTheme.typography.bodySmall,
-                                    color = if (hasCredential) palette.accent else palette.warn
+                                    color = if (hasCredential) palette.accentStrong else palette.warn
                                 )
                             }
                             if (hasCredential) {
@@ -404,13 +403,17 @@ fun AppLockSetupScreen(
                                         setupError = null
                                         setupResetKey++
                                     },
-                                    border = BorderStroke(1.dp, palette.cardBorder),
+                                    colors = ButtonDefaults.outlinedButtonColors(
+                                        containerColor = palette.controlSurface,
+                                        contentColor = palette.textPrimary
+                                    ),
+                                    border = BorderStroke(1.dp, palette.controlBorder),
                                     shape = RoundedCornerShape(12.dp),
                                     modifier = Modifier.testTag("applock_change_credential_button")
                                 ) {
                                     Text(
                                         text = if (showCredentialWizard) "Close" else "Change",
-                                        color = palette.accent
+                                        color = palette.textPrimary
                                     )
                                 }
                             }
@@ -438,16 +441,16 @@ fun AppLockSetupScreen(
                                         },
                                         label = { Text(label) },
                                         colors = FilterChipDefaults.filterChipColors(
-                                            selectedContainerColor = palette.accentSoftContainer,
+                                            selectedContainerColor = palette.surfaceElevated,
                                             selectedLabelColor = palette.accentStrong,
-                                            containerColor = palette.background,
+                                            containerColor = palette.surfaceSecondary,
                                             labelColor = palette.textSecondary
                                         ),
                                         border = FilterChipDefaults.filterChipBorder(
                                             enabled = true,
                                             selected = selected,
                                             borderColor = palette.cardBorder,
-                                            selectedBorderColor = palette.accent
+                                            selectedBorderColor = palette.accentSecondary
                                         ),
                                         modifier = Modifier.testTag("applock_method_${method.name.lowercase()}")
                                     )
@@ -468,9 +471,9 @@ fun AppLockSetupScreen(
                                             },
                                             label = { Text("${len.digits}-Digit PIN") },
                                             colors = FilterChipDefaults.filterChipColors(
-                                                selectedContainerColor = palette.accentSoftContainer,
+                                                selectedContainerColor = palette.surfaceElevated,
                                                 selectedLabelColor = palette.accentStrong,
-                                                containerColor = palette.background,
+                                                containerColor = palette.surfaceSecondary,
                                                 labelColor = palette.textSecondary
                                             ),
                                             modifier = Modifier.testTag("applock_pin_length_${len.digits}")
@@ -535,8 +538,8 @@ fun AppLockSetupScreen(
                         modifier = Modifier
                             .fillMaxWidth()
                             .resolveGlassCard(
-                                cornerRadius = 22.dp,
-                                borderColor = if (isAccOn) palette.accent.copy(alpha = 0.35f)
+                                cornerRadius = 16.dp,
+                                borderColor = if (isAccOn) palette.cardBorder
                                 else palette.warn.copy(alpha = 0.42f)
                             )
                             .padding(18.dp),
@@ -549,7 +552,7 @@ fun AppLockSetupScreen(
                             Icon(
                                 imageVector = Icons.Outlined.Info,
                                 contentDescription = null,
-                                tint = if (isAccOn) palette.accent else palette.warn,
+                                tint = if (isAccOn) palette.accentStrong else palette.warn,
                                 modifier = Modifier.size(18.dp)
                             )
                             Text(
@@ -585,7 +588,7 @@ fun AppLockSetupScreen(
                             }
                             if (!isOwner) {
                                 TextButton(onClick = onOpenDeviceOwnerGuide) {
-                                    Text("Device Owner Info", color = palette.accent)
+                                    Text("Device Owner Info", color = palette.accentStrong)
                                 }
                             }
                         }
@@ -639,7 +642,7 @@ private fun ProtectedAppsPickerSheet(
     ModalBottomSheet(
         onDismissRequest = onDismiss,
         sheetState = sheetState,
-        containerColor = palette.cardBottom
+        containerColor = palette.surfaceSecondary
     ) {
         ProvideSafeTextToolbar {
             CleanupTextInteractionsOnDispose()
@@ -673,7 +676,7 @@ private fun ProtectedAppsPickerSheet(
                     }
                     if (selectedPackages.isNotEmpty()) {
                         TextButton(onClick = { selectedPackages = emptySet() }) {
-                            Text("Clear", color = palette.accent)
+                            Text("Clear", color = palette.accentStrong)
                         }
                     }
                 }
@@ -707,8 +710,8 @@ private fun ProtectedAppsPickerSheet(
                                 .fillMaxWidth()
                                 .clip(RoundedCornerShape(16.dp))
                                 .background(
-                                    if (selected) palette.accentSoftContainer.copy(alpha = 0.72f)
-                                    else palette.background.copy(alpha = 0.65f)
+                                    if (selected) palette.surfaceElevated
+                                    else palette.cardBottom
                                 )
                                 .clickable {
                                     selectedPackages = if (selected) {
@@ -732,7 +735,7 @@ private fun ProtectedAppsPickerSheet(
                                     modifier = Modifier
                                         .size(38.dp)
                                         .clip(CircleShape)
-                                        .background(palette.cardTop),
+                                        .background(palette.surfaceElevated),
                                     contentAlignment = Alignment.Center
                                 ) {
                                     Icon(
@@ -762,7 +765,7 @@ private fun ProtectedAppsPickerSheet(
                             Icon(
                                 imageVector = if (selected) Icons.Outlined.CheckCircle else ResolveIcons.RadioButtonUnchecked,
                                 contentDescription = if (selected) "Protected" else "Not protected",
-                                tint = if (selected) palette.accent else palette.textMuted
+                                tint = if (selected) palette.success else palette.textMuted
                             )
                         }
                     }
@@ -774,8 +777,8 @@ private fun ProtectedAppsPickerSheet(
                         onSaveSelection(selectedPackages)
                     },
                     colors = ButtonDefaults.buttonColors(
-                        containerColor = palette.accent,
-                        contentColor = palette.onAccent
+                        containerColor = palette.primaryButton,
+                        contentColor = palette.onPrimaryButton
                     ),
                     shape = RoundedCornerShape(16.dp),
                     modifier = Modifier

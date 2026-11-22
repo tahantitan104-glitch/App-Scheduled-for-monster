@@ -1,16 +1,17 @@
 package com.example.flipclock
 
+import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
-import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.ExperimentalLayoutApi
+import androidx.compose.foundation.layout.FlowRow
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxWidth
-import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.navigationBarsPadding
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
@@ -18,6 +19,7 @@ import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.foundation.text.KeyboardActions
 import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
@@ -27,9 +29,12 @@ import androidx.compose.material.icons.outlined.Close
 import androidx.compose.material.icons.outlined.Delete
 import androidx.compose.material.icons.outlined.Edit
 import androidx.compose.material3.AlertDialog
+import androidx.compose.material3.BottomSheetDefaults
 import androidx.compose.material3.Button
 import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.ExperimentalMaterial3Api
+import androidx.compose.material3.FilterChip
+import androidx.compose.material3.FilterChipDefaults
 import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
@@ -37,6 +42,7 @@ import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.ModalBottomSheet
 import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.OutlinedTextField
+import androidx.compose.material3.OutlinedTextFieldDefaults
 import androidx.compose.material3.Switch
 import androidx.compose.material3.SwitchDefaults
 import androidx.compose.material3.Text
@@ -51,28 +57,44 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
-import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.platform.LocalFocusManager
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.text.font.FontWeight
-import androidx.compose.ui.text.input.KeyboardType
+import androidx.compose.ui.text.input.ImeAction
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.example.designsystem.ResolveColors
 import com.example.domain.model.FlipClockSettings
+import com.example.domain.model.FlipDateFormat
 import com.example.domain.model.FlipTimerPreset
 import com.example.presentation.components.ProvideSafeTextToolbar
 import kotlin.math.roundToInt
 
-@OptIn(ExperimentalMaterial3Api::class)
+private val SLEEP_TIMER_OPTIONS = listOf(0, 15, 30, 45, 60, 90)
+
+@OptIn(ExperimentalMaterial3Api::class, ExperimentalLayoutApi::class)
 @Composable
 fun FlipClockSettingsSheet(
     settings: FlipClockSettings,
     presets: List<FlipTimerPreset>,
     onDismiss: () -> Unit,
+    onSetUseSystemTimeFormat: (Boolean) -> Unit,
     onSetUse24Hour: (Boolean) -> Unit,
-    onSetKeepScreenAwake: (Boolean) -> Unit,
+    onSetHourLeadingZero: (Boolean) -> Unit,
+    onSetDateFormatPattern: (String) -> Unit,
+    onSetShowFlipAxis: (Boolean) -> Unit,
+    onSetShowSeconds: (Boolean) -> Unit,
+    onSetShowWeekday: (Boolean) -> Unit,
     onSetShowDate: (Boolean) -> Unit,
+    onSetShowBattery: (Boolean) -> Unit,
+    onSetShowUpcomingAlarm: (Boolean) -> Unit,
+    onSetShowWeather: (Boolean) -> Unit,
+    onSetWeatherLocationQuery: (String) -> Unit,
+    onSetSleepTimerMinutes: (Int) -> Unit,
+    onSetClockTickerSound: (Boolean) -> Unit,
+    onSetCustomTag: (String) -> Unit,
+    onSetKeepScreenAwake: (Boolean) -> Unit,
     onSetAutoRepeat: (Boolean) -> Unit,
     onResetZoom: () -> Unit,
     onSavePreset: (presetId: String?, name: String, durationSeconds: Long) -> String?,
@@ -85,9 +107,21 @@ fun FlipClockSettingsSheet(
     var showResetConfirmDialog by remember { mutableStateOf(false) }
     var presetError by remember { mutableStateOf<String?>(null) }
 
+    var weatherCityDraft by remember(settings.weatherLocationQuery) {
+        mutableStateOf(settings.weatherLocationQuery)
+    }
+    var customTagDraft by remember(settings.customTag) {
+        mutableStateOf(settings.customTag)
+    }
+    val focusManager = LocalFocusManager.current
+
     ModalBottomSheet(
         onDismissRequest = onDismiss,
         sheetState = sheetState,
+        shape = RoundedCornerShape(topStart = 24.dp, topEnd = 24.dp),
+        dragHandle = {
+            BottomSheetDefaults.DragHandle(color = FlipClockPalette.PanelOutline)
+        },
         containerColor = FlipClockPalette.PanelDark,
         contentColor = FlipClockPalette.AccentSoft
     ) {
@@ -124,16 +158,321 @@ fun FlipClockSettingsSheet(
                     }
                 }
 
-                // 1. Time Format
+                // SECTION 1: Time & Date Format
+                SettingsSectionLabel("TIME & FORMAT")
+
+                SettingsSwitchRow(
+                    title = "Use System Time Format",
+                    subtitle = "Follow Android's 12-hour or 24-hour system clock setting",
+                    checked = settings.useSystemTimeFormat,
+                    onCheckedChange = onSetUseSystemTimeFormat,
+                    testTag = "flip_setting_system_time"
+                )
+
                 SettingsSwitchRow(
                     title = "24-Hour Time Format",
-                    subtitle = if (settings.use24HourFormat) "Showing 24-hour clock" else "Showing 12-hour clock (AM/PM)",
+                    subtitle = when {
+                        settings.useSystemTimeFormat -> "Controlled by Android System Time setting"
+                        settings.use24HourFormat -> "Showing 24-hour clock"
+                        else -> "Showing 12-hour clock (AM/PM)"
+                    },
                     checked = settings.use24HourFormat,
+                    enabled = !settings.useSystemTimeFormat,
                     onCheckedChange = onSetUse24Hour,
                     testTag = "flip_setting_24h"
                 )
 
-                // 2. Orientation Status
+                SettingsSwitchRow(
+                    title = "Hour Leading Zero",
+                    subtitle = if (settings.hourLeadingZero) "Shows 09 instead of 9" else "Shows natural single-digit hours (e.g. 9)",
+                    checked = settings.hourLeadingZero,
+                    onCheckedChange = onSetHourLeadingZero,
+                    testTag = "flip_setting_leading_zero"
+                )
+
+                Column(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .clip(RoundedCornerShape(14.dp))
+                        .background(FlipClockPalette.PanelElevated)
+                        .padding(horizontal = 16.dp, vertical = 12.dp),
+                    verticalArrangement = Arrangement.spacedBy(8.dp)
+                ) {
+                    Text(
+                        text = "Date Format",
+                        style = MaterialTheme.typography.titleSmall,
+                        color = FlipClockPalette.AccentSoft
+                    )
+                    Text(
+                        text = "Choose how the optional date line is formatted",
+                        style = MaterialTheme.typography.bodySmall,
+                        color = FlipClockPalette.SubTextGrey
+                    )
+                    FlowRow(
+                        horizontalArrangement = Arrangement.spacedBy(8.dp),
+                        verticalArrangement = Arrangement.spacedBy(6.dp)
+                    ) {
+                        FlipDateFormat.entries.forEach { fmt ->
+                            val selected = settings.resolvedDateFormat == fmt
+                            FilterChip(
+                                selected = selected,
+                                onClick = { onSetDateFormatPattern(fmt.pattern) },
+                                label = { Text(fmt.label, style = MaterialTheme.typography.labelMedium) },
+                                colors = FilterChipDefaults.filterChipColors(
+                                    selectedContainerColor = FlipClockPalette.PrimaryCta,
+                                    selectedLabelColor = FlipClockPalette.PrimaryCtaText,
+                                    containerColor = FlipClockPalette.PanelDark,
+                                    labelColor = FlipClockPalette.SubTextGrey
+                                ),
+                                border = FilterChipDefaults.filterChipBorder(
+                                    enabled = true,
+                                    selected = selected,
+                                    borderColor = FlipClockPalette.PanelOutline,
+                                    selectedBorderColor = FlipClockPalette.SageLabel.copy(alpha = 0.75f)
+                                )
+                            )
+                        }
+                    }
+                }
+
+                // SECTION 2: Clock Display & Split Axis
+                SettingsSectionLabel("DISPLAY & FLIP AXIS")
+
+                SettingsSwitchRow(
+                    title = "Flip Axis Seam",
+                    subtitle = "Show central split-flap dividing line through digit midpoint",
+                    checked = settings.showFlipAxis,
+                    onCheckedChange = onSetShowFlipAxis,
+                    testTag = "flip_setting_flip_axis"
+                )
+
+                SettingsSwitchRow(
+                    title = "Show Seconds",
+                    subtitle = "Display live seconds below minutes",
+                    checked = settings.showSeconds,
+                    onCheckedChange = onSetShowSeconds,
+                    testTag = "flip_setting_show_seconds"
+                )
+
+                SettingsSwitchRow(
+                    title = "Show Weekday",
+                    subtitle = "Display day of the week between hour and minute",
+                    checked = settings.showWeekday,
+                    onCheckedChange = onSetShowWeekday,
+                    testTag = "flip_setting_show_weekday"
+                )
+
+                SettingsSwitchRow(
+                    title = "Date Display",
+                    subtitle = "Show subtle formatted date on Clock screen",
+                    checked = settings.showDate,
+                    onCheckedChange = onSetShowDate,
+                    testTag = "flip_setting_show_date"
+                )
+
+                // SECTION 3: Live Status & Custom Tag
+                SettingsSectionLabel("CLOCK OVERLAY INFO")
+
+                SettingsSwitchRow(
+                    title = "Battery Level",
+                    subtitle = "Show real device battery percentage and charging state",
+                    checked = settings.showBattery,
+                    onCheckedChange = onSetShowBattery,
+                    testTag = "flip_setting_show_battery"
+                )
+
+                SettingsSwitchRow(
+                    title = "Upcoming Alarm",
+                    subtitle = "Show next scheduled Android system alarm if set",
+                    checked = settings.showUpcomingAlarm,
+                    onCheckedChange = onSetShowUpcomingAlarm,
+                    testTag = "flip_setting_show_alarm"
+                )
+
+                SettingsSwitchRow(
+                    title = "Weather Info",
+                    subtitle = "Show live local weather for your configured city (no GPS)",
+                    checked = settings.showWeather,
+                    onCheckedChange = onSetShowWeather,
+                    testTag = "flip_setting_show_weather"
+                )
+
+                AnimatedVisibility(visible = settings.showWeather) {
+                    Row(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .clip(RoundedCornerShape(14.dp))
+                            .background(FlipClockPalette.PanelElevated)
+                            .padding(horizontal = 14.dp, vertical = 10.dp),
+                        verticalAlignment = Alignment.CenterVertically,
+                        horizontalArrangement = Arrangement.spacedBy(8.dp)
+                    ) {
+                        OutlinedTextField(
+                            value = weatherCityDraft,
+                            onValueChange = { weatherCityDraft = it.take(48) },
+                            label = { Text("City Name (e.g. Dhaka, London)") },
+                            singleLine = true,
+                            keyboardOptions = KeyboardOptions(imeAction = ImeAction.Done),
+                            keyboardActions = KeyboardActions(
+                                onDone = {
+                                    focusManager.clearFocus()
+                                    onSetWeatherLocationQuery(weatherCityDraft)
+                                }
+                            ),
+                            colors = OutlinedTextFieldDefaults.colors(
+                                focusedTextColor = FlipClockPalette.AccentSoft,
+                                unfocusedTextColor = FlipClockPalette.AccentSoft,
+                                focusedBorderColor = FlipClockPalette.SageAccent,
+                                unfocusedBorderColor = FlipClockPalette.PanelOutline
+                            ),
+                            modifier = Modifier
+                                .weight(1f)
+                                .testTag("flip_setting_weather_city_input")
+                        )
+                        Button(
+                            onClick = {
+                                focusManager.clearFocus()
+                                onSetWeatherLocationQuery(weatherCityDraft)
+                            },
+                            colors = ButtonDefaults.buttonColors(
+                                containerColor = FlipClockPalette.PrimaryCta,
+                                contentColor = FlipClockPalette.PrimaryCtaText
+                            ),
+                            shape = RoundedCornerShape(12.dp)
+                        ) {
+                            Text("Set")
+                        }
+                    }
+                }
+
+                Column(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .clip(RoundedCornerShape(14.dp))
+                        .background(FlipClockPalette.PanelElevated)
+                        .padding(horizontal = 16.dp, vertical = 12.dp),
+                    verticalArrangement = Arrangement.spacedBy(8.dp)
+                ) {
+                    Text(
+                        text = "Custom Tag",
+                        style = MaterialTheme.typography.titleSmall,
+                        color = FlipClockPalette.AccentSoft
+                    )
+                    Text(
+                        text = "Optional short label shown subtly on the Clock face",
+                        style = MaterialTheme.typography.bodySmall,
+                        color = FlipClockPalette.SubTextGrey
+                    )
+                    Row(
+                        verticalAlignment = Alignment.CenterVertically,
+                        horizontalArrangement = Arrangement.spacedBy(8.dp)
+                    ) {
+                        OutlinedTextField(
+                            value = customTagDraft,
+                            onValueChange = { customTagDraft = it.take(28) },
+                            placeholder = { Text("e.g. Deep Focus") },
+                            singleLine = true,
+                            keyboardOptions = KeyboardOptions(imeAction = ImeAction.Done),
+                            keyboardActions = KeyboardActions(
+                                onDone = {
+                                    focusManager.clearFocus()
+                                    onSetCustomTag(customTagDraft)
+                                }
+                            ),
+                            colors = OutlinedTextFieldDefaults.colors(
+                                focusedTextColor = FlipClockPalette.AccentSoft,
+                                unfocusedTextColor = FlipClockPalette.AccentSoft,
+                                focusedBorderColor = FlipClockPalette.SageAccent,
+                                unfocusedBorderColor = FlipClockPalette.PanelOutline
+                            ),
+                            modifier = Modifier
+                                .weight(1f)
+                                .testTag("flip_setting_custom_tag_input")
+                        )
+                        Button(
+                            onClick = {
+                                focusManager.clearFocus()
+                                onSetCustomTag(customTagDraft)
+                            },
+                            colors = ButtonDefaults.buttonColors(
+                                containerColor = FlipClockPalette.PrimaryCta,
+                                contentColor = FlipClockPalette.PrimaryCtaText
+                            ),
+                            shape = RoundedCornerShape(12.dp)
+                        ) {
+                            Text("Apply")
+                        }
+                    }
+                }
+
+                // SECTION 4: Audio, Sleep & Screen
+                SettingsSectionLabel("SOUND, SLEEP & SCREEN")
+
+                SettingsSwitchRow(
+                    title = "Clock Ticker Sound",
+                    subtitle = "Play subtle mechanical click on each second tick",
+                    checked = settings.clockTickerSoundEnabled,
+                    onCheckedChange = onSetClockTickerSound,
+                    testTag = "flip_setting_ticker_sound"
+                )
+
+                Column(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .clip(RoundedCornerShape(14.dp))
+                        .background(FlipClockPalette.PanelElevated)
+                        .padding(horizontal = 16.dp, vertical = 12.dp),
+                    verticalArrangement = Arrangement.spacedBy(8.dp)
+                ) {
+                    Text(
+                        text = "Sleep Timer",
+                        style = MaterialTheme.typography.titleSmall,
+                        color = FlipClockPalette.AccentSoft
+                    )
+                    Text(
+                        text = if (settings.sleepTimerMinutes > 0) {
+                            "Automatically dims sound & closes Flip Clock after ${settings.sleepTimerMinutes} min"
+                        } else {
+                            "Off — stays active until you exit"
+                        },
+                        style = MaterialTheme.typography.bodySmall,
+                        color = FlipClockPalette.SubTextGrey
+                    )
+                    FlowRow(
+                        horizontalArrangement = Arrangement.spacedBy(8.dp),
+                        verticalArrangement = Arrangement.spacedBy(6.dp)
+                    ) {
+                        SLEEP_TIMER_OPTIONS.forEach { mins ->
+                            val selected = settings.sleepTimerMinutes == mins
+                            FilterChip(
+                                selected = selected,
+                                onClick = { onSetSleepTimerMinutes(mins) },
+                                label = { Text(if (mins == 0) "Off" else "${mins}m") },
+                                colors = FilterChipDefaults.filterChipColors(
+                                    selectedContainerColor = FlipClockPalette.PrimaryCta,
+                                    selectedLabelColor = FlipClockPalette.PrimaryCtaText,
+                                    containerColor = FlipClockPalette.PanelDark,
+                                    labelColor = FlipClockPalette.SubTextGrey
+                                ),
+                                border = FilterChipDefaults.filterChipBorder(
+                                    enabled = true,
+                                    selected = selected,
+                                    borderColor = FlipClockPalette.PanelOutline,
+                                    selectedBorderColor = FlipClockPalette.SageLabel.copy(alpha = 0.75f)
+                                )
+                            )
+                        }
+                    }
+                }
+
+                SettingsSwitchRow(
+                    title = "Keep Screen Awake",
+                    subtitle = "Prevent display sleep while Flip Clock is open",
+                    checked = settings.keepScreenAwake,
+                    onCheckedChange = onSetKeepScreenAwake,
+                    testTag = "flip_setting_keep_awake"
+                )
+
                 Row(
                     modifier = Modifier
                         .fillMaxWidth()
@@ -158,42 +497,14 @@ fun FlipClockSettingsSheet(
                     Text(
                         text = "Auto",
                         style = MaterialTheme.typography.labelLarge,
-                        color = ResolveColors.MintAccent,
+                        color = FlipClockPalette.PrimaryCtaText,
                         modifier = Modifier
                             .clip(CircleShape)
-                            .background(ResolveColors.MintSoftContainer)
+                            .background(FlipClockPalette.PrimaryCta)
                             .padding(horizontal = 12.dp, vertical = 4.dp)
                     )
                 }
 
-                // 3. Keep Screen Awake
-                SettingsSwitchRow(
-                    title = "Keep Screen Awake",
-                    subtitle = "Prevent display sleep while Flip Clock is open",
-                    checked = settings.keepScreenAwake,
-                    onCheckedChange = onSetKeepScreenAwake,
-                    testTag = "flip_setting_keep_awake"
-                )
-
-                // 4. Date Display
-                SettingsSwitchRow(
-                    title = "Date & Weekday Display",
-                    subtitle = "Show subtle weekday and date on Clock screen",
-                    checked = settings.showDate,
-                    onCheckedChange = onSetShowDate,
-                    testTag = "flip_setting_show_date"
-                )
-
-                // 5. Auto-Repeat Timer
-                SettingsSwitchRow(
-                    title = "Timer Auto-Repeat",
-                    subtitle = "Automatically restart after the 5s completion message",
-                    checked = settings.autoRepeat,
-                    onCheckedChange = onSetAutoRepeat,
-                    testTag = "flip_setting_auto_repeat"
-                )
-
-                // 6. Zoom Reset
                 Row(
                     modifier = Modifier
                         .fillMaxWidth()
@@ -226,9 +537,19 @@ fun FlipClockSettingsSheet(
                     }
                 }
 
+                // SECTION 5: Timer Settings & Presets
+                SettingsSectionLabel("TIMER & PRESETS")
+
+                SettingsSwitchRow(
+                    title = "Timer Auto-Repeat",
+                    subtitle = "Automatically restart after the 5s completion message",
+                    checked = settings.autoRepeat,
+                    onCheckedChange = onSetAutoRepeat,
+                    testTag = "flip_setting_auto_repeat"
+                )
+
                 HorizontalDivider(color = FlipClockPalette.PanelOutline)
 
-                // 7. Timer Preset Management (max 15)
                 Row(
                     modifier = Modifier.fillMaxWidth(),
                     verticalAlignment = Alignment.CenterVertically,
@@ -254,8 +575,8 @@ fun FlipClockSettingsSheet(
                         enabled = presets.size < FlipTimerPreset.MAX_TOTAL_PRESETS,
                         shape = CircleShape,
                         colors = ButtonDefaults.buttonColors(
-                            containerColor = ResolveColors.MintSoftContainer,
-                            contentColor = ResolveColors.MintBright
+                            containerColor = FlipClockPalette.PrimaryCta,
+                            contentColor = FlipClockPalette.PrimaryCtaText
                         ),
                         modifier = Modifier.testTag("flip_add_preset_btn")
                     ) {
@@ -331,7 +652,6 @@ fun FlipClockSettingsSheet(
 
                 HorizontalDivider(color = FlipClockPalette.PanelOutline)
 
-                // 8. Reset Settings to Default
                 OutlinedButton(
                     onClick = { showResetConfirmDialog = true },
                     shape = RoundedCornerShape(14.dp),
@@ -383,7 +703,7 @@ fun FlipClockSettingsSheet(
             title = { Text("Reset Flip Clock Settings?") },
             text = {
                 Text(
-                    "Restores 12-hour format, Date Display OFF, Keep Screen Awake OFF, Auto-repeat OFF, 100% Zoom, and missing defaults within the 15-preset limit. Your custom Timer Presets stay preserved."
+                    "Restores default 12-hour clock, Flip Axis ON, Date Display OFF, Sleep Timer OFF, Ticker Sound OFF, 100% Zoom, and missing defaults within the 15-preset limit. Your custom Timer Presets stay preserved."
                 )
             },
             confirmButton = {
@@ -411,19 +731,33 @@ fun FlipClockSettingsSheet(
 }
 
 @Composable
+private fun SettingsSectionLabel(label: String) {
+    Text(
+        text = label,
+        style = MaterialTheme.typography.labelMedium.copy(
+            letterSpacing = 1.1.sp,
+            fontWeight = FontWeight.SemiBold
+        ),
+        color = FlipClockPalette.SageLabel,
+        modifier = Modifier.padding(top = 6.dp, bottom = 2.dp)
+    )
+}
+
+@Composable
 private fun SettingsSwitchRow(
     title: String,
     subtitle: String,
     checked: Boolean,
     onCheckedChange: (Boolean) -> Unit,
-    testTag: String
+    testTag: String,
+    enabled: Boolean = true
 ) {
     Row(
         modifier = Modifier
             .fillMaxWidth()
             .clip(RoundedCornerShape(14.dp))
-            .background(FlipClockPalette.PanelElevated)
-            .clickable { onCheckedChange(!checked) }
+            .background(FlipClockPalette.PanelElevated.copy(alpha = if (enabled) 1f else 0.55f))
+            .clickable(enabled = enabled) { onCheckedChange(!checked) }
             .padding(horizontal = 16.dp, vertical = 12.dp),
         verticalAlignment = Alignment.CenterVertically,
         horizontalArrangement = Arrangement.SpaceBetween
@@ -432,7 +766,7 @@ private fun SettingsSwitchRow(
             Text(
                 text = title,
                 style = MaterialTheme.typography.titleSmall,
-                color = FlipClockPalette.AccentSoft
+                color = if (enabled) FlipClockPalette.AccentSoft else FlipClockPalette.SubTextGrey
             )
             Text(
                 text = subtitle,
@@ -442,13 +776,16 @@ private fun SettingsSwitchRow(
         }
         Switch(
             checked = checked,
+            enabled = enabled,
             onCheckedChange = onCheckedChange,
             modifier = Modifier.testTag(testTag),
             colors = SwitchDefaults.colors(
-                checkedThumbColor = ResolveColors.ForestDeep,
-                checkedTrackColor = ResolveColors.MintAccent,
+                checkedThumbColor = androidx.compose.ui.graphics.Color.White,
+                checkedTrackColor = FlipClockPalette.SageAccent,
+                checkedBorderColor = FlipClockPalette.SageAccent,
                 uncheckedThumbColor = FlipClockPalette.SubTextGrey,
-                uncheckedTrackColor = FlipClockPalette.PanelDark
+                uncheckedTrackColor = FlipClockPalette.PanelDark,
+                uncheckedBorderColor = FlipClockPalette.PanelOutline
             )
         )
     }
@@ -559,8 +896,8 @@ fun FlipPresetEditorDialog(
                     onConfirm(effectiveName, total)
                 },
                 colors = ButtonDefaults.buttonColors(
-                    containerColor = ResolveColors.MintSoftContainer,
-                    contentColor = ResolveColors.MintBright
+                    containerColor = FlipClockPalette.PrimaryCta,
+                    contentColor = FlipClockPalette.PrimaryCtaText
                 ),
                 modifier = Modifier.testTag("flip_preset_save_btn")
             ) {

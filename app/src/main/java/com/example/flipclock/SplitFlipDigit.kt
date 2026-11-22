@@ -1,68 +1,87 @@
 package com.example.flipclock
 
 import androidx.compose.animation.core.Animatable
-import androidx.compose.animation.core.FastOutSlowInEasing
+import androidx.compose.animation.core.CubicBezierEasing
 import androidx.compose.animation.core.tween
 import androidx.compose.foundation.background
-import androidx.compose.foundation.border
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
-import androidx.compose.foundation.layout.offset
-import androidx.compose.foundation.layout.padding
-import androidx.compose.foundation.layout.requiredHeight
 import androidx.compose.foundation.layout.width
-import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.foundation.shape.GenericShape
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.key
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.draw.clip
-import androidx.compose.ui.draw.clipToBounds
-import androidx.compose.ui.graphics.Brush
+import androidx.compose.ui.geometry.Rect
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.Shape
 import androidx.compose.ui.graphics.TransformOrigin
 import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.platform.LocalDensity
+import androidx.compose.ui.text.AnnotatedString
+import androidx.compose.ui.text.PlatformTextStyle
+import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.rememberTextMeasurer
+import androidx.compose.ui.text.style.LineHeightStyle
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.TextUnit
 import androidx.compose.ui.unit.dp
-import com.example.designsystem.OutfitTimerFamily
+import com.example.designsystem.FlipClockDisplayFamily
 
 object FlipClockPalette {
     val CanvasBlack = Color(0xFF000000)
-    val CardSurface = Color(0xFF1A1A1D)
-    val CardSurfaceTop = Color(0xFF232327)
-    val CardSurfaceTopLower = Color(0xFF1C1C20)
-    val CardSurfaceBottom = Color(0xFF18181B)
-    val CardSurfaceBottomLower = Color(0xFF131316)
-    val CardBorderEdge = Color(0xFF2B2B30)
-    val HingeTick = Color(0xFF2F2F36)
-    val DigitGrey = Color(0xFFC8C8CE)
-    val SubTextGrey = Color(0xFF96969E)
-    val SeamBlack = Color(0xFF020203)
-    val PanelDark = Color(0xFF141416)
-    val PanelElevated = Color(0xFF232326)
-    val PanelOutline = Color(0xFF2F2F35)
-    val AccentSoft = Color(0xFFE0E0E6)
+    val DigitGrey = Color(0xFFC8CEC9)
+    val DigitGreyFlip = Color(0xFFA0A7A2)
+    val SubTextGrey = Color(0xFFA2ACA5)
+    val SeamBlack = Color(0xFF000000)
+
+    // Darker Deep Forest + Dark Teal Green (#176B5B) control chrome tokens
+    val PanelDark = Color(0xFF09120E)
+    val PanelElevated = Color(0xFF0E1A15)
+    val PanelActive = Color(0xFF14241D)
+    val PanelOutline = Color(0xFF1E3027)
+    val DividerSubtle = Color(0xFF15241D)
+    val PrimaryCta = Color(0xFF176B5B)
+    val PrimaryCtaText = Color(0xFFF2F5F1)
+    val SageAccent = Color(0xFF176B5B)
+    val SageLabel = Color(0xFF2B9C86)
+    val AccentSoft = Color(0xFFF2F5F1)
+    val TimerIndicator = Color(0xFF176B5B)
 }
 
+private val FlipPageEasing = CubicBezierEasing(0.22f, 0.61f, 0.36f, 1.0f)
+
+private val TopHalfClipShape: Shape = GenericShape { size, _ ->
+    addRect(Rect(left = 0f, top = 0f, right = size.width, bottom = size.height * 0.5f))
+}
+
+private val BottomHalfClipShape: Shape = GenericShape { size, _ ->
+    addRect(Rect(left = 0f, top = size.height * 0.5f, right = size.width, bottom = size.height))
+}
+
+// Empirically verified optical midpoint ratio of Manrope numerals (0..9) above baseline (capH ~ 0.72 * em)
+private const val MANROPE_NUMERAL_MID_RATIO = 0.360f
+
 /**
- * Authentic mechanical split-flap card rendered cleanly on pure #000000 canvas:
- * - Matte charcoal split plates with restrained overhead sheen & zero pocket/bezel clutter
- * - Crisp horizontal split gap with subtle hinge bevels
- * - Real 3D mechanical page-turn animation (top flap 0° -> -90° with fold shading,
- *   bottom flap 90° -> 0° with unfolding shadow scrim) ONLY when [value] genuinely changes
+ * Borderless pure-black split-flap numeral group:
+ * - Zero rectangular box, zero border, zero background card plate at rest
+ * - Bold rounded geometric sans-serif numerals (Manrope ExtraBold, tabular figures) directly on #000000
+ * - Per-digit 3D split-flap animation so ONLY the digit(s) that changed flip
+ * - Both halves occupy the exact full digit bounds and clip strictly at 50% height with TransformOrigin(0.5f, 0.5f)
+ * - [showFlipAxis] toggles visual seam appearance ONLY without altering the 50% hinge geometry
  */
 @Composable
 fun SplitFlipCard(
@@ -71,210 +90,254 @@ fun SplitFlipCard(
     cardHeight: Dp,
     fontSize: TextUnit,
     modifier: Modifier = Modifier,
-    cornerRadius: Dp = 20.dp,
-    seamThickness: Dp = 2.5.dp
+    @Suppress("UNUSED_PARAMETER") cornerRadius: Dp = 0.dp,
+    seamThickness: Dp = 3.2.dp,
+    digitColor: Color = FlipClockPalette.DigitGrey,
+    showFlipAxis: Boolean = true
 ) {
-    var currentValue by remember { mutableStateOf(value) }
-    var previousValue by remember { mutableStateOf(value) }
-    val flipProgress = remember { Animatable(1f) }
-
-    LaunchedEffect(value) {
-        if (value != currentValue) {
-            previousValue = currentValue
-            currentValue = value
-            flipProgress.snapTo(0f)
-            flipProgress.animateTo(
-                targetValue = 1f,
-                animationSpec = tween(durationMillis = 390, easing = FastOutSlowInEasing)
-            )
-            previousValue = currentValue
-        }
-    }
-
-    val progress = flipProgress.value
-    val isFlipping = progress < 0.999f && previousValue != currentValue
-    val cameraDistancePx = with(LocalDensity.current) { 16.dp.toPx() }
-    val cardShape = RoundedCornerShape(cornerRadius)
-
-    val topStaticBrush = remember {
-        Brush.verticalGradient(
-            colors = listOf(
-                FlipClockPalette.CardSurfaceTop,
-                FlipClockPalette.CardSurfaceTopLower
-            )
-        )
-    }
-    val bottomStaticBrush = remember {
-        Brush.verticalGradient(
-            colors = listOf(
-                FlipClockPalette.CardSurfaceBottom,
-                FlipClockPalette.CardSurfaceBottomLower
-            )
-        )
-    }
+    val normalized = value.ifEmpty { "0" }
+    val digits = normalized.toCharArray()
+    val slotGap = if (digits.size > 1) 4.dp else 0.dp
 
     Box(
         modifier = modifier
             .width(cardWidth)
             .height(cardHeight)
-            .clip(cardShape)
-            .background(FlipClockPalette.CardSurface)
-            .border(0.75.dp, FlipClockPalette.CardBorderEdge.copy(alpha = 0.65f), cardShape),
+            .background(Color.Transparent),
         contentAlignment = Alignment.Center
     ) {
-        // Static upper plate shows incoming target value beneath folding top flap
-        SplitCardHalf(
-            text = currentValue,
+        if (digits.size == 1) {
+            key("single_${digits.size}") {
+                val singleSlotWidth = (cardWidth * 0.60f).coerceAtLeast(cardHeight * 0.58f)
+                SplitFlipSingleDigit(
+                    digit = digits[0],
+                    digitWidth = singleSlotWidth,
+                    cardHeight = cardHeight,
+                    fontSize = fontSize,
+                    seamThickness = seamThickness,
+                    digitColor = digitColor,
+                    showFlipAxis = showFlipAxis
+                )
+            }
+        } else {
+            val totalSlots = digits.size
+            val singleSlotWidth = ((cardWidth - slotGap * (totalSlots - 1)) / totalSlots.toFloat())
+                .coerceAtLeast(24.dp)
+            Row(
+                modifier = Modifier
+                    .width(cardWidth)
+                    .fillMaxHeight(),
+                horizontalArrangement = Arrangement.spacedBy(slotGap, Alignment.CenterHorizontally),
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                digits.forEachIndexed { index, ch ->
+                    // Right-aligned positional key keeps seconds/minutes units animating cleanly even if width changes
+                    val rightAlignedKey = totalSlots - index
+                    key("slot_$rightAlignedKey") {
+                        SplitFlipSingleDigit(
+                            digit = ch,
+                            digitWidth = singleSlotWidth,
+                            cardHeight = cardHeight,
+                            fontSize = fontSize,
+                            seamThickness = seamThickness,
+                            digitColor = digitColor,
+                            showFlipAxis = showFlipAxis
+                        )
+                    }
+                }
+            }
+        }
+    }
+}
+
+@Composable
+private fun SplitFlipSingleDigit(
+    digit: Char,
+    digitWidth: Dp,
+    cardHeight: Dp,
+    fontSize: TextUnit,
+    seamThickness: Dp,
+    digitColor: Color,
+    showFlipAxis: Boolean
+) {
+    var currentDigit by remember { mutableStateOf(digit) }
+    var previousDigit by remember { mutableStateOf(digit) }
+    val flipProgress = remember { Animatable(1f) }
+
+    LaunchedEffect(digit) {
+        if (digit != currentDigit) {
+            previousDigit = currentDigit
+            currentDigit = digit
+            flipProgress.snapTo(0f)
+            flipProgress.animateTo(
+                targetValue = 1f,
+                animationSpec = tween(durationMillis = 420, easing = FlipPageEasing)
+            )
+            previousDigit = currentDigit
+        }
+    }
+
+    val progress = flipProgress.value
+    val isFlipping = progress < 0.999f && previousDigit != currentDigit
+    val density = LocalDensity.current
+    val cardHeightPx = with(density) { cardHeight.toPx() }
+    val fontSizePx = with(density) { fontSize.toPx() }
+    val cameraDistancePx = with(density) { 22.dp.toPx() }
+
+    val digitTextStyle = remember(fontSize) {
+        TextStyle(
+            fontFamily = FlipClockDisplayFamily,
+            fontWeight = FontWeight.ExtraBold,
             fontSize = fontSize,
-            cardHeight = cardHeight,
-            isTopHalf = true,
-            backgroundBrush = topStaticBrush,
-            shadeAlpha = if (isFlipping && progress < 0.5f) (0.28f * (1f - progress * 2f)) else 0f,
+            lineHeight = fontSize,
+            fontFeatureSettings = "tnum",
+            platformStyle = PlatformTextStyle(includeFontPadding = false),
+            lineHeightStyle = LineHeightStyle(
+                alignment = LineHeightStyle.Alignment.Proportional,
+                trim = LineHeightStyle.Trim.None
+            )
+        )
+    }
+
+    // Measure reference glyph "8" synchronously so every digit shares identical baseline & exact 50% ink center
+    val textMeasurer = rememberTextMeasurer()
+    val exactTranslationY = remember(digitTextStyle, cardHeightPx, fontSizePx) {
+        val referenceBaseline = textMeasurer.measure(
+            text = AnnotatedString("8"),
+            style = digitTextStyle,
+            softWrap = false,
+            maxLines = 1
+        ).firstBaseline
+        val numeralVisualMidInLayout = referenceBaseline - (MANROPE_NUMERAL_MID_RATIO * fontSizePx)
+        (cardHeightPx * 0.5f) - numeralVisualMidInLayout
+    }
+
+    val currentText = currentDigit.toString()
+    val previousText = previousDigit.toString()
+
+    Box(
+        modifier = Modifier
+            .width(digitWidth)
+            .height(cardHeight)
+            .background(Color.Transparent),
+        contentAlignment = Alignment.Center
+    ) {
+        // 1. Static upper half [0..50%): reveals incoming digit as previous top flap folds forward
+        val topRevealAlpha = if (isFlipping && progress < 0.5f) {
+            0.52f + 0.48f * (progress / 0.5f)
+        } else 1f
+        FullCardClippedDigitFace(
+            text = currentText,
+            style = digitTextStyle,
+            digitColor = digitColor.copy(alpha = topRevealAlpha),
+            translationYPx = exactTranslationY,
+            plateBackground = Color.Transparent,
             modifier = Modifier
-                .align(Alignment.TopCenter)
-                .fillMaxWidth()
-                .height(cardHeight / 2f)
+                .fillMaxSize()
+                .graphicsLayer {
+                    clip = true
+                    shape = TopHalfClipShape
+                }
         )
 
-        // Static lower plate keeps previous value during first half, then holds target value
-        val bottomFoldShadow = if (isFlipping && progress >= 0.5f) {
-            0.22f * (1f - ((progress - 0.5f) / 0.5f))
-        } else 0f
-        SplitCardHalf(
-            text = if (isFlipping) previousValue else currentValue,
-            fontSize = fontSize,
-            cardHeight = cardHeight,
-            isTopHalf = false,
-            backgroundBrush = bottomStaticBrush,
-            shadeAlpha = bottomFoldShadow,
+        // 2. Static lower half [50%..100%]: holds previous digit while top folds, dims smoothly under incoming flap
+        val bottomFadeAlpha = if (isFlipping && progress >= 0.5f) {
+            1f - ((progress - 0.5f) / 0.5f) * 0.80f
+        } else 1f
+        FullCardClippedDigitFace(
+            text = if (isFlipping) previousText else currentText,
+            style = digitTextStyle,
+            digitColor = digitColor.copy(alpha = bottomFadeAlpha),
+            translationYPx = exactTranslationY,
+            plateBackground = Color.Transparent,
             modifier = Modifier
-                .align(Alignment.BottomCenter)
-                .fillMaxWidth()
-                .height(cardHeight / 2f)
+                .fillMaxSize()
+                .graphicsLayer {
+                    clip = true
+                    shape = BottomHalfClipShape
+                }
         )
 
-        // Animated 3D upper flap folding down (0° -> -90°)
+        // 3. Folding upper flap (0° -> -90°) hinged at exact 50% vertical center TransformOrigin(0.5f, 0.5f)
         if (isFlipping && progress < 0.5f) {
             val phase = (progress / 0.5f).coerceIn(0f, 1f)
             val angle = -phase * 90f
-            SplitCardHalf(
-                text = previousValue,
-                fontSize = fontSize,
-                cardHeight = cardHeight,
-                isTopHalf = true,
-                backgroundBrush = topStaticBrush,
-                shadeAlpha = phase * 0.46f,
+            FullCardClippedDigitFace(
+                text = previousText,
+                style = digitTextStyle,
+                digitColor = FlipClockPalette.DigitGreyFlip.copy(alpha = 1f - phase * 0.45f),
+                translationYPx = exactTranslationY,
+                plateBackground = FlipClockPalette.CanvasBlack,
                 modifier = Modifier
-                    .align(Alignment.TopCenter)
-                    .fillMaxWidth()
-                    .height(cardHeight / 2f)
+                    .fillMaxSize()
                     .graphicsLayer {
+                        clip = true
+                        shape = TopHalfClipShape
                         rotationX = angle
-                        transformOrigin = TransformOrigin(0.5f, 1f)
+                        transformOrigin = TransformOrigin(0.5f, 0.5f)
                         cameraDistance = cameraDistancePx
                     }
             )
         }
 
-        // Animated 3D lower flap unfolding down (90° -> 0°)
+        // 4. Unfolding lower flap (+90° -> 0°) hinged at exact 50% vertical center TransformOrigin(0.5f, 0.5f)
         if (isFlipping && progress >= 0.5f) {
             val phase = ((progress - 0.5f) / 0.5f).coerceIn(0f, 1f)
             val angle = (1f - phase) * 90f
-            SplitCardHalf(
-                text = currentValue,
-                fontSize = fontSize,
-                cardHeight = cardHeight,
-                isTopHalf = false,
-                backgroundBrush = bottomStaticBrush,
-                shadeAlpha = (1f - phase) * 0.34f,
+            FullCardClippedDigitFace(
+                text = currentText,
+                style = digitTextStyle,
+                digitColor = digitColor.copy(alpha = 0.72f + 0.28f * phase),
+                translationYPx = exactTranslationY,
+                plateBackground = FlipClockPalette.CanvasBlack,
                 modifier = Modifier
-                    .align(Alignment.BottomCenter)
-                    .fillMaxWidth()
-                    .height(cardHeight / 2f)
+                    .fillMaxSize()
                     .graphicsLayer {
+                        clip = true
+                        shape = BottomHalfClipShape
                         rotationX = angle
-                        transformOrigin = TransformOrigin(0.5f, 0f)
+                        transformOrigin = TransformOrigin(0.5f, 0.5f)
                         cameraDistance = cameraDistancePx
                     }
             )
         }
 
-        // Precision center horizontal split gap + subtle hinge bevel notches
-        Box(
-            modifier = Modifier
-                .align(Alignment.Center)
-                .fillMaxWidth()
-                .height(seamThickness)
-                .background(FlipClockPalette.SeamBlack)
-        )
-        Row(
-            modifier = Modifier
-                .align(Alignment.Center)
-                .fillMaxWidth()
-                .padding(horizontal = 4.dp),
-            horizontalArrangement = Arrangement.SpaceBetween,
-            verticalAlignment = Alignment.CenterVertically
-        ) {
+        // 5. Visual horizontal split axis centered strictly at 50% card height
+        if (showFlipAxis) {
             Box(
                 modifier = Modifier
-                    .width(4.dp)
-                    .height(seamThickness + 2.dp)
-                    .clip(RoundedCornerShape(2.dp))
-                    .background(FlipClockPalette.HingeTick)
-            )
-            Box(
-                modifier = Modifier
-                    .width(4.dp)
-                    .height(seamThickness + 2.dp)
-                    .clip(RoundedCornerShape(2.dp))
-                    .background(FlipClockPalette.HingeTick)
+                    .align(Alignment.Center)
+                    .fillMaxWidth()
+                    .height(seamThickness)
+                    .background(FlipClockPalette.SeamBlack)
             )
         }
     }
 }
 
 @Composable
-private fun SplitCardHalf(
+private fun FullCardClippedDigitFace(
     text: String,
-    fontSize: TextUnit,
-    cardHeight: Dp,
-    isTopHalf: Boolean,
-    backgroundBrush: Brush,
-    shadeAlpha: Float,
+    style: TextStyle,
+    digitColor: Color,
+    translationYPx: Float,
+    plateBackground: Color,
     modifier: Modifier = Modifier
 ) {
     Box(
-        modifier = modifier
-            .background(backgroundBrush)
-            .clipToBounds(),
+        modifier = modifier.background(plateBackground),
         contentAlignment = Alignment.TopCenter
     ) {
-        Box(
-            modifier = Modifier
-                .fillMaxWidth()
-                .requiredHeight(cardHeight)
-                .offset(y = if (isTopHalf) 0.dp else -(cardHeight / 2f)),
-            contentAlignment = Alignment.Center
-        ) {
-            Text(
-                text = text,
-                fontFamily = OutfitTimerFamily,
-                fontWeight = FontWeight.Bold,
-                fontSize = fontSize,
-                lineHeight = fontSize,
-                color = FlipClockPalette.DigitGrey,
-                textAlign = TextAlign.Center,
-                maxLines = 1,
-                softWrap = false
-            )
-        }
-
-        if (shadeAlpha > 0.005f) {
-            Box(
-                modifier = Modifier
-                    .fillMaxSize()
-                    .background(Color.Black.copy(alpha = shadeAlpha.coerceIn(0f, 0.7f)))
-            )
-        }
+        Text(
+            text = text,
+            style = style,
+            color = digitColor,
+            textAlign = TextAlign.Center,
+            maxLines = 1,
+            softWrap = false,
+            modifier = Modifier.graphicsLayer {
+                translationY = translationYPx
+            }
+        )
     }
 }

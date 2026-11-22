@@ -178,10 +178,35 @@ enum class FlipClockPage {
     STOPWATCH
 }
 
+enum class FlipDateFormat(val pattern: String, val label: String) {
+    DD_MM_YY("dd/MM/yy", "DD/MM/YY"),
+    MM_DD_YY("MM/dd/yy", "MM/DD/YY"),
+    DAY_MONTH("EEE, d MMM", "Day, D Mon"),
+    MONTH_DAY_YEAR("MMM d, yyyy", "Mon D, Year");
+
+    companion object {
+        fun fromPattern(pattern: String?): FlipDateFormat =
+            entries.firstOrNull { it.pattern == pattern } ?: DD_MM_YY
+    }
+}
+
 data class FlipClockSettings(
     val use24HourFormat: Boolean = false,
+    val useSystemTimeFormat: Boolean = false,
+    val hourLeadingZero: Boolean = false,
+    val dateFormatPattern: String = FlipDateFormat.DD_MM_YY.pattern,
     val keepScreenAwake: Boolean = false,
     val showDate: Boolean = false,
+    val showWeekday: Boolean = true,
+    val showSeconds: Boolean = true,
+    val showFlipAxis: Boolean = true,
+    val showUpcomingAlarm: Boolean = false,
+    val showBattery: Boolean = false,
+    val showWeather: Boolean = false,
+    val weatherLocationQuery: String = "",
+    val sleepTimerMinutes: Int = 0,
+    val clockTickerSoundEnabled: Boolean = false,
+    val customTag: String = "",
     val autoRepeat: Boolean = false,
     val zoomFraction: Float = DEFAULT_ZOOM_FRACTION,
     val lastBrightnessPercent: Float? = null,
@@ -189,6 +214,9 @@ data class FlipClockSettings(
 ) {
     val clampedZoomFraction: Float
         get() = zoomFraction.coerceIn(MIN_ZOOM_FRACTION, MAX_ZOOM_FRACTION)
+
+    val resolvedDateFormat: FlipDateFormat
+        get() = FlipDateFormat.fromPattern(dateFormatPattern)
 
     companion object {
         const val MIN_ZOOM_FRACTION = 0.50f
@@ -281,8 +309,7 @@ enum class ForceDarkSupportLevel {
 }
 
 enum class ForceDarkModeApproach {
-    FORCE_DARK,
-    COLOR_INVERSION
+    FORCE_DARK
 }
 
 data class ForceDarkPreferences(

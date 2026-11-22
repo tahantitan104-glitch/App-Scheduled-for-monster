@@ -13,6 +13,7 @@ import androidx.compose.animation.shrinkVertically
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.gestures.animateScrollBy
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -31,8 +32,9 @@ import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.automirrored.outlined.ArrowForward
+import androidx.compose.material.icons.automirrored.outlined.KeyboardArrowRight
 import androidx.compose.material.icons.outlined.CheckCircle
+import androidx.compose.material.icons.outlined.Edit
 import androidx.compose.material.icons.outlined.Info
 import androidx.compose.material.icons.outlined.Notifications
 import androidx.compose.material.icons.outlined.Settings
@@ -40,16 +42,18 @@ import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Switch
-import androidx.compose.material3.SwitchDefaults
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.DisposableEffect
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.derivedStateOf
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
+import kotlinx.coroutines.delay
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
@@ -87,6 +91,7 @@ import com.example.presentation.components.ResolveIcons
 import com.example.presentation.components.ResolveRunnerLogo
 import com.example.presentation.components.SettingsAccountSyncCard
 import com.example.presentation.components.resolveGlassCard
+import com.example.presentation.components.resolveSwitchColors
 import com.example.presentation.settings.FocusMessagesManagerSheet
 import com.example.presentation.settings.FocusNotificationControlCard
 import com.example.presentation.settings.LockReminderEditorSheet
@@ -170,9 +175,12 @@ fun MoreScreen(
     var showRecoverySetup by remember { mutableStateOf(false) }
     var showFocusMessagesSheet by remember { mutableStateOf(false) }
     var showLockReminderSheet by remember { mutableStateOf(false) }
+    var permissionsExpanded by rememberSaveable { mutableStateOf(false) }
+    var systemHealthExpanded by rememberSaveable { mutableStateOf(false) }
     var aboutExpanded by rememberSaveable { mutableStateOf(false) }
     var headerTypingDone by rememberSaveable { mutableStateOf(false) }
     var devTypingDone by rememberSaveable { mutableStateOf(false) }
+    var expandedTypingStep by remember { mutableIntStateOf(0) }
 
     val accHealth = capabilities.accessibilityHealthState
     val accReady = accHealth == AccessibilityHealthState.ENABLED_CONNECTED
@@ -181,13 +189,62 @@ fun MoreScreen(
     val exactReady = !capabilities.exactAlarmRequiredByOs || capabilities.canScheduleExactAlarms
     val notifEnabled = capabilities.notificationsEnabled
     val unrestricted = capabilities.isIgnoringBatteryOptimizations
-    val allCorePermissionsReady =
-        accReady && overlayEnabled && usageEnabled && exactReady && notifEnabled && unrestricted
+    val readyCount = listOf(
+        accReady,
+        overlayEnabled,
+        usageEnabled,
+        exactReady,
+        notifEnabled,
+        unrestricted
+    ).count { it }
+    val allCorePermissionsReady = readyCount == 6
+
+    LaunchedEffect(allCorePermissionsReady) {
+        if (allCorePermissionsReady) {
+            permissionsExpanded = false
+        }
+    }
 
     val listState = rememberLazyListState()
     val isAboutVisible by remember {
         derivedStateOf {
             listState.layoutInfo.visibleItemsInfo.any { it.key == "more_about_card" }
+        }
+    }
+
+    // Auto-scroll smoothly down when About RESOLVE expands so the expanded card & sentences fit the viewport
+    LaunchedEffect(aboutExpanded) {
+        if (aboutExpanded) {
+            expandedTypingStep = if (mascotPreferences.reducedMotionEnabled) 6 else 0
+            delay(140L)
+            val aboutIndex = listState.layoutInfo.visibleItemsInfo
+                .firstOrNull { it.key == "more_about_card" }
+                ?.index
+                ?: (listState.layoutInfo.totalItemsCount - 1).coerceAtLeast(0)
+            listState.animateScrollToItem(index = aboutIndex, scrollOffset = 0)
+            delay(260L)
+            val itemInfo = listState.layoutInfo.visibleItemsInfo.firstOrNull { it.key == "more_about_card" }
+            if (itemInfo != null && !listState.isScrollInProgress) {
+                val overflow = (itemInfo.offset + itemInfo.size) - listState.layoutInfo.viewportEndOffset
+                if (overflow > 0) {
+                    listState.animateScrollBy(overflow.toFloat())
+                }
+            }
+        } else {
+            expandedTypingStep = 0
+        }
+    }
+
+    LaunchedEffect(aboutExpanded, expandedTypingStep) {
+        if (aboutExpanded && expandedTypingStep > 0 && !listState.isScrollInProgress) {
+            delay(180L)
+            val itemInfo = listState.layoutInfo.visibleItemsInfo.firstOrNull { it.key == "more_about_card" }
+            if (itemInfo != null) {
+                val overflow = (itemInfo.offset + itemInfo.size) - listState.layoutInfo.viewportEndOffset
+                if (overflow > 12) {
+                    listState.animateScrollBy(overflow.toFloat())
+                }
+            }
         }
     }
 
@@ -236,122 +293,239 @@ fun MoreScreen(
                 )
             }
 
-            // 2. PERMISSIONS (Strictly hidden — including header — when all 6 required permissions are ready)
-            if (!allCorePermissionsReady) {
-                item(key = "more_section_permissions_header") {
-                    SettingsSectionHeader(
-                        title = "PERMISSIONS",
-                        icon = ResolveIcons.Shield
-                    )
-                }
+            // 2. PERMISSIONS (Summary Done card when 6/6 granted; expandable checklist while < 6)
+            item(key = "more_section_permissions_header") {
+                SettingsSectionHeader(
+                    title = "PERMISSIONS",
+                    icon = ResolveIcons.Shield
+                )
+            }
 
-                if (!accReady) {
-                    item(key = "more_perm_accessibility") {
-                        val disconnected = accHealth == AccessibilityHealthState.ENABLED_DISCONNECTED
-                        PermissionItemCard(
-                            name = "Accessibility Service",
-                            reason = if (disconnected) {
-                                "Accessibility is enabled in settings, but Android disconnected the service. Re-toggle RESOLVE in Accessibility Settings."
-                            } else {
-                                "Primary guard required to monitor foreground apps and enforce Focus Lock."
-                            },
-                            status = if (disconnected) "Disconnected" else "Not Enabled",
-                            isReady = false,
-                            statusColor = palette.warn,
-                            actionLabel = if (disconnected) "Reconnect Accessibility" else "Enable Accessibility",
-                            onAction = onOpenAccessibilitySettings,
-                            testTag = "settings_accessibility_action"
+            item(key = "more_permissions_card") {
+                if (allCorePermissionsReady) {
+                    Row(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .resolveGlassCard(
+                                cornerRadius = 16.dp,
+                                borderColor = palette.success.copy(alpha = 0.42f)
+                            )
+                            .padding(16.dp)
+                            .testTag("more_permissions_done_card"),
+                        verticalAlignment = Alignment.CenterVertically,
+                        horizontalArrangement = Arrangement.spacedBy(12.dp)
+                    ) {
+                        Box(
+                            modifier = Modifier
+                                .size(40.dp)
+                                .clip(RoundedCornerShape(12.dp))
+                                .background(palette.success),
+                            contentAlignment = Alignment.Center
+                        ) {
+                            Icon(
+                                imageVector = Icons.Outlined.CheckCircle,
+                                contentDescription = "All 6 permissions enabled",
+                                tint = palette.onAccent,
+                                modifier = Modifier.size(22.dp)
+                            )
+                        }
+                        Column(modifier = Modifier.weight(1f)) {
+                            Text(
+                                text = "All 6 Permissions Enabled",
+                                style = MaterialTheme.typography.titleSmall.copy(fontWeight = FontWeight.SemiBold),
+                                color = palette.textPrimary
+                            )
+                            Text(
+                                text = "6 / 6 guards active & ready",
+                                style = MaterialTheme.typography.bodySmall,
+                                color = palette.textSecondary
+                            )
+                        }
+                        Text(
+                            text = "6 / 6 Done",
+                            style = MaterialTheme.typography.labelSmall.copy(fontWeight = FontWeight.SemiBold),
+                            color = palette.onAccent,
+                            modifier = Modifier
+                                .clip(CircleShape)
+                                .background(palette.success)
+                                .padding(horizontal = 10.dp, vertical = 5.dp)
                         )
                     }
-                }
-
-                if (!overlayEnabled) {
-                    item(key = "more_perm_overlay") {
-                        PermissionItemCard(
-                            name = "Display Over Other Apps",
-                            reason = "Required to show Focus Lock automatically over blocked apps.",
-                            status = "Not Enabled",
-                            isReady = false,
-                            statusColor = palette.warn,
-                            actionLabel = "Enable Overlay",
-                            onAction = onOpenOverlaySettings,
-                            testTag = "settings_overlay_action"
-                        )
-                    }
-                }
-
-                if (!usageEnabled) {
-                    item(key = "more_perm_usage") {
-                        PermissionItemCard(
-                            name = "Usage Access",
-                            reason = "Enables foreground fallback detection and daily focus insights.",
-                            status = "Not Enabled",
-                            isReady = false,
-                            statusColor = palette.warn,
-                            actionLabel = "Enable Usage Access",
-                            onAction = onOpenUsageAccessSettings,
-                            testTag = "settings_usage_access_action"
-                        )
-                    }
-                }
-
-                if (!exactReady) {
-                    item(key = "more_perm_exact_alarm") {
-                        PermissionItemCard(
-                            name = "Alarms & Reminders",
-                            reason = "Required for exact Delayed Lock and Schedule Lock timing.",
-                            status = "Not Enabled",
-                            isReady = false,
-                            statusColor = palette.warn,
-                            actionLabel = "Enable Access",
-                            onAction = onOpenExactAlarmSettings,
-                            testTag = "settings_exact_alarm_action"
-                        )
-                    }
-                }
-
-                if (!notifEnabled) {
-                    item(key = "more_perm_notifications") {
-                        PermissionItemCard(
-                            name = "Notifications",
-                            reason = "Required to display active focus countdown notifications reliably.",
-                            status = "Not Enabled",
-                            isReady = false,
-                            statusColor = palette.warn,
-                            actionLabel = "Enable Notifications",
-                            onAction = {
-                                if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
-                                    runCatching {
-                                        notificationPermissionLauncher.launch(Manifest.permission.POST_NOTIFICATIONS)
-                                    }.onFailure {
-                                        onOpenNotificationSettings()
-                                    }
-                                } else {
-                                    onOpenNotificationSettings()
+                } else {
+                    Column(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .resolveGlassCard(
+                                cornerRadius = 16.dp,
+                                borderColor = palette.warn.copy(alpha = 0.4f)
+                            )
+                            .testTag("more_permissions_card")
+                    ) {
+                        Row(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .clickable(role = Role.Button) {
+                                    permissionsExpanded = !permissionsExpanded
                                 }
-                            },
-                            testTag = "settings_notifications_action"
-                        )
-                    }
-                }
+                                .padding(16.dp)
+                                .testTag("more_permissions_toggle_button"),
+                            verticalAlignment = Alignment.CenterVertically,
+                            horizontalArrangement = Arrangement.spacedBy(12.dp)
+                        ) {
+                            Box(
+                                modifier = Modifier
+                                    .size(40.dp)
+                                    .clip(RoundedCornerShape(12.dp))
+                                    .background(palette.warnContainer),
+                                contentAlignment = Alignment.Center
+                            ) {
+                                Icon(
+                                    imageVector = ResolveIcons.Shield,
+                                    contentDescription = "Permissions status",
+                                    tint = palette.warn,
+                                    modifier = Modifier.size(21.dp)
+                                )
+                            }
+                            Column(modifier = Modifier.weight(1f)) {
+                                Text(
+                                    text = "$readyCount / 6 Permissions Enabled",
+                                    style = MaterialTheme.typography.titleSmall.copy(fontWeight = FontWeight.SemiBold),
+                                    color = palette.textPrimary
+                                )
+                                Text(
+                                    text = "Tap to enable remaining ${6 - readyCount} permission(s)",
+                                    style = MaterialTheme.typography.bodySmall,
+                                    color = palette.textSecondary
+                                )
+                            }
+                            Text(
+                                text = "$readyCount / 6",
+                                style = MaterialTheme.typography.labelSmall.copy(fontWeight = FontWeight.SemiBold),
+                                color = palette.warn,
+                                modifier = Modifier
+                                    .clip(CircleShape)
+                                    .background(palette.warnContainer)
+                                    .padding(horizontal = 9.dp, vertical = 4.dp)
+                            )
+                            Icon(
+                                imageVector = if (permissionsExpanded) ResolveIcons.ExpandLess else ResolveIcons.ExpandMore,
+                                contentDescription = if (permissionsExpanded) "Collapse Permissions" else "Expand Permissions",
+                                tint = palette.warn,
+                                modifier = Modifier.size(22.dp)
+                            )
+                        }
 
-                if (!unrestricted) {
-                    item(key = "more_perm_battery") {
-                        PermissionItemCard(
-                            name = "Unrestricted Battery",
-                            reason = "Prevents Android from pausing timers or Focus Guard in the background.",
-                            status = "Optimized",
-                            isReady = false,
-                            statusColor = palette.warn,
-                            actionLabel = "Allow Unrestricted",
-                            onAction = onOpenBatteryOptimizationSettings,
-                            testTag = "settings_battery_action"
-                        )
+                        AnimatedVisibility(
+                            visible = permissionsExpanded,
+                            enter = expandVertically() + fadeIn(),
+                            exit = shrinkVertically() + fadeOut()
+                        ) {
+                            Column(
+                                modifier = Modifier
+                                    .fillMaxWidth()
+                                    .padding(start = 12.dp, end = 12.dp, bottom = 12.dp)
+                                    .testTag("more_permissions_expanded_content"),
+                                verticalArrangement = Arrangement.spacedBy(10.dp)
+                            ) {
+                                if (!accReady) {
+                                    val disconnected = accHealth == AccessibilityHealthState.ENABLED_DISCONNECTED
+                                    PermissionItemCard(
+                                        name = "Accessibility Service",
+                                        reason = if (disconnected) {
+                                            "Accessibility is enabled in settings, but Android disconnected the service. Re-toggle RESOLVE in Accessibility Settings."
+                                        } else {
+                                            "Primary guard required to monitor foreground apps and enforce Focus Lock."
+                                        },
+                                        status = if (disconnected) "Disconnected" else "Not Enabled",
+                                        isReady = false,
+                                        statusColor = palette.warn,
+                                        actionLabel = if (disconnected) "Reconnect Accessibility" else "Enable Accessibility",
+                                        onAction = onOpenAccessibilitySettings,
+                                        testTag = "settings_accessibility_action"
+                                    )
+                                }
+
+                                if (!overlayEnabled) {
+                                    PermissionItemCard(
+                                        name = "Display Over Other Apps",
+                                        reason = "Required to show Focus Lock automatically over blocked apps.",
+                                        status = "Not Enabled",
+                                        isReady = false,
+                                        statusColor = palette.warn,
+                                        actionLabel = "Enable Overlay",
+                                        onAction = onOpenOverlaySettings,
+                                        testTag = "settings_overlay_action"
+                                    )
+                                }
+
+                                if (!usageEnabled) {
+                                    PermissionItemCard(
+                                        name = "Usage Access",
+                                        reason = "Enables foreground fallback detection and daily focus insights.",
+                                        status = "Not Enabled",
+                                        isReady = false,
+                                        statusColor = palette.warn,
+                                        actionLabel = "Enable Usage Access",
+                                        onAction = onOpenUsageAccessSettings,
+                                        testTag = "settings_usage_access_action"
+                                    )
+                                }
+
+                                if (!exactReady) {
+                                    PermissionItemCard(
+                                        name = "Alarms & Reminders",
+                                        reason = "Required for exact Delayed Lock and Schedule Lock timing.",
+                                        status = "Not Enabled",
+                                        isReady = false,
+                                        statusColor = palette.warn,
+                                        actionLabel = "Enable Access",
+                                        onAction = onOpenExactAlarmSettings,
+                                        testTag = "settings_exact_alarm_action"
+                                    )
+                                }
+
+                                if (!notifEnabled) {
+                                    PermissionItemCard(
+                                        name = "Notifications",
+                                        reason = "Required to display active focus countdown notifications reliably.",
+                                        status = "Not Enabled",
+                                        isReady = false,
+                                        statusColor = palette.warn,
+                                        actionLabel = "Enable Notifications",
+                                        onAction = {
+                                            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
+                                                runCatching {
+                                                    notificationPermissionLauncher.launch(Manifest.permission.POST_NOTIFICATIONS)
+                                                }.onFailure {
+                                                    onOpenNotificationSettings()
+                                                }
+                                            } else {
+                                                onOpenNotificationSettings()
+                                            }
+                                        },
+                                        testTag = "settings_notifications_action"
+                                    )
+                                }
+
+                                if (!unrestricted) {
+                                    PermissionItemCard(
+                                        name = "Unrestricted Battery",
+                                        reason = "Prevents Android from pausing timers or Focus Guard in the background.",
+                                        status = "Optimized",
+                                        isReady = false,
+                                        statusColor = palette.warn,
+                                        actionLabel = "Allow Unrestricted",
+                                        onAction = onOpenBatteryOptimizationSettings,
+                                        testTag = "settings_battery_action"
+                                    )
+                                }
+                            }
+                        }
                     }
                 }
             }
 
-            // 3. SYSTEM HEALTH (One unified card with 5 items)
+            // 3. SYSTEM HEALTH (Collapsed by default as an expandable card with 3 focused actions)
             item(key = "more_section_health_header") {
                 SettingsSectionHeader(
                     title = "SYSTEM HEALTH",
@@ -369,51 +543,94 @@ fun MoreScreen(
                     modifier = Modifier
                         .fillMaxWidth()
                         .resolveGlassCard(
-                            cornerRadius = 22.dp,
+                            cornerRadius = 16.dp,
                             borderColor = palette.cardBorder
                         )
-                        .padding(vertical = 6.dp)
                         .testTag("more_system_health_card")
                 ) {
-                    SystemHealthRow(
-                        icon = ResolveIcons.Shield,
-                        title = "System Status",
-                        description = overallSummary,
-                        onClick = { onOpenDeviceAnalysis("status") },
-                        testTag = "more_health_status"
-                    )
-                    HealthDivider()
-                    SystemHealthRow(
-                        icon = ResolveIcons.History,
-                        title = "Device Analysis",
-                        description = "Inspect app & background service readiness",
-                        onClick = { onOpenDeviceAnalysis("analysis") },
-                        testTag = "more_health_analysis"
-                    )
-                    HealthDivider()
-                    SystemHealthRow(
-                        icon = ResolveIcons.Devices,
-                        title = "Hardware Check",
-                        description = "Verify OS version, memory, and build support",
-                        onClick = { onOpenDeviceAnalysis("hardware") },
-                        testTag = "more_health_hardware"
-                    )
-                    HealthDivider()
-                    SystemHealthRow(
-                        icon = Icons.Outlined.CheckCircle,
-                        title = "Readiness Diagnostics",
-                        description = "Review Android security and compatibility checks",
-                        onClick = { onOpenDeviceAnalysis("diagnostics") },
-                        testTag = "more_health_diagnostics"
-                    )
-                    HealthDivider()
-                    SystemHealthRow(
-                        icon = Icons.Outlined.Settings,
-                        title = "System Repair",
-                        description = "Fix disconnected services or missing OS permissions",
-                        onClick = { onOpenDeviceAnalysis("repair") },
-                        testTag = "more_health_repair"
-                    )
+                    Row(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .clickable(role = Role.Button) {
+                                systemHealthExpanded = !systemHealthExpanded
+                            }
+                            .padding(16.dp)
+                            .testTag("more_system_health_toggle_button"),
+                        verticalAlignment = Alignment.CenterVertically,
+                        horizontalArrangement = Arrangement.spacedBy(12.dp)
+                    ) {
+                        Box(
+                            modifier = Modifier
+                                .size(40.dp)
+                                .clip(RoundedCornerShape(12.dp))
+                                .background(palette.slateTealContainer)
+                                .border(1.dp, palette.slateTeal.copy(alpha = 0.28f), RoundedCornerShape(12.dp)),
+                            contentAlignment = Alignment.Center
+                        ) {
+                            Icon(
+                                imageVector = ResolveIcons.Devices,
+                                contentDescription = "System Health",
+                                tint = palette.slateTealStrong,
+                                modifier = Modifier.size(21.dp)
+                            )
+                        }
+                        Column(modifier = Modifier.weight(1f)) {
+                            Text(
+                                text = "System Health",
+                                style = MaterialTheme.typography.titleSmall.copy(fontWeight = FontWeight.SemiBold),
+                                color = palette.textPrimary
+                            )
+                            Text(
+                                text = overallSummary,
+                                style = MaterialTheme.typography.bodySmall,
+                                color = palette.textSecondary
+                            )
+                        }
+                        Icon(
+                            imageVector = if (systemHealthExpanded) ResolveIcons.ExpandLess else ResolveIcons.ExpandMore,
+                            contentDescription = if (systemHealthExpanded) "Collapse System Health" else "Expand System Health",
+                            tint = palette.slateTealStrong,
+                            modifier = Modifier.size(22.dp)
+                        )
+                    }
+
+                    AnimatedVisibility(
+                        visible = systemHealthExpanded,
+                        enter = expandVertically() + fadeIn(),
+                        exit = shrinkVertically() + fadeOut()
+                    ) {
+                        Column(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .padding(bottom = 6.dp)
+                                .testTag("more_system_health_expanded_content")
+                        ) {
+                            HealthDivider()
+                            SystemHealthRow(
+                                icon = ResolveIcons.Shield,
+                                title = "System Status",
+                                description = overallSummary,
+                                onClick = { onOpenDeviceAnalysis("status") },
+                                testTag = "more_health_status"
+                            )
+                            HealthDivider()
+                            SystemHealthRow(
+                                icon = ResolveIcons.Devices,
+                                title = "Device & Hardware Analysis",
+                                description = "Inspect app, OS hardware & background readiness",
+                                onClick = { onOpenDeviceAnalysis("analysis") },
+                                testTag = "more_health_analysis"
+                            )
+                            HealthDivider()
+                            SystemHealthRow(
+                                icon = Icons.Outlined.Settings,
+                                title = "System Repair",
+                                description = "Fix disconnected services or missing OS permissions",
+                                onClick = { onOpenDeviceAnalysis("repair") },
+                                testTag = "more_health_repair"
+                            )
+                        }
+                    }
                 }
             }
 
@@ -429,7 +646,7 @@ fun MoreScreen(
                 Column(
                     modifier = Modifier
                         .fillMaxWidth()
-                        .resolveGlassCard(cornerRadius = 22.dp)
+                        .resolveGlassCard(cornerRadius = 16.dp)
                         .padding(16.dp)
                         .testTag("more_focus_settings_card"),
                     verticalArrangement = Arrangement.spacedBy(12.dp)
@@ -439,8 +656,8 @@ fun MoreScreen(
                         modifier = Modifier
                             .fillMaxWidth()
                             .clip(RoundedCornerShape(14.dp))
-                            .background(palette.background.copy(alpha = 0.55f))
-                            .border(1.dp, palette.cardBorder, RoundedCornerShape(14.dp))
+                            .background(palette.controlSurface)
+                            .border(1.dp, palette.controlBorder, RoundedCornerShape(14.dp))
                             .clickable(role = Role.Button) { showRecoverySetup = true }
                             .padding(horizontal = 14.dp, vertical = 12.dp)
                             .testTag("settings_recovery_action"),
@@ -451,13 +668,14 @@ fun MoreScreen(
                             modifier = Modifier
                                 .size(38.dp)
                                 .clip(RoundedCornerShape(12.dp))
-                                .background(palette.accentSoftContainer),
+                                .background(palette.champagneContainer)
+                                .border(1.dp, palette.champagne.copy(alpha = 0.28f), RoundedCornerShape(12.dp)),
                             contentAlignment = Alignment.Center
                         ) {
                             Icon(
                                 imageVector = ResolveIcons.Key,
                                 contentDescription = null,
-                                tint = palette.accent,
+                                tint = palette.champagneStrong,
                                 modifier = Modifier.size(20.dp)
                             )
                         }
@@ -474,13 +692,13 @@ fun MoreScreen(
                                     "Set emergency unlock code for restricted sessions"
                                 },
                                 style = MaterialTheme.typography.bodySmall,
-                                color = if (hasRecoveryCode) palette.accent else palette.warn
+                                color = if (hasRecoveryCode) palette.accentStrong else palette.warn
                             )
                         }
                         Icon(
-                            imageVector = Icons.AutoMirrored.Outlined.ArrowForward,
+                            imageVector = Icons.Outlined.Edit,
                             contentDescription = "Configure Recovery Code",
-                            tint = palette.accent,
+                            tint = palette.textMuted,
                             modifier = Modifier.size(18.dp)
                         )
                     }
@@ -490,8 +708,8 @@ fun MoreScreen(
                         modifier = Modifier
                             .fillMaxWidth()
                             .clip(RoundedCornerShape(14.dp))
-                            .background(palette.background.copy(alpha = 0.55f))
-                            .border(1.dp, palette.cardBorder, RoundedCornerShape(14.dp))
+                            .background(palette.controlSurface)
+                            .border(1.dp, palette.controlBorder, RoundedCornerShape(14.dp))
                             .clickable { onToggleLandscapeTiltMode(!landscapeTiltMode) }
                             .padding(horizontal = 14.dp, vertical = 10.dp),
                         verticalAlignment = Alignment.CenterVertically,
@@ -501,13 +719,14 @@ fun MoreScreen(
                             modifier = Modifier
                                 .size(38.dp)
                                 .clip(RoundedCornerShape(12.dp))
-                                .background(palette.accentSoftContainer),
+                                .background(palette.slateTealContainer)
+                                .border(1.dp, palette.slateTeal.copy(alpha = 0.28f), RoundedCornerShape(12.dp)),
                             contentAlignment = Alignment.Center
                         ) {
                             Icon(
                                 imageVector = ResolveIcons.ScreenRotation,
                                 contentDescription = null,
-                                tint = palette.accent,
+                                tint = palette.slateTealStrong,
                                 modifier = Modifier.size(20.dp)
                             )
                         }
@@ -526,10 +745,7 @@ fun MoreScreen(
                         Switch(
                             checked = landscapeTiltMode,
                             onCheckedChange = onToggleLandscapeTiltMode,
-                            colors = SwitchDefaults.colors(
-                                checkedThumbColor = palette.onAccent,
-                                checkedTrackColor = palette.accent
-                            ),
+                            colors = resolveSwitchColors(),
                             modifier = Modifier.testTag("more_landscape_tilt_switch")
                         )
                     }
@@ -585,12 +801,46 @@ fun MoreScreen(
             }
 
             item(key = "more_about_card") {
+                val aboutSections = remember {
+                    listOf(
+                        "About RESOLVE" to listOf(
+                            "RESOLVE is a calm, offline-first digital discipline shield designed to help you reclaim uninterrupted attention without nagging subscriptions or noisy feeds."
+                        ),
+                        "What RESOLVE Offers" to listOf(
+                            "• Instant Lock: Restrict distracting apps immediately for your chosen focus timer.",
+                            "• Delayed Lock: Enjoy a fixed free-use window followed by automatic Focus Lock.",
+                            "• Schedule Lock: Automate One-Time, Daily, or Custom Weekly focus sessions.",
+                            "• App Lock: Guard sensitive apps using PIN, Pattern, or 6-Cell Sequence.",
+                            "• Flip Clock: Dedicated full-screen split-flap Clock, Timer, and Stopwatch.",
+                            "• Focus Notification Control: Quiet interruptions during focus locks while preserving your prior DND state."
+                        ),
+                        "How RESOLVE Works" to listOf(
+                            "Accessibility Focus Guard and Overlay permission let RESOLVE detect when a restricted app is opened and bring the Focus Lock or App Lock screen forward smoothly.",
+                            "Persistent session deadlines survive device restarts and process stops."
+                        ),
+                        "How to Use RESOLVE Effectively" to listOf(
+                            "• Allowlist only essential tools (Dialer, Calculator, Notes) before starting a lock.",
+                            "• Save your Recovery Code securely so you can unlock early in genuine emergencies.",
+                            "• Use Delayed Lock when you want a mindful finish-up countdown before focus begins."
+                        ),
+                        "Practical Tips & Multi-Device Sync" to listOf(
+                            "Connect a Google account on two or more devices only if you want active focus locks synced automatically across them.",
+                            "Mascots, Allowed Apps, Recovery Codes, Screen Time, and Insights stay private on each phone."
+                        ),
+                        "Developer Information" to listOf(
+                            "Developed by Tahan Official",
+                            "Package: ${BuildConfig.APPLICATION_ID}",
+                            "Version: v${BuildConfig.VERSION_NAME} (${BuildConfig.VERSION_CODE})"
+                        )
+                    )
+                }
+
                 Column(
                     modifier = Modifier
                         .fillMaxWidth()
                         .resolveGlassCard(
-                            cornerRadius = 22.dp,
-                            borderColor = palette.accent.copy(alpha = 0.38f)
+                            cornerRadius = 16.dp,
+                            borderColor = palette.cardBorder
                         )
                         .padding(18.dp)
                         .testTag("more_about_card"),
@@ -633,10 +883,11 @@ fun MoreScreen(
                                         style = MaterialTheme.typography.labelSmall.copy(
                                             fontFamily = JetBrainsMonoFamily
                                         ),
-                                        color = palette.accent,
+                                        color = palette.champagneStrong,
                                         modifier = Modifier
                                             .clip(CircleShape)
-                                            .background(palette.accentSoftContainer)
+                                            .background(palette.champagneContainer)
+                                            .border(1.dp, palette.champagne.copy(alpha = 0.35f), CircleShape)
                                             .padding(horizontal = 8.dp, vertical = 2.dp)
                                     )
                                 }
@@ -646,10 +897,10 @@ fun MoreScreen(
                                         fontStyle = FontStyle.Italic,
                                         fontWeight = FontWeight.Medium
                                     ),
-                                    color = palette.accent,
+                                    color = palette.accentStrong,
                                     startTyping = isAboutVisible || aboutExpanded,
                                     startDelayMillis = 120,
-                                    typingDurationMillis = 1600,
+                                    typingDurationMillis = 2200,
                                     reducedMotion = mascotPreferences.reducedMotionEnabled,
                                     alreadyCompleted = headerTypingDone,
                                     onTypingCompleted = { headerTypingDone = true }
@@ -660,8 +911,31 @@ fun MoreScreen(
                         Icon(
                             imageVector = if (aboutExpanded) ResolveIcons.ExpandLess else ResolveIcons.ExpandMore,
                             contentDescription = if (aboutExpanded) "Collapse About RESOLVE" else "Expand About RESOLVE",
-                            tint = palette.accent,
+                            tint = palette.accentStrong,
                             modifier = Modifier.size(24.dp)
+                        )
+                    }
+
+                    // Always visible directly below card header BEFORE expanding, keeping typing animation intact
+                    Row(
+                        verticalAlignment = Alignment.CenterVertically,
+                        horizontalArrangement = Arrangement.spacedBy(8.dp)
+                    ) {
+                        PulsingStatusDot(color = palette.accentStrong, size = 5.dp)
+                        KeyboardTypingText(
+                            fullText = "Developed by Tahan Official",
+                            style = MaterialTheme.typography.titleSmall.copy(
+                                fontWeight = FontWeight.SemiBold,
+                                letterSpacing = 0.35.sp
+                            ),
+                            color = palette.accentStrong,
+                            startTyping = isAboutVisible || aboutExpanded,
+                            startDelayMillis = 2400,
+                            typingDurationMillis = 1900,
+                            reducedMotion = mascotPreferences.reducedMotionEnabled,
+                            alreadyCompleted = devTypingDone,
+                            onTypingCompleted = { devTypingDone = true },
+                            modifier = Modifier.testTag("more_developer_credit")
                         )
                     }
 
@@ -680,72 +954,29 @@ fun MoreScreen(
                                 modifier = Modifier
                                     .fillMaxWidth()
                                     .height(1.dp)
-                                    .background(
-                                        Brush.horizontalGradient(
-                                            colors = listOf(
-                                                Color.Transparent,
-                                                palette.accent.copy(alpha = 0.42f),
-                                                Color.Transparent
-                                            )
-                                        )
+                                    .background(palette.divider)
+                            )
+
+                            aboutSections.forEachIndexed { idx, (sectionTitle, sectionSentences) ->
+                                val showSection = mascotPreferences.reducedMotionEnabled || expandedTypingStep >= idx
+                                AnimatedVisibility(
+                                    visible = showSection,
+                                    enter = expandVertically() + fadeIn(),
+                                    exit = shrinkVertically() + fadeOut()
+                                ) {
+                                    InlineAboutSection(
+                                        title = sectionTitle,
+                                        sentences = sectionSentences,
+                                        startTyping = aboutExpanded && expandedTypingStep >= idx,
+                                        reducedMotion = mascotPreferences.reducedMotionEnabled,
+                                        onSectionCompleted = {
+                                            if (expandedTypingStep == idx) {
+                                                expandedTypingStep = idx + 1
+                                            }
+                                        }
                                     )
-                            )
-
-                            Row(
-                                verticalAlignment = Alignment.CenterVertically,
-                                horizontalArrangement = Arrangement.spacedBy(8.dp)
-                            ) {
-                                PulsingStatusDot(color = palette.accentStrong, size = 5.dp)
-                                KeyboardTypingText(
-                                    fullText = "Developed by Tahan Official",
-                                    style = MaterialTheme.typography.titleSmall.copy(
-                                        fontWeight = FontWeight.SemiBold,
-                                        letterSpacing = 0.35.sp
-                                    ),
-                                    color = palette.accentStrong,
-                                    startTyping = aboutExpanded,
-                                    startDelayMillis = 180,
-                                    typingDurationMillis = 1400,
-                                    reducedMotion = mascotPreferences.reducedMotionEnabled,
-                                    alreadyCompleted = devTypingDone,
-                                    onTypingCompleted = { devTypingDone = true },
-                                    modifier = Modifier.testTag("more_developer_credit")
-                                )
+                                }
                             }
-
-                            InlineAboutSection(
-                                title = "About RESOLVE",
-                                body = "RESOLVE is a calm, offline-first digital discipline shield designed to help you reclaim uninterrupted attention without nagging subscriptions or noisy feeds."
-                            )
-                            InlineAboutSection(
-                                title = "What RESOLVE Offers",
-                                body = "• Instant Lock: Restrict distracting apps immediately for your chosen focus timer.\n" +
-                                    "• Delayed Lock: Enjoy a fixed free-use window followed by automatic Focus Lock.\n" +
-                                    "• Schedule Lock: Automate One-Time, Daily, or Custom Weekly focus sessions.\n" +
-                                    "• App Lock: Guard sensitive apps using PIN, Pattern, or 6-Cell Sequence.\n" +
-                                    "• Flip Clock: Dedicated full-screen split-flap Clock, Timer, and Stopwatch.\n" +
-                                    "• Focus Notification Control: Quiet interruptions during focus locks while preserving your prior DND state."
-                            )
-                            InlineAboutSection(
-                                title = "How RESOLVE Works",
-                                body = "Accessibility Focus Guard and Overlay permission let RESOLVE detect when a restricted app is opened and bring the Focus Lock or App Lock screen forward smoothly. Persistent session deadlines survive device restarts and process stops."
-                            )
-                            InlineAboutSection(
-                                title = "How to Use RESOLVE Effectively",
-                                body = "• Allowlist only essential tools (Dialer, Calculator, Notes) before starting a lock.\n" +
-                                    "• Save your Recovery Code securely so you can unlock early in genuine emergencies.\n" +
-                                    "• Use Delayed Lock when you want a mindful finish-up countdown before focus begins."
-                            )
-                            InlineAboutSection(
-                                title = "Practical Tips & Multi-Device Sync",
-                                body = "Connect a Google account on two or more devices only if you want active focus locks synced automatically across them. Mascots, Allowed Apps, Recovery Codes, Screen Time, and Insights stay private on each phone."
-                            )
-                            InlineAboutSection(
-                                title = "Developer Information",
-                                body = "Developed by Tahan Official\n" +
-                                    "Package: ${BuildConfig.APPLICATION_ID}\n" +
-                                    "Version: v${BuildConfig.VERSION_NAME} (${BuildConfig.VERSION_CODE})"
-                            )
                         }
                     }
                 }
@@ -809,13 +1040,13 @@ private fun SystemHealthRow(
             modifier = Modifier
                 .size(38.dp)
                 .clip(RoundedCornerShape(12.dp))
-                .background(palette.accentSoftContainer),
+                .background(palette.slateTealContainer),
             contentAlignment = Alignment.Center
         ) {
             Icon(
                 imageVector = icon,
                 contentDescription = null,
-                tint = palette.accent,
+                tint = palette.slateTealStrong,
                 modifier = Modifier.size(19.dp)
             )
         }
@@ -832,10 +1063,10 @@ private fun SystemHealthRow(
             )
         }
         Icon(
-            imageVector = Icons.AutoMirrored.Outlined.ArrowForward,
+            imageVector = Icons.AutoMirrored.Outlined.KeyboardArrowRight,
             contentDescription = "Open $title",
-            tint = palette.accent,
-            modifier = Modifier.size(16.dp)
+            tint = palette.textMuted,
+            modifier = Modifier.size(18.dp)
         )
     }
 }
@@ -846,36 +1077,60 @@ private fun HealthDivider() {
     HorizontalDivider(
         modifier = Modifier.padding(horizontal = 16.dp),
         thickness = 1.dp,
-        color = palette.cardBorder.copy(alpha = 0.55f)
+        color = palette.divider
     )
 }
 
 @Composable
 private fun InlineAboutSection(
     title: String,
-    body: String
+    sentences: List<String>,
+    startTyping: Boolean,
+    reducedMotion: Boolean,
+    onSectionCompleted: () -> Unit
 ) {
     val palette = LocalResolveExtendedPalette.current
+    var activeSentenceIdx by remember(sentences, startTyping) {
+        mutableIntStateOf(if (reducedMotion) sentences.size else 0)
+    }
+
     Column(
         modifier = Modifier
             .fillMaxWidth()
             .clip(RoundedCornerShape(14.dp))
-            .background(palette.background.copy(alpha = 0.52f))
+            .background(palette.surfaceSecondary)
             .border(1.dp, palette.cardBorder, RoundedCornerShape(14.dp))
             .padding(12.dp),
-        verticalArrangement = Arrangement.spacedBy(4.dp)
+        verticalArrangement = Arrangement.spacedBy(5.dp)
     ) {
         Text(
             text = title,
             style = MaterialTheme.typography.titleSmall.copy(fontWeight = FontWeight.SemiBold),
             color = palette.textPrimary
         )
-        Text(
-            text = body,
-            style = MaterialTheme.typography.bodySmall,
-            color = palette.textSecondary,
-            lineHeight = 19.sp
-        )
+        sentences.forEachIndexed { idx, sentence ->
+            val sentenceStarted = startTyping && (reducedMotion || activeSentenceIdx >= idx)
+            val sentenceDurationMs = (sentence.length * 64).coerceIn(1800, 12500)
+            KeyboardTypingText(
+                fullText = sentence,
+                style = MaterialTheme.typography.bodySmall.copy(lineHeight = 19.sp),
+                color = palette.textSecondary,
+                startTyping = sentenceStarted,
+                startDelayMillis = if (idx == 0) 220 else 280,
+                typingDurationMillis = sentenceDurationMs,
+                reducedMotion = reducedMotion,
+                alreadyCompleted = reducedMotion || activeSentenceIdx > idx,
+                onTypingCompleted = {
+                    if (activeSentenceIdx == idx) {
+                        val next = idx + 1
+                        activeSentenceIdx = next
+                        if (next >= sentences.size) {
+                            onSectionCompleted()
+                        }
+                    }
+                }
+            )
+        }
     }
 }
 

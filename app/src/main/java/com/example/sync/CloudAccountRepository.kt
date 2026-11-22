@@ -410,9 +410,10 @@ class CloudAccountRepository(
                 }
                 docRef.set(createMap).await()
             } else {
+                val existingName = existing.getString("displayName")
                 val updateMap = buildMap<String, Any> {
                     put("schemaVersion", CURRENT_SYNC_SCHEMA_VERSION)
-                    put("displayName", safeName)
+                    if (existingName.isNullOrBlank()) put("displayName", safeName)
                     if (!safeEmail.isNullOrBlank()) put("email", safeEmail)
                     if (!safePhotoUrl.isNullOrBlank()) put("photoUrl", safePhotoUrl)
                     put("updatedAt", FieldValue.serverTimestamp())

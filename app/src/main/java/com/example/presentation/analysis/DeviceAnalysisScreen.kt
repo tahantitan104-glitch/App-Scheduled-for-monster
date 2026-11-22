@@ -166,7 +166,7 @@ fun DeviceAnalysisScreen(
             // Overall Result & Run Trigger Card
             item(key = "summary") {
                 val (badgeColor, badgeBg) = when (report.overallResult) {
-                    OverallCompatibilityResult.READY -> palette.accent to palette.accentSoftContainer
+                    OverallCompatibilityResult.READY -> palette.onAccent to palette.success
                     OverallCompatibilityResult.ACTION_REQUIRED -> palette.error to palette.errorContainer
                     OverallCompatibilityResult.LIMITED_COMPATIBILITY -> palette.warn to palette.warnContainer
                     OverallCompatibilityResult.ANALYSIS_INCOMPLETE -> palette.warn to palette.warnContainer
@@ -175,7 +175,7 @@ fun DeviceAnalysisScreen(
                     modifier = Modifier
                         .fillMaxWidth()
                         .resolveGlassCard(
-                            cornerRadius = 22.dp,
+                            cornerRadius = 16.dp,
                             borderColor = badgeColor.copy(alpha = 0.42f)
                         )
                         .padding(18.dp)
@@ -219,8 +219,8 @@ fun DeviceAnalysisScreen(
                         onClick = onRunAnalysis,
                         shape = RoundedCornerShape(14.dp),
                         colors = ButtonDefaults.buttonColors(
-                            containerColor = palette.accent,
-                            contentColor = palette.onAccent
+                            containerColor = palette.primaryButton,
+                            contentColor = palette.onPrimaryButton
                         ),
                         modifier = Modifier
                             .fillMaxWidth()
@@ -245,7 +245,7 @@ fun DeviceAnalysisScreen(
                         modifier = Modifier
                             .fillMaxWidth()
                             .resolveGlassCard(
-                                cornerRadius = 20.dp,
+                                cornerRadius = 16.dp,
                                 borderColor = palette.warn.copy(alpha = 0.42f)
                             )
                             .padding(16.dp)
@@ -262,7 +262,7 @@ fun DeviceAnalysisScreen(
                                 modifier = Modifier
                                     .fillMaxWidth()
                                     .clip(RoundedCornerShape(14.dp))
-                                    .background(palette.background.copy(alpha = 0.5f))
+                                    .background(palette.surfaceSecondary)
                                     .border(1.dp, palette.cardBorder, RoundedCornerShape(14.dp))
                                     .padding(12.dp),
                                 verticalAlignment = Alignment.CenterVertically,
@@ -284,8 +284,8 @@ fun DeviceAnalysisScreen(
                                     OutlinedButton(
                                         onClick = { onExecuteAction(item.actionType) },
                                         shape = RoundedCornerShape(12.dp),
-                                        border = BorderStroke(1.dp, palette.accent.copy(alpha = 0.5f)),
-                                        colors = ButtonDefaults.outlinedButtonColors(contentColor = palette.accent),
+                                        border = BorderStroke(1.dp, palette.accentStrong.copy(alpha = 0.55f)),
+                                        colors = ButtonDefaults.outlinedButtonColors(contentColor = palette.accentStrong),
                                         modifier = Modifier.testTag("repair_fix_${item.id}")
                                     ) {
                                         Text(item.actionLabel)
@@ -303,7 +303,7 @@ fun DeviceAnalysisScreen(
                     Column(
                         modifier = Modifier
                             .fillMaxWidth()
-                            .resolveGlassCard(cornerRadius = 20.dp)
+                            .resolveGlassCard(cornerRadius = 16.dp)
                             .padding(16.dp)
                             .testTag("device_analysis_hardware_card"),
                         verticalArrangement = Arrangement.spacedBy(8.dp)
@@ -330,7 +330,7 @@ fun DeviceAnalysisScreen(
                     Column(
                         modifier = Modifier
                             .fillMaxWidth()
-                            .resolveGlassCard(cornerRadius = 20.dp)
+                            .resolveGlassCard(cornerRadius = 16.dp)
                             .padding(16.dp)
                             .testTag("device_analysis_compatibility_card"),
                         verticalArrangement = Arrangement.spacedBy(10.dp)
@@ -357,7 +357,7 @@ fun DeviceAnalysisScreen(
                     Column(
                         modifier = Modifier
                             .fillMaxWidth()
-                            .resolveGlassCard(cornerRadius = 20.dp)
+                            .resolveGlassCard(cornerRadius = 16.dp)
                             .padding(16.dp)
                             .testTag("device_analysis_security_card"),
                         verticalArrangement = Arrangement.spacedBy(10.dp)
@@ -389,7 +389,7 @@ fun DeviceAnalysisScreen(
                     Column(
                         modifier = Modifier
                             .fillMaxWidth()
-                            .resolveGlassCard(cornerRadius = 20.dp)
+                            .resolveGlassCard(cornerRadius = 16.dp)
                             .padding(16.dp)
                             .testTag("device_analysis_management_card"),
                         verticalArrangement = Arrangement.spacedBy(8.dp)
@@ -417,7 +417,7 @@ fun DeviceAnalysisScreen(
                         Text(
                             text = dm.statusLabel,
                             style = MaterialTheme.typography.titleSmall,
-                            color = palette.accent
+                            color = palette.accentStrong
                         )
                         Text(
                             text = dm.explanation,
@@ -473,18 +473,18 @@ private fun AnalysisStatusRow(
 ) {
     val palette = LocalResolveExtendedPalette.current
     val (fg, bg) = when (status) {
-        CompatibilityItemStatus.ACTIVE -> palette.accent to palette.accentSoftContainer
+        CompatibilityItemStatus.ACTIVE -> palette.onAccent to palette.success
         CompatibilityItemStatus.ACTION_REQUIRED -> palette.error to palette.errorContainer
         CompatibilityItemStatus.UNAVAILABLE -> palette.warn to palette.warnContainer
-        CompatibilityItemStatus.NOT_REQUIRED -> palette.textSecondary to palette.background.copy(alpha = 0.6f)
-        CompatibilityItemStatus.NOT_VERIFIED -> palette.textMuted to palette.background.copy(alpha = 0.6f)
+        CompatibilityItemStatus.NOT_REQUIRED -> palette.textSecondary to palette.surfaceSecondary
+        CompatibilityItemStatus.NOT_VERIFIED -> palette.textMuted to palette.surfaceSecondary
     }
 
     Column(
         modifier = Modifier
             .fillMaxWidth()
             .clip(RoundedCornerShape(14.dp))
-            .background(palette.background.copy(alpha = 0.45f))
+            .background(palette.surfaceSecondary)
             .border(1.dp, palette.cardBorder, RoundedCornerShape(14.dp))
             .padding(12.dp),
         verticalArrangement = Arrangement.spacedBy(4.dp)

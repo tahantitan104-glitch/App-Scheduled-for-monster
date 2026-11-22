@@ -1,11 +1,12 @@
-<?xml version="1.0" encoding="utf-8"?>
 <resources>
-    <color name="forest_deep">#FF07110E</color>
-    <color name="forest_brand_deep">#FF10251F</color>
-    <color name="forest_secondary">#FF101C17</color>
-    <color name="forest_surface">#FF17251E</color>
-    <color name="mint_accent">#FF9BE3B4</color>
-    <color name="focus_mint">#FF75E0B5</color>
-    <color name="sage_accent">#FF6FAE88</color>
+    <color name="forest_deep">#FF040B08</color>
+    <color name="forest_brand_deep">#FF06130F</color>
+    <color name="forest_secondary">#FF09120E</color>
+    <color name="forest_surface">#FF0E1A15</color>
+    <color name="mint_accent">#FF176B5B</color>
+    <color name="focus_mint">#FF176B5B</color>
+    <color name="sage_accent">#FF176B5B</color>
+    <color name="champagne_accent">#FFD4B781</color>
+    <color name="slate_teal_accent">#FF6EC2C8</color>
     <color name="text_primary">#FFF2F5F1</color>
 </resources>

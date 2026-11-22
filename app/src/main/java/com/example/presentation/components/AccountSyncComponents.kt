@@ -112,14 +112,7 @@ fun SyncedAvatarBadge(
             modifier = Modifier
                 .size(size)
                 .clip(CircleShape)
-                .background(
-                    Brush.linearGradient(
-                        colors = listOf(
-                            palette.accentSoftContainer,
-                            palette.cardTop
-                        )
-                    )
-                )
+                .background(palette.accentSoftContainer)
                 .border(1.5.dp, palette.accent.copy(alpha = 0.55f), CircleShape),
             contentAlignment = Alignment.Center
         ) {
@@ -163,14 +156,14 @@ fun SyncedAvatarBadge(
                     .align(Alignment.BottomEnd)
                     .size(22.dp)
                     .clip(CircleShape)
-                    .background(palette.accent)
+                    .background(palette.primaryButton)
                     .border(1.5.dp, palette.background, CircleShape),
                 contentAlignment = Alignment.Center
             ) {
                 Icon(
                     imageVector = ResolveIcons.AddAPhoto,
                     contentDescription = "Change profile photo",
-                    tint = palette.onAccent,
+                    tint = palette.onPrimaryButton,
                     modifier = Modifier.size(12.dp)
                 )
             }
@@ -194,8 +187,8 @@ fun HomeOptionalSyncBanner(
         modifier = modifier
             .fillMaxWidth()
             .resolveGlassCard(
-                cornerRadius = 22.dp,
-                borderColor = palette.accent.copy(alpha = 0.35f)
+                cornerRadius = 16.dp,
+                borderColor = palette.cardBorder
             )
             .padding(16.dp)
             .testTag("home_optional_sync_banner"),
@@ -215,13 +208,14 @@ fun HomeOptionalSyncBanner(
                     modifier = Modifier
                         .size(38.dp)
                         .clip(RoundedCornerShape(12.dp))
-                        .background(palette.accentSoftContainer),
+                        .background(palette.cobaltContainer)
+                        .border(1.dp, palette.cobaltSlate.copy(alpha = 0.30f), RoundedCornerShape(12.dp)),
                     contentAlignment = Alignment.Center
                 ) {
                     Icon(
                         imageVector = ResolveIcons.Sync,
                         contentDescription = null,
-                        tint = palette.accent,
+                        tint = palette.cobaltStrong,
                         modifier = Modifier.size(20.dp)
                     )
                 }
@@ -234,7 +228,7 @@ fun HomeOptionalSyncBanner(
                     Text(
                         text = "Offline mode works anytime without signing in.",
                         style = MaterialTheme.typography.labelSmall,
-                        color = palette.accent
+                        color = palette.cobaltStrong
                     )
                 }
             }
@@ -269,8 +263,8 @@ fun HomeOptionalSyncBanner(
                 enabled = !isAuthBusy,
                 shape = RoundedCornerShape(14.dp),
                 colors = ButtonDefaults.buttonColors(
-                    containerColor = palette.accent,
-                    contentColor = palette.onAccent
+                    containerColor = palette.primaryButton,
+                    contentColor = palette.onPrimaryButton
                 ),
                 modifier = Modifier
                     .weight(1f)
@@ -279,7 +273,7 @@ fun HomeOptionalSyncBanner(
             ) {
                 if (isAuthBusy) {
                     CircularProgressIndicator(
-                        color = palette.onAccent,
+                        color = palette.onPrimaryButton,
                         strokeWidth = 2.dp,
                         modifier = Modifier.size(16.dp)
                     )
@@ -348,10 +342,12 @@ fun SettingsAccountSyncCard(
         val resolvedName = state.displayName.ifBlank {
             if (signedIn) "Resolve Focus Account" else "Focus Explorer"
         }
-        val launchPhotoPicker = {
-            photoPickerLauncher.launch(
-                PickVisualMediaRequest(ActivityResultContracts.PickVisualMedia.ImageOnly)
-            )
+        val launchPhotoPicker: () -> Unit = {
+            runCatching {
+                photoPickerLauncher.launch(
+                    PickVisualMediaRequest(ActivityResultContracts.PickVisualMedia.ImageOnly)
+                )
+            }
         }
 
         if (!signedIn) {
@@ -359,7 +355,7 @@ fun SettingsAccountSyncCard(
                 modifier = Modifier
                     .fillMaxWidth()
                     .resolveGlassCard(
-                        cornerRadius = 22.dp,
+                        cornerRadius = 16.dp,
                         borderColor = palette.cardBorder
                     )
                     .padding(16.dp)
@@ -407,7 +403,7 @@ fun SettingsAccountSyncCard(
                                 Icon(
                                     imageVector = ResolveIcons.Edit,
                                     contentDescription = "Edit profile name",
-                                    tint = palette.accent,
+                                    tint = palette.accentStrong,
                                     modifier = Modifier.size(16.dp)
                                 )
                             }
@@ -438,7 +434,7 @@ fun SettingsAccountSyncCard(
                         Text(
                             text = "Sync Status: Offline Mode • Works without an account",
                             style = MaterialTheme.typography.labelSmall,
-                            color = palette.accent,
+                            color = palette.accentStrong,
                             maxLines = 1,
                             overflow = TextOverflow.Ellipsis
                         )
@@ -450,8 +446,8 @@ fun SettingsAccountSyncCard(
                     enabled = !state.isAuthBusy,
                     shape = RoundedCornerShape(14.dp),
                     colors = ButtonDefaults.buttonColors(
-                        containerColor = palette.accent,
-                        contentColor = palette.onAccent
+                        containerColor = palette.primaryButton,
+                        contentColor = palette.onPrimaryButton
                     ),
                     modifier = Modifier
                         .fillMaxWidth()
@@ -460,7 +456,7 @@ fun SettingsAccountSyncCard(
                 ) {
                     if (state.isAuthBusy) {
                         CircularProgressIndicator(
-                            color = palette.onAccent,
+                            color = palette.onPrimaryButton,
                             strokeWidth = 2.dp,
                             modifier = Modifier.size(18.dp)
                         )
@@ -478,8 +474,8 @@ fun SettingsAccountSyncCard(
                 modifier = Modifier
                     .fillMaxWidth()
                     .resolveGlassCard(
-                        cornerRadius = 22.dp,
-                        borderColor = palette.accent.copy(alpha = 0.42f)
+                        cornerRadius = 16.dp,
+                        borderColor = palette.accentSecondary.copy(alpha = 0.45f)
                     )
                     .padding(16.dp)
                     .testTag("settings_account_signed_in_card"),
@@ -525,7 +521,7 @@ fun SettingsAccountSyncCard(
                                 Icon(
                                     imageVector = ResolveIcons.Edit,
                                     contentDescription = "Edit profile name",
-                                    tint = palette.accent,
+                                    tint = palette.accentStrong,
                                     modifier = Modifier.size(16.dp)
                                 )
                             }
@@ -545,7 +541,10 @@ fun SettingsAccountSyncCard(
                             verticalAlignment = Alignment.CenterVertically,
                             horizontalArrangement = Arrangement.spacedBy(6.dp)
                         ) {
-                            PulsingStatusDot(color = palette.accent, size = 5.dp)
+                            PulsingStatusDot(
+                                color = if (state.syncLockEnabled) palette.accentStrong else palette.accentSecondary,
+                                size = 5.dp
+                            )
                             val syncLabel = if (state.syncLockEnabled) {
                                 "Google Sync Active • ${state.activeSyncedDeviceCount.coerceAtLeast(1)} device(s)"
                             } else {
@@ -554,7 +553,7 @@ fun SettingsAccountSyncCard(
                             Text(
                                 text = syncLabel,
                                 style = MaterialTheme.typography.labelSmall,
-                                color = palette.accent,
+                                color = palette.accentStrong,
                                 maxLines = 1,
                                 overflow = TextOverflow.Ellipsis
                             )
@@ -596,15 +595,15 @@ fun SettingsAccountSyncCard(
                                         .clip(CircleShape)
                                         .background(
                                             if (device.syncEnabled) {
-                                                palette.accentSoftContainer.copy(alpha = 0.78f)
+                                                palette.surfaceElevated
                                             } else {
-                                                palette.background.copy(alpha = 0.55f)
+                                                palette.surfaceSecondary
                                             }
                                         )
                                         .border(
                                             1.dp,
                                             if (device.syncEnabled) {
-                                                palette.accent.copy(alpha = 0.35f)
+                                                palette.accentSecondary.copy(alpha = 0.45f)
                                             } else {
                                                 palette.cardBorder
                                             },
@@ -620,7 +619,7 @@ fun SettingsAccountSyncCard(
                                 ) {
                                     if (isUnlinking) {
                                         CircularProgressIndicator(
-                                            color = palette.accent,
+                                            color = palette.accentStrong,
                                             strokeWidth = 1.5.dp,
                                             modifier = Modifier.size(12.dp)
                                         )
@@ -628,7 +627,7 @@ fun SettingsAccountSyncCard(
                                         Icon(
                                             imageVector = ResolveIcons.Devices,
                                             contentDescription = null,
-                                            tint = if (device.syncEnabled) palette.accent else palette.textSecondary,
+                                            tint = if (device.syncEnabled) palette.accentStrong else palette.textSecondary,
                                             modifier = Modifier.size(13.dp)
                                         )
                                     }
@@ -654,7 +653,7 @@ fun SettingsAccountSyncCard(
                     modifier = Modifier
                         .fillMaxWidth()
                         .clip(RoundedCornerShape(16.dp))
-                        .background(palette.background.copy(alpha = 0.55f))
+                        .background(palette.surfaceSecondary)
                         .border(1.dp, palette.cardBorder, RoundedCornerShape(16.dp))
                         .clickable { onToggleSyncEnabled(!state.syncLockEnabled) }
                         .padding(horizontal = 14.dp, vertical = 10.dp),
@@ -679,10 +678,7 @@ fun SettingsAccountSyncCard(
                     Switch(
                         checked = state.syncLockEnabled,
                         onCheckedChange = onToggleSyncEnabled,
-                        colors = SwitchDefaults.colors(
-                            checkedThumbColor = palette.onAccent,
-                            checkedTrackColor = palette.accent
-                        ),
+                        colors = resolveSwitchColors(),
                         modifier = Modifier.testTag("settings_device_sync_switch")
                     )
                 }
@@ -729,7 +725,7 @@ fun SettingsAccountSyncCard(
     if (showEditNameDialog) {
         AlertDialog(
             onDismissRequest = { showEditNameDialog = false },
-            containerColor = palette.cardBottom,
+            containerColor = palette.surfaceSecondary,
             title = {
                 Text(
                     text = "Profile Name",
@@ -763,8 +759,8 @@ fun SettingsAccountSyncCard(
                         showEditNameDialog = false
                     },
                     colors = ButtonDefaults.buttonColors(
-                        containerColor = palette.accent,
-                        contentColor = palette.onAccent
+                        containerColor = palette.primaryButton,
+                        contentColor = palette.onPrimaryButton
                     ),
                     modifier = Modifier.testTag("settings_profile_name_save_button")
                 ) {
@@ -783,7 +779,7 @@ fun SettingsAccountSyncCard(
         val isThis = device.deviceId == state.thisDeviceId
         AlertDialog(
             onDismissRequest = { pendingUnlinkDevice = null },
-            containerColor = palette.cardBottom,
+            containerColor = palette.surfaceSecondary,
             title = {
                 Text(
                     text = "Unlink ${device.deviceName}?",
@@ -810,8 +806,8 @@ fun SettingsAccountSyncCard(
                         onUnlinkDevice(id)
                     },
                     colors = ButtonDefaults.buttonColors(
-                        containerColor = palette.accent,
-                        contentColor = palette.onAccent
+                        containerColor = palette.primaryButton,
+                        contentColor = palette.onPrimaryButton
                     ),
                     modifier = Modifier.testTag("confirm_unlink_device_button")
                 ) {
@@ -837,7 +833,7 @@ private fun SyncBenefitBullet(text: String) {
         Icon(
             imageVector = Icons.Outlined.CheckCircle,
             contentDescription = null,
-            tint = palette.accent,
+            tint = palette.success,
             modifier = Modifier
                 .padding(top = 2.dp)
                 .size(15.dp)

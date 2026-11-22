@@ -80,7 +80,7 @@ fun InsightsScreen(
                 modifier = Modifier
                     .fillMaxWidth()
                     .clip(RoundedCornerShape(16.dp))
-                    .background(palette.cardBottom)
+                    .background(palette.surfaceSecondary)
                     .border(1.dp, palette.cardBorder, RoundedCornerShape(16.dp))
                     .padding(4.dp),
                 horizontalArrangement = Arrangement.spacedBy(4.dp)
@@ -144,12 +144,12 @@ private fun InsightsSegmentTab(
 ) {
     val palette = LocalResolveExtendedPalette.current
     val bg by animateColorAsState(
-        targetValue = if (selected) palette.accentSoftContainer else Color.Transparent,
+        targetValue = if (selected) palette.surfaceElevated else Color.Transparent,
         animationSpec = tween(180),
         label = "insights_tab_bg_$testTag"
     )
     val fg by animateColorAsState(
-        targetValue = if (selected) palette.accent else palette.textSecondary,
+        targetValue = if (selected) palette.accentStrong else palette.textSecondary,
         animationSpec = tween(180),
         label = "insights_tab_fg_$testTag"
     )
@@ -161,7 +161,7 @@ private fun InsightsSegmentTab(
             .background(bg)
             .border(
                 width = if (selected) 1.dp else 0.dp,
-                color = if (selected) palette.accent.copy(alpha = 0.35f) else Color.Transparent,
+                color = if (selected) palette.accentSecondary.copy(alpha = 0.45f) else Color.Transparent,
                 shape = RoundedCornerShape(12.dp)
             )
             .clickable(role = Role.Tab, onClick = onClick)

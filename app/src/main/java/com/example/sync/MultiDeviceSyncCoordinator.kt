@@ -79,18 +79,48 @@ class MultiDeviceSyncCoordinator(
     @Volatile
     private var lastObservedFlipSyncedSignature: FlipSyncedSignature? = null
 
+    @Volatile
+    private var isLocalAvatarWriteInFlight: Boolean = false
+
+    @Volatile
+    private var pendingRemoteAvatarClear: Boolean = false
+
     private data class FlipSyncedSignature(
         val use24HourFormat: Boolean,
+        val useSystemTimeFormat: Boolean,
+        val hourLeadingZero: Boolean,
+        val dateFormatPattern: String,
         val keepScreenAwake: Boolean,
         val showDate: Boolean,
+        val showWeekday: Boolean,
+        val showSeconds: Boolean,
+        val showFlipAxis: Boolean,
+        val showUpcomingAlarm: Boolean,
+        val showBattery: Boolean,
+        val showWeather: Boolean,
+        val weatherLocationQuery: String,
+        val clockTickerSoundEnabled: Boolean,
+        val customTag: String,
         val autoRepeat: Boolean,
         val zoomFraction: Float
     )
 
     private fun FlipClockSettings.syncedSignature(): FlipSyncedSignature = FlipSyncedSignature(
         use24HourFormat = use24HourFormat,
+        useSystemTimeFormat = useSystemTimeFormat,
+        hourLeadingZero = hourLeadingZero,
+        dateFormatPattern = resolvedDateFormat.pattern,
         keepScreenAwake = keepScreenAwake,
         showDate = showDate,
+        showWeekday = showWeekday,
+        showSeconds = showSeconds,
+        showFlipAxis = showFlipAxis,
+        showUpcomingAlarm = showUpcomingAlarm,
+        showBattery = showBattery,
+        showWeather = showWeather,
+        weatherLocationQuery = weatherLocationQuery,
+        clockTickerSoundEnabled = clockTickerSoundEnabled,
+        customTag = customTag,
         autoRepeat = autoRepeat,
         zoomFraction = clampedZoomFraction
     )
@@ -276,14 +306,57 @@ class MultiDeviceSyncCoordinator(
                     }
                     .collect { profile ->
                         if (profile != null) {
-                            _uiState.update {
-                                it.copy(
-                                    displayName = profile.displayName.ifBlank { it.displayName },
-                                    email = profile.email.ifBlank { it.email },
-                                    photoUrl = profile.photoUrl.ifBlank { it.photoUrl },
-                                    avatarBase64 = profile.avatarBase64,
-                                    errorMessage = null
-                                )
+                            val remoteAvatar = profile.avatarBase64
+                            val remoteName = profile.displayName
+                            if (remoteName.isNotBlank()) {
+                                preferencesRepository.setLocalProfileName(remoteName)
+                            }
+                            if (remoteAvatar.isNotBlank() && !pendingRemoteAvatarClear) {
+                                preferencesRepository.setLocalAvatarBase64(remoteAvatar)
+                                _uiState.update {
+                                    it.copy(
+                                        displayName = remoteName.ifBlank { it.displayName },
+                                        email = profile.email.ifBlank { it.email },
+                                        photoUrl = profile.photoUrl.ifBlank { it.photoUrl },
+                                        avatarBase64 = remoteAvatar,
+                                        errorMessage = null
+                                    )
+                                }
+                            } else {
+                                val localAvatar = preferencesRepository.getLocalAvatarBase64Snapshot()
+                                if (localAvatar.isNotBlank() && !pendingRemoteAvatarClear && !isLocalAvatarWriteInFlight) {
+                                    // Local avatar was saved offline before sign-in -> push up to Firestore instead of erasing
+                                    isLocalAvatarWriteInFlight = true
+                                    scope.launch {
+                                        try {
+                                            gateway.updateAvatarBase64(uid, localAvatar)
+                                        } finally {
+                                            isLocalAvatarWriteInFlight = false
+                                        }
+                                    }
+                                    _uiState.update {
+                                        it.copy(
+                                            displayName = remoteName.ifBlank { it.displayName },
+                                            email = profile.email.ifBlank { it.email },
+                                            photoUrl = profile.photoUrl.ifBlank { it.photoUrl },
+                                            avatarBase64 = localAvatar,
+                                            errorMessage = null
+                                        )
+                                    }
+                                } else if (!isLocalAvatarWriteInFlight) {
+                                    if (pendingRemoteAvatarClear && remoteAvatar.isBlank()) {
+                                        pendingRemoteAvatarClear = false
+                                    }
+                                    _uiState.update {
+                                        it.copy(
+                                            displayName = remoteName.ifBlank { it.displayName },
+                                            email = profile.email.ifBlank { it.email },
+                                            photoUrl = profile.photoUrl.ifBlank { it.photoUrl },
+                                            avatarBase64 = if (pendingRemoteAvatarClear) "" else it.avatarBase64.ifBlank { remoteAvatar },
+                                            errorMessage = null
+                                        )
+                                    }
+                                }
                             }
                         }
                     }
@@ -594,8 +667,20 @@ class MultiDeviceSyncCoordinator(
         if (remote.updatedAtWallMs > local.updatedAtWallMs) {
             val merged = local.copy(
                 use24HourFormat = remote.use24HourFormat,
+                useSystemTimeFormat = remote.useSystemTimeFormat,
+                hourLeadingZero = remote.hourLeadingZero,
+                dateFormatPattern = com.example.domain.model.FlipDateFormat.fromPattern(remote.dateFormatPattern).pattern,
                 keepScreenAwake = remote.keepScreenAwake,
                 showDate = remote.showDate,
+                showWeekday = remote.showWeekday,
+                showSeconds = remote.showSeconds,
+                showFlipAxis = remote.showFlipAxis,
+                showUpcomingAlarm = remote.showUpcomingAlarm,
+                showBattery = remote.showBattery,
+                showWeather = remote.showWeather,
+                weatherLocationQuery = remote.weatherLocationQuery,
+                clockTickerSoundEnabled = remote.clockTickerSoundEnabled,
+                customTag = remote.customTag,
                 autoRepeat = remote.autoRepeat,
                 zoomFraction = remote.zoomFraction.toFloat().coerceIn(
                     FlipClockSettings.MIN_ZOOM_FRACTION,
@@ -685,10 +770,14 @@ class MultiDeviceSyncCoordinator(
             activeUid = null
             GoogleSignInHelper.clearCredentialState(appContext)
             gateway.signOut()
+            val localName = preferencesRepository.getLocalProfileNameSnapshot()
+            val localAvatar = preferencesRepository.getLocalAvatarBase64Snapshot()
             _uiState.update {
                 AccountSyncUiState(
                     isSignedIn = false,
                     isAuthBusy = false,
+                    displayName = localName,
+                    avatarBase64 = localAvatar,
                     thisDeviceId = it.thisDeviceId,
                     thisDeviceName = it.thisDeviceName,
                     syncLockEnabled = it.syncLockEnabled
@@ -756,9 +845,12 @@ class MultiDeviceSyncCoordinator(
     }
 
     suspend fun updateProfilePhoto(uri: Uri) {
+        pendingRemoteAvatarClear = false
+        isLocalAvatarWriteInFlight = true
         _uiState.update { it.copy(isAvatarUploading = true, errorMessage = null) }
         val encoded = AvatarImageProcessor.encodeAvatarFromUri(appContext, uri)
         if (encoded.isFailure) {
+            isLocalAvatarWriteInFlight = false
             _uiState.update { it.copy(isAvatarUploading = false) }
             _syncEvents.tryEmit("Could not read selected image.")
             return
@@ -768,11 +860,13 @@ class MultiDeviceSyncCoordinator(
         _uiState.update { it.copy(avatarBase64 = base64) }
         val uid = activeUid
         if (uid == null) {
+            isLocalAvatarWriteInFlight = false
             _uiState.update { it.copy(isAvatarUploading = false) }
-            _syncEvents.tryEmit("Profile photo updated on this device.")
+            _syncEvents.tryEmit("Profile photo saved on this device.")
             return
         }
         val writeResult = gateway.updateAvatarBase64(uid, base64)
+        isLocalAvatarWriteInFlight = false
         _uiState.update { it.copy(isAvatarUploading = false) }
         if (writeResult.isSuccess) {
             _syncEvents.tryEmit("Profile photo synced across connected devices.")
@@ -785,14 +879,18 @@ class MultiDeviceSyncCoordinator(
     }
 
     suspend fun clearCustomProfilePhoto() {
+        pendingRemoteAvatarClear = true
+        isLocalAvatarWriteInFlight = true
         preferencesRepository.setLocalAvatarBase64("")
         _uiState.update { it.copy(avatarBase64 = "") }
         val uid = activeUid ?: run {
+            isLocalAvatarWriteInFlight = false
             _syncEvents.tryEmit("Profile photo removed.")
             return
         }
         _uiState.update { it.copy(isAvatarUploading = true) }
         val writeResult = gateway.updateAvatarBase64(uid, "")
+        isLocalAvatarWriteInFlight = false
         _uiState.update { it.copy(isAvatarUploading = false) }
         if (writeResult.isSuccess) {
             _syncEvents.tryEmit("Custom profile photo removed.")
@@ -917,8 +1015,20 @@ class MultiDeviceSyncCoordinator(
             settings = CloudFlipClockSettings(
                 userId = uid,
                 use24HourFormat = settings.use24HourFormat,
+                useSystemTimeFormat = settings.useSystemTimeFormat,
+                hourLeadingZero = settings.hourLeadingZero,
+                dateFormatPattern = settings.resolvedDateFormat.pattern,
                 keepScreenAwake = settings.keepScreenAwake,
                 showDate = settings.showDate,
+                showWeekday = settings.showWeekday,
+                showSeconds = settings.showSeconds,
+                showFlipAxis = settings.showFlipAxis,
+                showUpcomingAlarm = settings.showUpcomingAlarm,
+                showBattery = settings.showBattery,
+                showWeather = settings.showWeather,
+                weatherLocationQuery = settings.weatherLocationQuery,
+                clockTickerSoundEnabled = settings.clockTickerSoundEnabled,
+                customTag = settings.customTag,
                 autoRepeat = settings.autoRepeat,
                 zoomFraction = settings.clampedZoomFraction.toDouble(),
                 originDeviceId = deviceId,

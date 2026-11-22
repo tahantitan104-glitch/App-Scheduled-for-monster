@@ -64,7 +64,7 @@
             android:excludeFromRecents="true"
             android:taskAffinity="com.resolve.lock"
             android:launchMode="singleTask"
-            android:configChanges="orientation|screenSize|smallestScreenSize|screenLayout"
+            android:configChanges="orientation|screenSize|smallestScreenSize|screenLayout|keyboardHidden"
             android:showWhenLocked="true"
             android:turnScreenOn="true"
             android:theme="@style/Theme.Resolve.LockScreen" />

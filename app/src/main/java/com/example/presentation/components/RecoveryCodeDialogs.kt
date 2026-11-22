@@ -19,8 +19,10 @@ import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Button
 import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.Checkbox
+import androidx.compose.material3.CheckboxDefaults
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.FilterChip
+import androidx.compose.material3.FilterChipDefaults
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.ModalBottomSheet
@@ -28,6 +30,7 @@ import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
+import androidx.compose.ui.graphics.Color
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableIntStateOf
@@ -43,7 +46,6 @@ import androidx.compose.ui.text.input.PasswordVisualTransformation
 import androidx.compose.ui.unit.dp
 import com.example.designsystem.JetBrainsMonoFamily
 import com.example.designsystem.LocalResolveExtendedPalette
-import com.example.designsystem.ResolveColors
 import com.example.domain.model.RecoveryVerificationResult
 import com.example.security.RecoveryCodeManager
 
@@ -62,7 +64,7 @@ fun RecoveryCodeSetupDialog(
 
     AlertDialog(
         onDismissRequest = onDismiss,
-        containerColor = palette.cardBottom,
+        containerColor = palette.surfaceSecondary,
         title = {
             Text(
                 text = "Configure Recovery Code",
@@ -88,8 +90,9 @@ fun RecoveryCodeSetupDialog(
                             RecoveryCodeManager.DEFAULT_LENGTH to "16-digit",
                             RecoveryCodeManager.EXTENDED_LENGTH to "32-digit (optional)"
                         ).forEach { (len, title) ->
+                            val chipSelected = selectedLength == len
                             FilterChip(
-                                selected = selectedLength == len,
+                                selected = chipSelected,
                                 onClick = {
                                     selectedLength = len
                                     codeInput = generateRandomCode(len)
@@ -97,6 +100,18 @@ fun RecoveryCodeSetupDialog(
                                     acknowledged = false
                                     error = null
                                 },
+                                colors = FilterChipDefaults.filterChipColors(
+                                    selectedContainerColor = palette.surfaceElevated,
+                                    selectedLabelColor = palette.accentStrong,
+                                    containerColor = palette.cardBottom,
+                                    labelColor = palette.textSecondary
+                                ),
+                                border = FilterChipDefaults.filterChipBorder(
+                                    enabled = true,
+                                    selected = chipSelected,
+                                    borderColor = palette.cardBorder,
+                                    selectedBorderColor = palette.accentSecondary
+                                ),
                                 label = { Text(title) }
                             )
                         }
@@ -106,14 +121,14 @@ fun RecoveryCodeSetupDialog(
                         modifier = Modifier
                             .fillMaxWidth()
                             .clip(RoundedCornerShape(14.dp))
-                            .background(palette.background.copy(alpha = 0.72f))
+                            .background(palette.background)
                             .border(1.dp, palette.cardBorder, RoundedCornerShape(14.dp))
                             .padding(12.dp)
                     ) {
                         Text(
                             text = RecoveryCodeManager.formatGrouped(codeInput.ifBlank { "0".repeat(selectedLength) }),
                             style = MaterialTheme.typography.titleMedium.copy(fontFamily = JetBrainsMonoFamily),
-                            color = palette.accent
+                            color = palette.accentStrong
                         )
                     }
 
@@ -171,6 +186,11 @@ fun RecoveryCodeSetupDialog(
                         Checkbox(
                             checked = acknowledged,
                             onCheckedChange = { acknowledged = it },
+                            colors = CheckboxDefaults.colors(
+                                checkedColor = palette.accent,
+                                checkmarkColor = Color.White,
+                                uncheckedColor = palette.textSecondary
+                            ),
                             modifier = Modifier.testTag("recovery_setup_ack_checkbox")
                         )
                         Text(
@@ -210,8 +230,8 @@ fun RecoveryCodeSetupDialog(
                     }
                 },
                 colors = ButtonDefaults.buttonColors(
-                    containerColor = palette.accent,
-                    contentColor = palette.onAccent
+                    containerColor = palette.primaryButton,
+                    contentColor = palette.onPrimaryButton
                 ),
                 modifier = Modifier.testTag("recovery_setup_save_button")
             ) {
@@ -243,11 +263,12 @@ fun RecoveryCodeVerifySheet(
     onDismiss: () -> Unit,
     onSubmitCode: (String) -> Unit
 ) {
+    val palette = LocalResolveExtendedPalette.current
     var input by remember { mutableStateOf("") }
 
     ModalBottomSheet(
         onDismissRequest = onDismiss,
-        containerColor = ResolveColors.ForestSecondary
+        containerColor = palette.surfaceSecondary
     ) {
         ProvideSafeTextToolbar {
             CleanupTextInteractionsOnDispose()
@@ -265,12 +286,12 @@ fun RecoveryCodeVerifySheet(
                 Text(
                     text = "Emergency Session Recovery",
                     style = MaterialTheme.typography.headlineMedium,
-                    color = ResolveColors.TextPrimary
+                    color = palette.textPrimary
                 )
                 Text(
                     text = "Enter your $expectedLength-digit recovery code to exit Lock Task Mode.",
                     style = MaterialTheme.typography.bodyMedium,
-                    color = ResolveColors.TextSecondary
+                    color = palette.textSecondary
                 )
 
                 OutlinedTextField(
@@ -295,21 +316,21 @@ fun RecoveryCodeVerifySheet(
                         Text(
                             text = "Incorrect code. ${verificationFeedback.remainingAttemptsBeforeCooldown} attempts left before cooldown.",
                             style = MaterialTheme.typography.bodyMedium,
-                            color = ResolveColors.ErrorCoral
+                            color = palette.error
                         )
                     }
                     is RecoveryVerificationResult.Throttled -> {
                         Text(
                             text = "Too many attempts. Try again in ${verificationFeedback.retryAfterSeconds}s.",
                             style = MaterialTheme.typography.bodyMedium,
-                            color = ResolveColors.AmberWarn
+                            color = palette.warn
                         )
                     }
                     RecoveryVerificationResult.NotConfigured -> {
                         Text(
                             text = "No recovery code verifier is stored.",
                             style = MaterialTheme.typography.bodyMedium,
-                            color = ResolveColors.ErrorCoral
+                            color = palette.error
                         )
                     }
                     else -> Unit
@@ -322,8 +343,8 @@ fun RecoveryCodeVerifySheet(
                     },
                     enabled = !isVerifying && input.length == expectedLength,
                     colors = ButtonDefaults.buttonColors(
-                        containerColor = ResolveColors.MintAccent,
-                        contentColor = ResolveColors.ForestDeep
+                        containerColor = palette.primaryButton,
+                        contentColor = palette.onPrimaryButton
                     ),
                     shape = RoundedCornerShape(16.dp),
                     modifier = Modifier

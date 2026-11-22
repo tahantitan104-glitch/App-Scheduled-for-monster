@@ -455,12 +455,12 @@ class NewFeaturesRobolectricTest {
         composeRule.waitForIdle()
         composeRule.onNodeWithTag("lock_screen_landscape_reminder_on").assertIsDisplayed()
         composeRule.onNodeWithTag("lock_screen_landscape_action_stack").assertIsDisplayed()
-        val appsBounds = composeRule.onNodeWithTag("lock_screen_allowed_apps_button").assertIsDisplayed().getBoundsInRoot()
         val phoneBounds = composeRule.onNodeWithTag("lock_screen_phone_button").assertIsDisplayed().getBoundsInRoot()
+        val appsBounds = composeRule.onNodeWithTag("lock_screen_allowed_apps_button").assertIsDisplayed().getBoundsInRoot()
         val emergencyBounds = composeRule.onNodeWithTag("lock_screen_recovery_button").assertIsDisplayed().getBoundsInRoot()
         val flipBounds = composeRule.onNodeWithTag("lock_screen_flip_clock_button").assertIsDisplayed().getBoundsInRoot()
-        assertTrue(appsBounds.bottom <= phoneBounds.top)
-        assertTrue(phoneBounds.bottom <= emergencyBounds.top)
+        assertTrue(phoneBounds.bottom <= appsBounds.top)
+        assertTrue(appsBounds.bottom <= emergencyBounds.top)
         assertTrue(emergencyBounds.bottom <= flipBounds.top)
         composeRule.onNodeWithText("Flip Clock").assertIsDisplayed()
     }
@@ -504,9 +504,76 @@ class NewFeaturesRobolectricTest {
     }
 
     @Test
-    fun `modes color inversion requires consent, enables live preview, and restores normal colors cleanly`() {
-        var inAppInverted by mutableStateOf(false)
-        var consentGranted by mutableStateOf(false)
+    fun `flip clock face shows borderless hour, minute, weekday, and seconds without colon`() {
+        val manager = kotlinx.coroutines.runBlocking {
+            FlipClockManager(prefs, flipPresetRepo, FlipTimerNotificationHelper(context), engine, clock).also {
+                it.initialize()
+            }
+        }
+
+        composeRule.setContent {
+            ResolveTheme {
+                com.example.flipclock.FlipClockScreen(
+                    manager = manager,
+                    initialPage = com.example.domain.model.FlipClockPage.CLOCK,
+                    isRestrictedLock = false,
+                    initialBrightnessPercent = 50f,
+                    controlsVisible = false,
+                    onControlsVisibleChange = {},
+                    onBrightnessChanged = {},
+                    onRequestTimerStartWithNotificationCheck = {},
+                    onOpenAppNotificationSettings = {},
+                    onExit = {}
+                )
+            }
+        }
+        composeRule.waitForIdle()
+        composeRule.onNodeWithTag("flip_clock_hour_card").assertIsDisplayed()
+        composeRule.onNodeWithTag("flip_clock_minute_card").assertIsDisplayed()
+        composeRule.onNodeWithTag("flip_clock_weekday_label").assertIsDisplayed()
+        composeRule.onNodeWithTag("flip_clock_seconds_label").assertIsDisplayed()
+        assertTrue(composeRule.onAllNodesWithTag("flip_clock_colon").fetchSemanticsNodes().isEmpty())
+    }
+
+    @Test
+    fun `lock screen orientation resolver covers comfortable tilt bands and ignores deadzones`() {
+        assertEquals(
+            android.content.pm.ActivityInfo.SCREEN_ORIENTATION_PORTRAIT,
+            com.example.presentation.lockscreen.resolveLockScreenCandidateOrientation(0)
+        )
+        assertEquals(
+            android.content.pm.ActivityInfo.SCREEN_ORIENTATION_PORTRAIT,
+            com.example.presentation.lockscreen.resolveLockScreenCandidateOrientation(35)
+        )
+        assertEquals(
+            android.content.pm.ActivityInfo.SCREEN_ORIENTATION_PORTRAIT,
+            com.example.presentation.lockscreen.resolveLockScreenCandidateOrientation(325)
+        )
+        assertEquals(
+            android.content.pm.ActivityInfo.SCREEN_ORIENTATION_REVERSE_LANDSCAPE,
+            com.example.presentation.lockscreen.resolveLockScreenCandidateOrientation(50)
+        )
+        assertEquals(
+            android.content.pm.ActivityInfo.SCREEN_ORIENTATION_REVERSE_LANDSCAPE,
+            com.example.presentation.lockscreen.resolveLockScreenCandidateOrientation(130)
+        )
+        assertEquals(
+            android.content.pm.ActivityInfo.SCREEN_ORIENTATION_LANDSCAPE,
+            com.example.presentation.lockscreen.resolveLockScreenCandidateOrientation(230)
+        )
+        assertEquals(
+            android.content.pm.ActivityInfo.SCREEN_ORIENTATION_LANDSCAPE,
+            com.example.presentation.lockscreen.resolveLockScreenCandidateOrientation(310)
+        )
+        assertNull(com.example.presentation.lockscreen.resolveLockScreenCandidateOrientation(-1))
+        assertNull(com.example.presentation.lockscreen.resolveLockScreenCandidateOrientation(42))
+        assertNull(com.example.presentation.lockscreen.resolveLockScreenCandidateOrientation(180))
+        assertNull(com.example.presentation.lockscreen.resolveLockScreenCandidateOrientation(318))
+    }
+
+    @Test
+    fun `modes screen enforces Dark Mode card without Color Inversion and triggers reset cleanly`() {
+        var resetClicked = false
         val report = com.example.platform.ForceDarkCapabilityHelper.inspect(context)
 
         composeRule.setContent {
@@ -515,45 +582,22 @@ class NewFeaturesRobolectricTest {
                     report = report,
                     installedApps = emptyList(),
                     darkModeAppPrefs = emptyMap(),
-                    colorInversionAppPrefs = emptyMap(),
                     loadAppIcon = { null },
                     onEnterFlipClock = {},
                     onAttemptAppDarkMode = { _, _ -> },
-                    onAttemptAppColorInversion = { _, _ -> },
                     onOpenDisplaySettings = {},
-                    onOpenAccessibilitySettings = {},
-                    onResetAllModes = { inAppInverted = false },
-                    initialDisplaySection = com.example.presentation.modes.VisionDisplaySection.COLOR_INVERSION,
-                    inAppColorInversionEnabled = inAppInverted,
-                    colorInversionConsentGranted = consentGranted,
-                    onToggleInAppColorInversion = {
-                        if (it) consentGranted = true
-                        inAppInverted = it
-                    }
+                    onResetAllModes = { resetClicked = true }
                 )
             }
         }
         composeRule.waitForIdle()
+        composeRule.onNodeWithTag("modes_app_dark_card").assertIsDisplayed()
+        assertTrue(composeRule.onAllNodesWithTag("modes_color_inversion_card").fetchSemanticsNodes().isEmpty())
         composeRule.onNodeWithTag("modes_list")
-            .performScrollToNode(hasTestTag("modes_inversion_preview_card"))
-        composeRule.onNodeWithTag("modes_inversion_preview_card").assertIsDisplayed()
-        composeRule.onNodeWithTag("modes_list")
-            .performScrollToNode(hasTestTag("modes_in_app_inversion_switch"))
-        composeRule.onNodeWithTag("modes_in_app_inversion_switch").performClick()
+            .performScrollToNode(hasTestTag("modes_reset_all_btn"))
+        composeRule.onNodeWithTag("modes_reset_all_btn").performClick()
         composeRule.waitForIdle()
-
-        // Consent dialog opens before activating
-        composeRule.onNodeWithTag("modes_inversion_consent_dialog").assertIsDisplayed()
-        composeRule.onNodeWithTag("modes_inversion_consent_confirm").performClick()
-        composeRule.waitForIdle()
-
-        assertTrue(consentGranted)
-        assertTrue(inAppInverted)
-        composeRule.onNodeWithTag("modes_list")
-            .performScrollToNode(hasTestTag("modes_restore_colors_btn"))
-        composeRule.onNodeWithTag("modes_restore_colors_btn").performClick()
-        composeRule.waitForIdle()
-        assertFalse(inAppInverted)
+        assertTrue(resetClicked)
     }
 
     private class FakeTestClock(var wallMs: Long, var elapsedMs: Long) : ClockProvider {

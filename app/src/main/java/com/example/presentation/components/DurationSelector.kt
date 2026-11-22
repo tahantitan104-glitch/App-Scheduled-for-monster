@@ -98,7 +98,7 @@ fun DurationSelector(
         modifier = modifier
             .fillMaxWidth()
             .resolveGlassCard(
-                cornerRadius = 24.dp,
+                cornerRadius = 18.dp,
                 borderColor = palette.cardBorder
             )
             .padding(20.dp)
@@ -116,13 +116,13 @@ fun DurationSelector(
                     modifier = Modifier
                         .size(28.dp)
                         .clip(CircleShape)
-                        .background(palette.accentSoftContainer),
+                        .background(palette.surfaceElevated),
                     contentAlignment = Alignment.Center
                 ) {
                     Icon(
                         imageVector = ResolveIcons.Timer,
                         contentDescription = null,
-                        tint = palette.accent,
+                        tint = palette.accentStrong,
                         modifier = Modifier.size(16.dp)
                     )
                 }
@@ -135,14 +135,14 @@ fun DurationSelector(
             Box(
                 modifier = Modifier
                     .clip(CircleShape)
-                    .background(palette.accentSoftContainer)
-                    .border(1.dp, palette.accent.copy(alpha = 0.35f), CircleShape)
+                    .background(palette.surfaceElevated)
+                    .border(1.dp, palette.cardBorder, CircleShape)
                     .padding(horizontal = 10.dp, vertical = 4.dp)
             ) {
                 Text(
                     text = duration.formattedCompact(),
                     style = MaterialTheme.typography.labelMedium.copy(fontFamily = JetBrainsMonoFamily),
-                    color = palette.accent
+                    color = palette.accentStrong
                 )
             }
         }
@@ -154,16 +154,9 @@ fun DurationSelector(
             modifier = Modifier
                 .fillMaxWidth()
                 .pressScale(displayInteraction, pressedScale = 0.985f)
-                .clip(RoundedCornerShape(20.dp))
-                .background(
-                    Brush.verticalGradient(
-                        colors = listOf(
-                            palette.background,
-                            palette.cardBottom
-                        )
-                    )
-                )
-                .border(1.dp, palette.accent.copy(alpha = 0.28f), RoundedCornerShape(20.dp))
+                .clip(RoundedCornerShape(16.dp))
+                .background(palette.surfaceSecondary)
+                .border(1.dp, palette.cardBorder, RoundedCornerShape(16.dp))
                 .clickable(
                     interactionSource = displayInteraction,
                     indication = androidx.compose.material3.ripple()
@@ -195,13 +188,13 @@ fun DurationSelector(
                     modifier = Modifier
                         .size(34.dp)
                         .clip(CircleShape)
-                        .background(palette.accentSoftContainer.copy(alpha = 0.85f)),
+                        .background(palette.surfaceElevated),
                     contentAlignment = Alignment.Center
                 ) {
                     Icon(
                         imageVector = Icons.Outlined.Edit,
                         contentDescription = "Edit duration directly",
-                        tint = palette.accent,
+                        tint = palette.accentStrong,
                         modifier = Modifier.size(16.dp)
                     )
                 }
@@ -232,7 +225,7 @@ fun DurationSelector(
                     fontFamily = JetBrainsMonoFamily,
                     fontWeight = FontWeight.Bold
                 ),
-                color = palette.accent.copy(alpha = 0.7f),
+                color = palette.accentStrong.copy(alpha = 0.78f),
                 modifier = Modifier.padding(top = 16.dp)
             )
 
@@ -257,12 +250,12 @@ fun DurationSelector(
             items(QUICK_PRESETS, key = { it.label }) { preset ->
                 val isSelected = duration.totalMinutes == preset.totalMinutes
                 val chipContainer by animateColorAsState(
-                    targetValue = if (isSelected) palette.accentSoftContainer else palette.background,
+                    targetValue = if (isSelected) palette.surfaceElevated else palette.surfaceSecondary,
                     animationSpec = tween(200),
                     label = "preset_bg"
                 )
                 val chipLabel by animateColorAsState(
-                    targetValue = if (isSelected) palette.accent else palette.textSecondary,
+                    targetValue = if (isSelected) palette.accentStrong else palette.textSecondary,
                     animationSpec = tween(200),
                     label = "preset_fg"
                 )
@@ -289,7 +282,7 @@ fun DurationSelector(
                         enabled = true,
                         selected = isSelected,
                         borderColor = palette.cardBorder,
-                        selectedBorderColor = palette.accent.copy(alpha = 0.8f)
+                        selectedBorderColor = palette.accentSecondary.copy(alpha = 0.65f)
                     ),
                     modifier = Modifier.testTag("${testTagPrefix}_preset_${preset.label}")
                 )
@@ -385,9 +378,9 @@ private fun IndependentWheelPicker(
             modifier = Modifier
                 .fillMaxWidth()
                 .height(itemHeight * 3)
-                .clip(RoundedCornerShape(18.dp))
-                .background(palette.background.copy(alpha = 0.72f))
-                .border(1.dp, palette.cardBorder, RoundedCornerShape(18.dp))
+                .clip(RoundedCornerShape(16.dp))
+                .background(palette.surfaceSecondary)
+                .border(1.dp, palette.cardBorder, RoundedCornerShape(16.dp))
         ) {
             // Center selection lens band
             Box(
@@ -397,16 +390,8 @@ private fun IndependentWheelPicker(
                     .height(itemHeight)
                     .padding(horizontal = 8.dp)
                     .clip(RoundedCornerShape(12.dp))
-                    .background(
-                        Brush.horizontalGradient(
-                            colors = listOf(
-                                palette.accentSoftContainer.copy(alpha = 0.65f),
-                                palette.accentSoftContainer.copy(alpha = 0.92f),
-                                palette.accentSoftContainer.copy(alpha = 0.65f)
-                            )
-                        )
-                    )
-                    .border(1.dp, palette.accent.copy(alpha = 0.55f), RoundedCornerShape(12.dp))
+                    .background(palette.surfaceElevated)
+                    .border(1.dp, palette.accentSecondary.copy(alpha = 0.45f), RoundedCornerShape(12.dp))
             )
 
             LazyColumn(
@@ -461,7 +446,7 @@ private fun IndependentWheelPicker(
                     .height(34.dp)
                     .background(
                         Brush.verticalGradient(
-                            colors = listOf(palette.background.copy(alpha = 0.95f), Color.Transparent)
+                            colors = listOf(palette.surfaceSecondary.copy(alpha = 0.95f), Color.Transparent)
                         )
                     )
             )
@@ -472,7 +457,7 @@ private fun IndependentWheelPicker(
                     .height(34.dp)
                     .background(
                         Brush.verticalGradient(
-                            colors = listOf(Color.Transparent, palette.background.copy(alpha = 0.95f))
+                            colors = listOf(Color.Transparent, palette.surfaceSecondary.copy(alpha = 0.95f))
                         )
                     )
             )
@@ -493,7 +478,7 @@ private fun DirectDurationEntryDialog(
 
     AlertDialog(
         onDismissRequest = onDismiss,
-        containerColor = palette.cardBottom,
+        containerColor = palette.surfaceSecondary,
         title = {
             Text(
                 text = "Set Duration",
@@ -578,7 +563,7 @@ private fun DirectDurationEntryDialog(
                 },
                 modifier = Modifier.testTag("direct_duration_confirm")
             ) {
-                Text("Apply", color = palette.accent)
+                Text("Apply", color = palette.accentStrong)
             }
         },
         dismissButton = {

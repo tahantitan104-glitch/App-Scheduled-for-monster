@@ -29,7 +29,7 @@ import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.outlined.ArrowBack
-import androidx.compose.material.icons.automirrored.outlined.ArrowForward
+import androidx.compose.material.icons.automirrored.outlined.KeyboardArrowRight
 import androidx.compose.material.icons.outlined.CheckCircle
 import androidx.compose.material.icons.outlined.Info
 import androidx.compose.material.icons.outlined.Notifications
@@ -39,7 +39,6 @@ import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.Switch
-import androidx.compose.material3.SwitchDefaults
 import androidx.compose.material3.Text
 import androidx.compose.material3.minimumInteractiveComponentSize
 import androidx.compose.runtime.Composable
@@ -52,7 +51,6 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
-import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.platform.testTag
@@ -87,6 +85,7 @@ import com.example.presentation.components.ResolveIcons
 import com.example.presentation.components.ResolveRunnerLogo
 import com.example.presentation.components.SettingsAccountSyncCard
 import com.example.presentation.components.resolveGlassCard
+import com.example.presentation.components.resolveSwitchColors
 import com.example.sync.AccountSyncUiState
 
 @Composable
@@ -260,21 +259,13 @@ fun SettingsScreen(
                     Row(
                         modifier = Modifier
                             .fillMaxWidth()
-                            .clip(RoundedCornerShape(22.dp))
-                            .background(
-                                Brush.horizontalGradient(
-                                    colors = if (isGuardActive) {
-                                        listOf(palette.accentSoftContainer, palette.cardBottom)
-                                    } else {
-                                        listOf(palette.warnContainer.copy(alpha = 0.7f), palette.cardBottom)
-                                    }
-                                )
-                            )
+                            .clip(RoundedCornerShape(16.dp))
+                            .background(if (isGuardActive) palette.surfaceElevated else palette.warnContainer)
                             .border(
                                 1.dp,
-                                if (isGuardActive) palette.accent.copy(alpha = 0.45f)
+                                if (isGuardActive) palette.success.copy(alpha = 0.45f)
                                 else palette.warn.copy(alpha = 0.45f),
-                                RoundedCornerShape(22.dp)
+                                RoundedCornerShape(16.dp)
                             )
                             .padding(18.dp),
                         verticalAlignment = Alignment.CenterVertically
@@ -283,13 +274,13 @@ fun SettingsScreen(
                             modifier = Modifier
                                 .size(44.dp)
                                 .clip(RoundedCornerShape(14.dp))
-                                .background(palette.background.copy(alpha = 0.7f)),
+                                .background(palette.background),
                             contentAlignment = Alignment.Center
                         ) {
                             Icon(
                                 imageVector = ResolveIcons.Shield,
                                 contentDescription = null,
-                                tint = if (isGuardActive) palette.accent else palette.warn,
+                                tint = if (isGuardActive) palette.success else palette.warn,
                                 modifier = Modifier.size(24.dp)
                             )
                         }
@@ -300,7 +291,7 @@ fun SettingsScreen(
                                 horizontalArrangement = Arrangement.spacedBy(6.dp)
                             ) {
                                 if (isGuardActive) {
-                                    PulsingStatusDot(color = palette.accent, size = 6.dp)
+                                    PulsingStatusDot(color = palette.success, size = 6.dp)
                                 }
                                 Text(
                                     text = tierLabel,
@@ -312,7 +303,7 @@ fun SettingsScreen(
                             Text(
                                 text = "$readyCount / 6 system permissions ready",
                                 style = MaterialTheme.typography.bodyMedium.copy(fontFamily = JetBrainsMonoFamily),
-                                color = if (isGuardActive) palette.accent else palette.warn
+                                color = if (isGuardActive) palette.accentStrong else palette.warn
                             )
                         }
                     }
@@ -355,8 +346,8 @@ fun SettingsScreen(
                         modifier = Modifier
                             .fillMaxWidth()
                             .resolveGlassCard(
-                                cornerRadius = 20.dp,
-                                borderColor = palette.accent.copy(alpha = 0.40f)
+                                cornerRadius = 18.dp,
+                                borderColor = palette.success.copy(alpha = 0.40f)
                             )
                             .padding(16.dp)
                             .testTag("settings_all_permissions_ready_banner"),
@@ -367,13 +358,13 @@ fun SettingsScreen(
                             modifier = Modifier
                                 .size(38.dp)
                                 .clip(RoundedCornerShape(12.dp))
-                                .background(palette.accentSoftContainer),
+                                .background(palette.success),
                             contentAlignment = Alignment.Center
                         ) {
                             Icon(
                                 imageVector = Icons.Outlined.CheckCircle,
                                 contentDescription = null,
-                                tint = palette.accent,
+                                tint = palette.onAccent,
                                 modifier = Modifier.size(20.dp)
                             )
                         }
@@ -386,7 +377,7 @@ fun SettingsScreen(
                             Text(
                                 text = "6 / 6 core guards active & connected.",
                                 style = MaterialTheme.typography.bodySmall,
-                                color = palette.accent
+                                color = palette.accentStrong
                             )
                         }
                     }
@@ -504,6 +495,8 @@ fun SettingsScreen(
                     title = "Device Analysis & Compatibility",
                     subtitle = "Inspect device hardware profile, readiness checks & Device Owner info",
                     icon = ResolveIcons.Devices,
+                    iconBg = palette.slateTealContainer,
+                    iconTint = palette.slateTealStrong,
                     onClick = onOpenDeviceAnalysis,
                     testTag = "settings_open_device_analysis_row"
                 )
@@ -524,7 +517,7 @@ fun SettingsScreen(
                     reason = "Ends an active restricted focus session only when verified.",
                     status = if (hasRecoveryCode) "$recoveryCodeLength-digit Configured" else "Not Configured",
                     isReady = hasRecoveryCode,
-                    statusColor = if (hasRecoveryCode) palette.accent else palette.warn,
+                    statusColor = if (hasRecoveryCode) palette.accentStrong else palette.warn,
                     actionLabel = if (hasRecoveryCode) "Update Code" else "Configure Code",
                     onAction = { showRecoverySetup = true },
                     testTag = "settings_recovery_action"
@@ -541,6 +534,8 @@ fun SettingsScreen(
                     title = "App Lock",
                     subtitle = "Protect selected apps with Pattern, 4/6-digit PIN, or 6-Cell Sequence",
                     icon = ResolveIcons.Shield,
+                    iconBg = palette.cobaltContainer,
+                    iconTint = palette.cobaltStrong,
                     onClick = onOpenAppLock,
                     testTag = "settings_open_applock_row"
                 )
@@ -590,9 +585,11 @@ fun SettingsScreen(
 
             item {
                 SettingsLinkRow(
-                    title = "Vision & Visual Modes",
-                    subtitle = "Enter Flip Clock Mode and inspect OS Dark Mode or Color Inversion support",
+                    title = "Modes",
+                    subtitle = "Enter Flip Clock Mode and inspect Dark Mode status",
                     icon = ResolveIcons.Vision,
+                    iconBg = palette.champagneContainer,
+                    iconTint = palette.champagneStrong,
                     onClick = onOpenModes,
                     testTag = "settings_open_modes_row"
                 )
@@ -668,23 +665,23 @@ fun FocusNotificationControlCard(
         !hasPolicyAccess ->
             Triple("Access Needed", palette.warn, palette.warnContainer)
         protectionState == NotificationProtectionState.ACTIVE ->
-            Triple("Quiet Focus Active", palette.accent, palette.accentSoftContainer)
+            Triple("Quiet Focus Active", palette.onAccent, palette.success)
         protectionState == NotificationProtectionState.PRESERVED_EXISTING_DND ->
-            Triple("Preserved Existing DND", palette.accent, palette.accentSoftContainer)
+            Triple("Preserved Existing DND", palette.onAccent, palette.success)
         protectionState == NotificationProtectionState.OVERRIDDEN_BY_USER ->
             Triple("Overridden by User", palette.warn, palette.warnContainer)
         protectionState == NotificationProtectionState.UNAVAILABLE_NO_PERMISSION ->
             Triple("Access Needed", palette.warn, palette.warnContainer)
         else ->
-            Triple("Inactive", palette.textSecondary, palette.background.copy(alpha = 0.6f))
+            Triple("Inactive", palette.textSecondary, palette.surfaceSecondary)
     }
 
     Column(
         modifier = Modifier
             .fillMaxWidth()
             .resolveGlassCard(
-                cornerRadius = 22.dp,
-                borderColor = if (config.enabled) palette.accent.copy(alpha = 0.36f) else palette.cardBorder
+                cornerRadius = 18.dp,
+                borderColor = if (config.enabled) palette.accentSecondary.copy(alpha = 0.45f) else palette.cardBorder
             )
             .padding(18.dp)
             .testTag("settings_notification_control_card"),
@@ -726,10 +723,7 @@ fun FocusNotificationControlCard(
             Switch(
                 checked = config.enabled,
                 onCheckedChange = onToggleEnabled,
-                colors = SwitchDefaults.colors(
-                    checkedThumbColor = palette.onAccent,
-                    checkedTrackColor = palette.accent
-                ),
+                colors = resolveSwitchColors(),
                 modifier = Modifier.testTag("notif_control_enabled_switch")
             )
         }
@@ -783,7 +777,7 @@ fun SettingSwitchRow(
         modifier = Modifier
             .fillMaxWidth()
             .clip(RoundedCornerShape(14.dp))
-            .background(palette.background.copy(alpha = 0.55f))
+            .background(palette.surfaceSecondary)
             .border(1.dp, palette.cardBorder, RoundedCornerShape(14.dp))
             .padding(horizontal = 12.dp, vertical = 8.dp),
         verticalAlignment = Alignment.CenterVertically,
@@ -804,10 +798,7 @@ fun SettingSwitchRow(
         Switch(
             checked = checked,
             onCheckedChange = onCheckedChange,
-            colors = SwitchDefaults.colors(
-                checkedThumbColor = palette.onAccent,
-                checkedTrackColor = palette.accent
-            ),
+            colors = resolveSwitchColors(),
             modifier = Modifier.testTag(testTag)
         )
     }
@@ -819,9 +810,13 @@ private fun SettingsLinkRow(
     subtitle: String,
     icon: ImageVector,
     onClick: () -> Unit,
-    testTag: String
+    testTag: String,
+    iconBg: Color? = null,
+    iconTint: Color? = null
 ) {
     val palette = LocalResolveExtendedPalette.current
+    val resolvedBg = iconBg ?: palette.surfaceElevated
+    val resolvedTint = iconTint ?: palette.accentStrong
     Row(
         modifier = Modifier
             .fillMaxWidth()
@@ -836,13 +831,13 @@ private fun SettingsLinkRow(
             modifier = Modifier
                 .size(40.dp)
                 .clip(RoundedCornerShape(12.dp))
-                .background(palette.accentSoftContainer),
+                .background(resolvedBg),
             contentAlignment = Alignment.Center
         ) {
             Icon(
                 imageVector = icon,
                 contentDescription = null,
-                tint = palette.accent,
+                tint = resolvedTint,
                 modifier = Modifier.size(20.dp)
             )
         }
@@ -859,9 +854,9 @@ private fun SettingsLinkRow(
             )
         }
         Icon(
-            imageVector = Icons.AutoMirrored.Outlined.ArrowForward,
+            imageVector = Icons.AutoMirrored.Outlined.KeyboardArrowRight,
             contentDescription = "Open $title",
-            tint = palette.accent,
+            tint = palette.textMuted,
             modifier = Modifier.size(18.dp)
         )
     }
@@ -930,8 +925,8 @@ fun PermissionItemCard(
         if (actionLabel != null) {
             OutlinedButton(
                 onClick = onAction,
-                colors = ButtonDefaults.outlinedButtonColors(contentColor = palette.accent),
-                border = BorderStroke(1.dp, palette.accent.copy(alpha = 0.55f)),
+                colors = ButtonDefaults.outlinedButtonColors(contentColor = palette.accentStrong),
+                border = BorderStroke(1.dp, palette.accent.copy(alpha = 0.70f)),
                 shape = RoundedCornerShape(12.dp),
                 modifier = Modifier.testTag(testTag)
             ) {
@@ -955,7 +950,7 @@ fun SettingsSectionHeader(
         Icon(
             imageVector = icon,
             contentDescription = null,
-            tint = palette.accent,
+            tint = palette.accentStrong,
             modifier = Modifier.size(15.dp)
         )
         Text(
@@ -964,7 +959,7 @@ fun SettingsSectionHeader(
                 letterSpacing = 1.25.sp,
                 fontWeight = FontWeight.SemiBold
             ),
-            color = palette.accent
+            color = palette.accentStrong
         )
     }
 }
@@ -983,8 +978,8 @@ private fun CraftedSignatureCard(
         modifier = Modifier
             .fillMaxWidth()
             .resolveGlassCard(
-                cornerRadius = 22.dp,
-                borderColor = palette.accent.copy(alpha = 0.38f)
+                cornerRadius = 16.dp,
+                borderColor = palette.cardBorder
             )
             .padding(20.dp)
             .testTag("settings_about_card"),
@@ -1022,7 +1017,7 @@ private fun CraftedSignatureCard(
                             fontStyle = FontStyle.Italic,
                             fontWeight = FontWeight.Medium
                         ),
-                        color = palette.accent,
+                        color = palette.accentStrong,
                         startTyping = hasEnteredView,
                         startDelayMillis = 80,
                         typingDurationMillis = 820,
@@ -1039,11 +1034,11 @@ private fun CraftedSignatureCard(
                     fontFamily = JetBrainsMonoFamily,
                     fontWeight = FontWeight.Medium
                 ),
-                color = palette.accentStrong,
+                color = palette.champagneStrong,
                 modifier = Modifier
                     .clip(CircleShape)
-                    .background(palette.accentSoftContainer)
-                    .border(1.dp, palette.accent.copy(alpha = 0.30f), CircleShape)
+                    .background(palette.champagneContainer)
+                    .border(1.dp, palette.champagne.copy(alpha = 0.35f), CircleShape)
                     .padding(horizontal = 10.dp, vertical = 4.dp)
             )
         }
@@ -1052,15 +1047,7 @@ private fun CraftedSignatureCard(
             modifier = Modifier
                 .fillMaxWidth()
                 .height(1.dp)
-                .background(
-                    Brush.horizontalGradient(
-                        colors = listOf(
-                            Color.Transparent,
-                            palette.accent.copy(alpha = 0.42f),
-                            Color.Transparent
-                        )
-                    )
-                )
+                .background(palette.divider)
         )
 
         Row(
@@ -1092,8 +1079,8 @@ private fun CraftedSignatureCard(
             OutlinedButton(
                 onClick = onOpenAboutResolve,
                 shape = CircleShape,
-                border = BorderStroke(1.dp, palette.accent.copy(alpha = 0.35f)),
-                colors = ButtonDefaults.outlinedButtonColors(contentColor = palette.accent),
+                border = BorderStroke(1.dp, palette.cardBorder),
+                colors = ButtonDefaults.outlinedButtonColors(contentColor = palette.accentStrong),
                 contentPadding = PaddingValues(horizontal = 12.dp, vertical = 6.dp),
                 modifier = Modifier.testTag("settings_open_about_btn")
             ) {

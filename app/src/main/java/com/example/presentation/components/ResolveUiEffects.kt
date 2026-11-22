@@ -1,6 +1,9 @@
 package com.example.presentation.components
 
+import android.provider.Settings
+import androidx.compose.animation.core.CubicBezierEasing
 import androidx.compose.animation.core.EaseInOutSine
+import androidx.compose.animation.core.FiniteAnimationSpec
 import androidx.compose.animation.core.RepeatMode
 import androidx.compose.animation.core.Spring
 import androidx.compose.animation.core.animateFloat
@@ -11,7 +14,6 @@ import androidx.compose.animation.core.spring
 import androidx.compose.animation.core.tween
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
-import androidx.compose.foundation.gestures.detectTapGestures
 import androidx.compose.foundation.interaction.MutableInteractionSource
 import androidx.compose.foundation.interaction.collectIsPressedAsState
 import androidx.compose.foundation.layout.Arrangement
@@ -29,10 +31,15 @@ import androidx.compose.material3.Button
 import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.SwitchColors
+import androidx.compose.material3.SwitchDefaults
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.composed
@@ -43,11 +50,88 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.hapticfeedback.HapticFeedbackType
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalHapticFeedback
 import androidx.compose.ui.unit.Dp
+import androidx.compose.ui.unit.IntOffset
 import androidx.compose.ui.unit.dp
+import androidx.lifecycle.Lifecycle
+import androidx.lifecycle.LifecycleEventObserver
+import androidx.lifecycle.compose.LocalLifecycleOwner
 import com.example.designsystem.LocalResolveExtendedPalette
 import com.example.designsystem.ResolveColors
+
+object ResolveMotion {
+    const val STANDARD_DURATION_MS = 260
+    const val SUBSCREEN_DURATION_MS = 290
+    const val EXIT_DURATION_MS = 190
+    const val REDUCED_DURATION_MS = 95
+
+    val StandardEasing = CubicBezierEasing(0.22f, 1.0f, 0.36f, 1.0f)
+
+    fun <T> standardTween(reducedMotion: Boolean): FiniteAnimationSpec<T> = tween(
+        durationMillis = if (reducedMotion) REDUCED_DURATION_MS else STANDARD_DURATION_MS,
+        easing = StandardEasing
+    )
+
+    fun <T> subScreenTween(reducedMotion: Boolean): FiniteAnimationSpec<T> = tween(
+        durationMillis = if (reducedMotion) REDUCED_DURATION_MS else SUBSCREEN_DURATION_MS,
+        easing = StandardEasing
+    )
+
+    fun <T> fastTween(reducedMotion: Boolean): FiniteAnimationSpec<T> = tween(
+        durationMillis = if (reducedMotion) REDUCED_DURATION_MS else 220,
+        easing = StandardEasing
+    )
+
+    fun <T> exitTween(reducedMotion: Boolean): FiniteAnimationSpec<T> = tween(
+        durationMillis = if (reducedMotion) REDUCED_DURATION_MS else EXIT_DURATION_MS,
+        easing = StandardEasing
+    )
+
+    fun intOffsetSlideTween(reducedMotion: Boolean): FiniteAnimationSpec<IntOffset> = tween(
+        durationMillis = if (reducedMotion) REDUCED_DURATION_MS else SUBSCREEN_DURATION_MS,
+        easing = StandardEasing
+    )
+
+    fun gentleSpring(): FiniteAnimationSpec<Float> = spring(
+        dampingRatio = 0.84f,
+        stiffness = Spring.StiffnessMediumLow
+    )
+}
+
+fun isSystemReducedMotionEnabled(context: android.content.Context): Boolean = runCatching {
+    val animatorScale = Settings.Global.getFloat(
+        context.contentResolver,
+        Settings.Global.ANIMATOR_DURATION_SCALE,
+        1f
+    )
+    val transitionScale = Settings.Global.getFloat(
+        context.contentResolver,
+        Settings.Global.TRANSITION_ANIMATION_SCALE,
+        1f
+    )
+    animatorScale <= 0f || transitionScale <= 0f
+}.getOrDefault(false)
+
+@Composable
+fun rememberEffectiveReducedMotion(appReducedMotion: Boolean): Boolean {
+    val context = LocalContext.current
+    val lifecycleOwner = LocalLifecycleOwner.current
+    var osReduced by remember(context) { mutableStateOf(isSystemReducedMotionEnabled(context)) }
+
+    DisposableEffect(lifecycleOwner, context) {
+        val observer = LifecycleEventObserver { _, event ->
+            if (event == Lifecycle.Event.ON_RESUME) {
+                osReduced = isSystemReducedMotionEnabled(context)
+            }
+        }
+        lifecycleOwner.lifecycle.addObserver(observer)
+        onDispose { lifecycleOwner.lifecycle.removeObserver(observer) }
+    }
+
+    return appReducedMotion || osReduced
+}
 
 @Composable
 fun Modifier.pressScale(
@@ -126,13 +210,13 @@ fun TactilePrimaryButton(
     enabled: Boolean = true,
     containerColor: Color = Color.Unspecified,
     contentColor: Color = Color.Unspecified,
-    cornerRadius: Dp = 18.dp,
-    height: Dp = 56.dp,
+    cornerRadius: Dp = 16.dp,
+    height: Dp = 54.dp,
     content: @Composable RowScope.() -> Unit
 ) {
     val palette = LocalResolveExtendedPalette.current
-    val resolvedContainer = if (containerColor == Color.Unspecified) palette.accent else containerColor
-    val resolvedContent = if (contentColor == Color.Unspecified) palette.onAccent else contentColor
+    val resolvedContainer = if (containerColor == Color.Unspecified) palette.primaryButton else containerColor
+    val resolvedContent = if (contentColor == Color.Unspecified) palette.onPrimaryButton else contentColor
     val haptic = LocalHapticFeedback.current
     val interactionSource = remember { MutableInteractionSource() }
 
@@ -145,6 +229,14 @@ fun TactilePrimaryButton(
         interactionSource = interactionSource,
         shape = RoundedCornerShape(cornerRadius),
         contentPadding = PaddingValues(horizontal = 20.dp, vertical = 12.dp),
+        border = if (enabled) {
+            androidx.compose.foundation.BorderStroke(
+                width = 1.dp,
+                color = palette.accentStrong.copy(alpha = 0.25f)
+            )
+        } else {
+            androidx.compose.foundation.BorderStroke(1.dp, palette.cardBorder)
+        },
         colors = ButtonDefaults.buttonColors(
             containerColor = resolvedContainer,
             contentColor = resolvedContent,
@@ -152,36 +244,26 @@ fun TactilePrimaryButton(
             disabledContentColor = palette.textMuted
         ),
         elevation = ButtonDefaults.buttonElevation(
-            defaultElevation = 4.dp,
-            pressedElevation = 1.dp,
+            defaultElevation = 0.dp,
+            pressedElevation = 0.dp,
             disabledElevation = 0.dp
         ),
         modifier = modifier
             .fillMaxWidth()
             .height(height)
             .pressScale(interactionSource, pressedScale = 0.975f)
-            .then(
-                if (enabled) {
-                    Modifier.shadow(
-                        elevation = 14.dp,
-                        shape = RoundedCornerShape(cornerRadius),
-                        ambientColor = resolvedContainer.copy(alpha = 0.25f),
-                        spotColor = resolvedContainer.copy(alpha = 0.3f)
-                    )
-                } else Modifier
-            )
     ) {
         content()
     }
 }
 
 fun resolveCardBrush(
-    topColor: Color = ResolveColors.ForestSurfaceElevated.copy(alpha = 0.85f),
-    bottomColor: Color = ResolveColors.ForestSurface
+    topColor: Color = ResolveColors.ForestSurface,
+    bottomColor: Color = ResolveColors.ForestSecondary
 ): Brush = Brush.verticalGradient(colors = listOf(topColor, bottomColor))
 
 fun Modifier.resolveGlassCard(
-    cornerRadius: Dp = 22.dp,
+    cornerRadius: Dp = 18.dp,
     borderColor: Color? = null
 ): Modifier = composed {
     val palette = LocalResolveExtendedPalette.current
@@ -197,6 +279,23 @@ fun Modifier.resolveGlassCard(
 }
 
 @Composable
+fun resolveSwitchColors(): SwitchColors {
+    val palette = LocalResolveExtendedPalette.current
+    return SwitchDefaults.colors(
+        checkedThumbColor = palette.onPrimaryButton,
+        checkedTrackColor = palette.accent,
+        checkedBorderColor = Color.Transparent,
+        uncheckedThumbColor = Color(0xFF93A39B),
+        uncheckedTrackColor = palette.controlSurface,
+        uncheckedBorderColor = palette.controlBorder,
+        disabledCheckedThumbColor = palette.onPrimaryButton.copy(alpha = 0.6f),
+        disabledCheckedTrackColor = palette.accent.copy(alpha = 0.45f),
+        disabledUncheckedThumbColor = palette.textMuted,
+        disabledUncheckedTrackColor = palette.cardBottom
+    )
+}
+
+@Composable
 fun FeatureTipNote(
     text: String,
     icon: ImageVector,
@@ -204,7 +303,7 @@ fun FeatureTipNote(
     tint: Color? = null
 ) {
     val palette = LocalResolveExtendedPalette.current
-    val resolvedTint = tint ?: palette.accent
+    val resolvedTint = tint ?: palette.accentSecondary
     Row(
         modifier = modifier
             .fillMaxWidth()
@@ -215,7 +314,7 @@ fun FeatureTipNote(
         Icon(
             imageVector = icon,
             contentDescription = null,
-            tint = resolvedTint.copy(alpha = 0.85f),
+            tint = resolvedTint.copy(alpha = 0.90f),
             modifier = Modifier.size(14.dp)
         )
         Text(

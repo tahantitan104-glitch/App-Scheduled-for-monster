@@ -176,26 +176,21 @@ class ResolveArchitectureModulesRobolectricTest {
     }
 
     @Test
-    fun `vision hub enforces dark-only palette, opens flip clock on Enter, and separates Dark Mode vs Color Inversion sections`() {
+    fun `vision hub enforces dark-only palette, opens flip clock on Enter, and checks Dark Mode compatibility`() {
         var capturedIsDark: Boolean? = null
         var flipClockEntered = false
         val sampleApps = listOf(
+            InstalledAppInfo(packageName = context.packageName, appName = "RESOLVE"),
             InstalledAppInfo(packageName = "com.example.chat", appName = "Chat App")
         )
         var darkErr = ""
-        var invErr = ""
 
         val report = ForceDarkCapabilityReport(
             androidSdkInt = 36,
             forceDarkSupportLevel = ForceDarkSupportLevel.PARTIALLY_SUPPORTED,
-            colorInversionSupportLevel = ForceDarkSupportLevel.UNSUPPORTED,
             isSystemNightModeActive = true,
-            isColorInversionEnabledInOs = false,
             perAppDarkModeSupported = false,
-            perAppColorInversionSupported = false,
-            forceDarkSummary = "Standard Android does not permit per-app third-party Dark Mode toggling.",
-            colorInversionSummary = "Color Inversion is device-wide only.",
-            restoreInstructions = emptyList()
+            forceDarkSummary = "RESOLVE runs strictly in native Dark Mode on every phone."
         )
 
         composeRule.setContent {
@@ -205,38 +200,26 @@ class ResolveArchitectureModulesRobolectricTest {
                     report = report,
                     installedApps = sampleApps,
                     darkModeAppPrefs = emptyMap(),
-                    colorInversionAppPrefs = emptyMap(),
                     loadAppIcon = { null },
                     onEnterFlipClock = { flipClockEntered = true },
                     onAttemptAppDarkMode = { pkg, _ ->
                         val res = ForceDarkCapabilityHelper.tryApplyPerAppDarkMode(pkg, report.supportedDarkModeApps)
                         if (res is ModeOperationResult.Unsupported) darkErr = res.reason
                     },
-                    onAttemptAppColorInversion = { pkg, _ ->
-                        val res = ForceDarkCapabilityHelper.tryApplyPerAppColorInversion(pkg, report.supportedColorInversionApps)
-                        if (res is ModeOperationResult.Unsupported) invErr = res.reason
-                    },
                     onOpenDisplaySettings = {},
-                    onOpenAccessibilitySettings = {},
                     onResetAllModes = {}
                 )
             }
         }
         composeRule.waitForIdle()
         assertEquals(true, capturedIsDark)
-        assertTrue(composeRule.onAllNodesWithTag("modes_resolve_appearance_card").fetchSemanticsNodes().isEmpty())
+        assertTrue(composeRule.onAllNodesWithTag("modes_color_inversion_card").fetchSemanticsNodes().isEmpty())
         composeRule.onNodeWithText("Modes").assertIsDisplayed()
         composeRule.onNodeWithTag("vision_flip_clock_card").assertIsDisplayed()
         composeRule.onNodeWithTag("vision_flip_clock_enter_btn").performClick()
         assertTrue(flipClockEntered)
 
         composeRule.onNodeWithTag("modes_app_dark_card").assertIsDisplayed()
-        composeRule.onNodeWithTag("vision_tab_color_inversion").performClick()
-        composeRule.waitForIdle()
-        composeRule.onNodeWithTag("modes_color_inversion_card").assertIsDisplayed()
-
-        composeRule.onNodeWithTag("vision_tab_dark_mode").performClick()
-        composeRule.waitForIdle()
         composeRule.onNodeWithTag("modes_list")
             .performScrollToNode(hasTestTag("modes_dark_check_apps_btn"))
         composeRule.onNodeWithTag("modes_dark_check_apps_btn").performClick()
@@ -249,16 +232,8 @@ class ResolveArchitectureModulesRobolectricTest {
         composeRule.onNodeWithTag("mode_app_switch_com.example.chat").performClick()
         composeRule.waitForIdle()
         assertEquals(
-            "Not Supported — this app manages Dark Mode independently on Android.",
+            "Not Supported per-app on Android — turn on System Dark Theme in Display Settings so compatible apps switch to Dark Mode.",
             darkErr
-        )
-        assertEquals("", invErr)
-
-        assertEquals(
-            ModeOperationResult.Unsupported(
-                "Not Supported per-app on non-root Android. Use In-App Inversion Preview or System Accessibility Color Inversion with consent."
-            ),
-            ForceDarkCapabilityHelper.tryApplyPerAppColorInversion("com.example.chat")
         )
     }
 
@@ -437,18 +412,24 @@ class ResolveArchitectureModulesRobolectricTest {
             }
         }
         composeRule.waitForIdle()
-        // All 6 permissions ready -> entire PERMISSIONS header and rows are hidden
-        assertTrue(composeRule.onAllNodesWithText("PERMISSIONS").fetchSemanticsNodes().isEmpty())
+        // All 6 permissions ready -> compact 6/6 Done summary card stays visible, missing rows stay permanently hidden
+        composeRule.onNodeWithTag("more_list").performScrollToNode(hasTestTag("more_permissions_done_card"))
+        composeRule.onNodeWithTag("more_permissions_done_card").assertIsDisplayed()
+        composeRule.onNodeWithText("All 6 Permissions Enabled").assertIsDisplayed()
+        composeRule.onNodeWithText("6 / 6 Done").assertIsDisplayed()
+        assertTrue(composeRule.onAllNodesWithTag("more_permissions_toggle_button").fetchSemanticsNodes().isEmpty())
         assertTrue(composeRule.onAllNodesWithTag("settings_accessibility_action").fetchSemanticsNodes().isEmpty())
 
-        // Unified 5-item System Health card routes to respective DeviceAnalysis sections
-        composeRule.onNodeWithTag("more_list").performScrollToNode(hasTestTag("more_health_status"))
+        // System Health starts collapsed (options hidden) and expands to 3 focused items
+        composeRule.onNodeWithTag("more_list").performScrollToNode(hasTestTag("more_system_health_toggle_button"))
+        assertTrue(composeRule.onAllNodesWithTag("more_system_health_expanded_content").fetchSemanticsNodes().isEmpty())
+        composeRule.onNodeWithTag("more_system_health_toggle_button").performClick()
+        composeRule.waitForIdle()
+        composeRule.onNodeWithTag("more_list").performScrollToNode(hasTestTag("more_health_repair"))
         composeRule.onNodeWithTag("more_health_status").performClick()
         composeRule.onNodeWithTag("more_health_analysis").performClick()
-        composeRule.onNodeWithTag("more_health_hardware").performClick()
-        composeRule.onNodeWithTag("more_health_diagnostics").performClick()
         composeRule.onNodeWithTag("more_health_repair").performClick()
-        assertEquals(listOf("status", "analysis", "hardware", "diagnostics", "repair"), clickedFocusSections)
+        assertEquals(listOf("status", "analysis", "repair"), clickedFocusSections)
 
         // Focus Settings: Landscape Tilt Mode default OFF, toggles ON cleanly
         composeRule.onNodeWithTag("more_list").performScrollToNode(hasTestTag("more_landscape_tilt_switch"))
@@ -456,12 +437,98 @@ class ResolveArchitectureModulesRobolectricTest {
         composeRule.waitForIdle()
         assertTrue(tiltMode)
 
-        // Inline About RESOLVE expands in-place with Developer credit
-        composeRule.onNodeWithTag("more_list").performScrollToNode(hasTestTag("more_about_toggle_button"))
-        composeRule.onNodeWithTag("more_about_toggle_button").performClick()
-        composeRule.waitForIdle()
+        // Inline About RESOLVE shows Developed by Tahan Official BEFORE expanding, then expands cleanly
         composeRule.onNodeWithTag("more_list").performScrollToNode(hasTestTag("more_developer_credit"))
         composeRule.onNodeWithTag("more_developer_credit").assertIsDisplayed()
+        assertTrue(composeRule.onAllNodesWithTag("more_about_expanded_content").fetchSemanticsNodes().isEmpty())
+        composeRule.onNodeWithTag("more_about_toggle_button").performClick()
+        composeRule.waitForIdle()
+        composeRule.onNodeWithTag("more_list").performScrollToNode(hasTestTag("more_about_expanded_content"))
+        composeRule.onNodeWithTag("more_about_expanded_content").assertIsDisplayed()
+    }
+
+    @Test
+    fun `more hub permissions card expands missing items while incomplete and becomes 6-of-6 Done card when granted`() {
+        var caps by mutableStateOf(
+            SystemCapabilityStatus(
+                isAccessibilityServiceEnabled = true,
+                isAccessibilityEnabledInSettings = true,
+                isAccessibilityServiceConnected = true,
+                canDrawOverlays = false,
+                hasUsageStatsAccess = false,
+                exactAlarmRequiredByOs = false,
+                canScheduleExactAlarms = true,
+                notificationsEnabled = true,
+                isIgnoringBatteryOptimizations = true
+            )
+        )
+        composeRule.setContent {
+            ResolveTheme {
+                MoreScreen(
+                    capabilities = caps,
+                    protectionStatus = ProtectionStatus.ProtectionLimited("Action", "Missing", "Focus"),
+                    deviceAnalysisReport = com.example.domain.model.DeviceAnalysisReport(),
+                    hasRecoveryCode = true,
+                    recoveryCodeLength = 16,
+                    landscapeTiltMode = false,
+                    notificationConfig = NotificationControlConfig(),
+                    notificationProtectionState = NotificationProtectionState.INACTIVE,
+                    mascotPreferences = com.example.domain.model.MascotPreferences(reducedMotionEnabled = true),
+                    accountSyncState = com.example.sync.AccountSyncUiState(),
+                    generateRandomCode = { "1".repeat(it) },
+                    onSaveRecoveryCode = {},
+                    onToggleLandscapeTiltMode = {},
+                    onRefreshCapabilities = {},
+                    onProtectionAction = {},
+                    onOpenDeviceAnalysis = {},
+                    onOpenAccessibilitySettings = {},
+                    onOpenOverlaySettings = {},
+                    onOpenUsageAccessSettings = {},
+                    onOpenBatteryOptimizationSettings = {},
+                    onOpenExactAlarmSettings = {},
+                    onOpenNotificationSettings = {},
+                    onOpenNotificationPolicySettings = {},
+                    onToggleNotificationControlEnabled = {},
+                    onToggleNotificationControlAutoActivate = {},
+                    onToggleNotificationControlAllowCalls = {},
+                    onToggleNotificationControlAllowAlarms = {},
+                    onSelectMascot = {},
+                    onToggleReducedMotion = {},
+                    onToggleFocusMessagesEnabled = {},
+                    onSelectFocusMessageFrequency = {},
+                    onAddFocusMessage = {},
+                    onEditFocusMessage = { _, _ -> },
+                    onDeleteFocusMessage = {},
+                    onRestoreDefaultFocusMessages = {},
+                    onToggleLockReminderEnabled = {},
+                    onSaveLockReminderText = {},
+                    onSelectLockReminderStyle = {},
+                    onSignInGoogle = {},
+                    onSignOutGoogle = {},
+                    onToggleDeviceSync = {},
+                    onUpdateProfileName = {},
+                    onUpdateProfilePhoto = {},
+                    onClearProfilePhoto = {},
+                    onUnlinkDevice = {}
+                )
+            }
+        }
+        composeRule.waitForIdle()
+        composeRule.onNodeWithTag("more_list").performScrollToNode(hasTestTag("more_permissions_toggle_button"))
+        composeRule.onNodeWithText("4 / 6 Permissions Enabled").assertIsDisplayed()
+        assertTrue(composeRule.onAllNodesWithTag("more_permissions_expanded_content").fetchSemanticsNodes().isEmpty())
+
+        composeRule.onNodeWithTag("more_permissions_toggle_button").performClick()
+        composeRule.waitForIdle()
+        composeRule.onNodeWithTag("more_list").performScrollToNode(hasTestTag("settings_usage_access_action"))
+        composeRule.onNodeWithTag("settings_overlay_action").assertIsDisplayed()
+        composeRule.onNodeWithTag("settings_usage_access_action").assertIsDisplayed()
+
+        // Once all 6 permissions are granted, card switches to 6 / 6 Done summary card and hides expandable list
+        caps = caps.copy(canDrawOverlays = true, hasUsageStatsAccess = true)
+        composeRule.waitForIdle()
+        composeRule.onNodeWithTag("more_permissions_done_card").assertIsDisplayed()
+        assertTrue(composeRule.onAllNodesWithTag("more_permissions_expanded_content").fetchSemanticsNodes().isEmpty())
     }
 
     @Test
@@ -581,44 +648,26 @@ class ResolveArchitectureModulesRobolectricTest {
     }
 
     @Test
-    fun `mathematical RGB color inversion and DisplayModeAvailability stay separated from Dark Mode`() {
-        assertEquals(Triple(255, 255, 255), ForceDarkCapabilityHelper.invertRgbTriplet(0, 0, 0))
-        assertEquals(Triple(0, 255, 255), ForceDarkCapabilityHelper.invertRgbTriplet(255, 0, 0))
-        assertEquals(Triple(255, 255, 0), ForceDarkCapabilityHelper.invertRgbTriplet(0, 0, 255))
-        assertEquals(Triple(255, 0, 255), ForceDarkCapabilityHelper.invertRgbTriplet(0, 255, 0))
-
-        val matrix = ForceDarkCapabilityHelper.RGB_INVERSION_COLOR_MATRIX
-        assertEquals(20, matrix.size)
-        assertEquals(-1f, matrix[0], 0.001f)
-        assertEquals(255f, matrix[4], 0.001f)
-        assertEquals(-1f, matrix[6], 0.001f)
-        assertEquals(255f, matrix[9], 0.001f)
-        assertEquals(-1f, matrix[12], 0.001f)
-        assertEquals(255f, matrix[14], 0.001f)
-        assertEquals(1f, matrix[18], 0.001f)
-
+    fun `dark mode capability helper marks RESOLVE native dark active and other apps as managed by OS`() {
         val report = ForceDarkCapabilityHelper.inspect(context)
         assertEquals(
-            com.example.platform.DisplayModeAvailability.COLOR_INVERSION_AVAILABLE,
-            ForceDarkCapabilityHelper.resolveColorInversionStatus(
+            com.example.platform.DisplayModeAvailability.DARK_MODE_AVAILABLE,
+            ForceDarkCapabilityHelper.resolveDarkModeStatus(
                 packageName = context.packageName,
                 report = report,
-                inAppPreviewActive = false,
-                isOwnAppPackage = true
-            )
-        )
-        assertEquals(
-            com.example.platform.DisplayModeAvailability.COLOR_INVERSION_ACTIVE,
-            ForceDarkCapabilityHelper.resolveColorInversionStatus(
-                packageName = context.packageName,
-                report = report,
-                inAppPreviewActive = true,
-                isOwnAppPackage = true
+                ownPackageName = context.packageName
             )
         )
         assertEquals(
             com.example.platform.DisplayModeAvailability.NOT_SUPPORTED,
-            ForceDarkCapabilityHelper.resolveDarkModeStatus("com.other.app", report)
+            ForceDarkCapabilityHelper.resolveDarkModeStatus(
+                packageName = "com.other.app",
+                report = report,
+                ownPackageName = context.packageName
+            )
+        )
+        assertTrue(
+            ForceDarkCapabilityHelper.tryApplyPerAppDarkMode("com.other.app") is ModeOperationResult.Unsupported
         )
     }
 }

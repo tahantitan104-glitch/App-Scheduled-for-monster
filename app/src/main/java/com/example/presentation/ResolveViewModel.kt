@@ -45,6 +45,8 @@ import com.example.domain.startup.StartupStage
 import com.example.platform.ForceDarkCapabilityHelper
 import com.example.platform.ForceDarkCapabilityReport
 import com.example.platform.ModeOperationResult
+import com.example.presentation.components.ResolveNotificationTone
+import com.example.presentation.components.inferNotificationTone
 import com.example.session.EngineStartResult
 import com.example.sync.AccountSyncUiState
 import java.util.UUID
@@ -62,7 +64,12 @@ import java.time.DayOfWeek
 import java.time.LocalDate
 
 sealed interface UiEvent {
-    data class ShowMessage(val message: String) : UiEvent
+    data class ShowMessage(
+        val message: String,
+        val tone: ResolveNotificationTone = inferNotificationTone(message),
+        val actionLabel: String? = null,
+        val showCloseButton: Boolean = false
+    ) : UiEvent
     data object NavigateBackToHome : UiEvent
 }
 
@@ -148,9 +155,6 @@ class ResolveViewModel(
     val darkModeAppPrefs: StateFlow<Map<String, Boolean>> = container.preferencesRepository.darkModeAppPrefsFlow
         .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), emptyMap())
 
-    val colorInversionAppPrefs: StateFlow<Map<String, Boolean>> = container.preferencesRepository.colorInversionAppPrefsFlow
-        .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), emptyMap())
-
     val notificationControlConfig: StateFlow<NotificationControlConfig> =
         container.preferencesRepository.notificationControlConfigFlow
             .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), NotificationControlConfig())
@@ -158,18 +162,6 @@ class ResolveViewModel(
     val landscapeTiltMode: StateFlow<Boolean> =
         container.preferencesRepository.landscapeTiltModeFlow
             .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), false)
-
-    val inAppColorInversionEnabled: StateFlow<Boolean> =
-        container.preferencesRepository.inAppColorInversionEnabledFlow
-            .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), false)
-
-    val colorInversionConsentGranted: StateFlow<Boolean> =
-        container.preferencesRepository.colorInversionConsentGrantedFlow
-            .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), false)
-
-    val priorOsColorInversionState: StateFlow<Int> =
-        container.preferencesRepository.priorOsColorInversionStateFlow
-            .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), -1)
 
     private val _deviceAnalysisReport = MutableStateFlow(DeviceAnalysisReport())
     val deviceAnalysisReport: StateFlow<DeviceAnalysisReport> = _deviceAnalysisReport.asStateFlow()
@@ -606,38 +598,9 @@ class ResolveViewModel(
         }
     }
 
-    fun attemptAppColorInversion(packageName: String, enable: Boolean) {
-        viewModelScope.launch {
-            val report = ForceDarkCapabilityHelper.inspect(getApplication())
-            when (val res = ForceDarkCapabilityHelper.tryApplyPerAppColorInversion(packageName, report.supportedColorInversionApps)) {
-                ModeOperationResult.Applied ->
-                    container.preferencesRepository.setAppColorInversionPreference(packageName, enable)
-                is ModeOperationResult.Unsupported ->
-                    _events.emit(UiEvent.ShowMessage(res.reason))
-            }
-        }
-    }
-
     fun setLandscapeTiltMode(enabled: Boolean) {
         viewModelScope.launch {
             container.preferencesRepository.setLandscapeTiltMode(enabled)
-        }
-    }
-
-    fun setInAppColorInversionEnabled(enabled: Boolean) {
-        viewModelScope.launch {
-            container.preferencesRepository.setInAppColorInversionEnabled(enabled)
-        }
-    }
-
-    fun grantColorInversionConsentAndOpenAccessibility() {
-        viewModelScope.launch {
-            val currentOs = if (ForceDarkCapabilityHelper.isAccessibilityInversionEnabled(getApplication())) 1 else 0
-            if (priorOsColorInversionState.value == -1) {
-                container.preferencesRepository.setPriorOsColorInversionState(currentOs)
-            }
-            container.preferencesRepository.setColorInversionConsentGranted(true)
-            ForceDarkCapabilityHelper.openAccessibilityDisplaySettings(getApplication())
         }
     }
 
@@ -648,7 +611,7 @@ class ResolveViewModel(
     fun resetAllModes() {
         viewModelScope.launch {
             container.preferencesRepository.resetAllModeAppPreferences()
-            _events.emit(UiEvent.ShowMessage("Visual preferences reset to defaults."))
+            _events.emit(UiEvent.ShowMessage("Mode preferences reset to defaults."))
         }
     }
 

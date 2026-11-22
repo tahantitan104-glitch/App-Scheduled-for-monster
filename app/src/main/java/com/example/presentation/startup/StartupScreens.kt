@@ -46,15 +46,14 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.alpha
 import androidx.compose.ui.draw.clip
-import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
-import com.example.designsystem.PlusJakartaSansFamily
-import com.example.designsystem.ResolveColors
+import com.example.designsystem.InterFamily
+import com.example.designsystem.LocalResolveExtendedPalette
 import com.example.domain.model.SystemCapabilityStatus
 import com.example.presentation.components.FocusSymbolMark
 import com.example.presentation.components.RecoveryCodeSetupDialog
@@ -66,7 +65,7 @@ import kotlinx.coroutines.launch
 
 /**
  * Minimal Brand Intro (0.5–0.8s, ~600ms total):
- * Stage 1: Clean Deep Forest Green (#10251F) canvas seamlessly matching Theme.Resolve.Starting
+ * Stage 1: Clean Deep Forest (#040B08) canvas seamlessly matching Theme.Resolve.Starting
  * Stage 2: Smooth pure-flat Focus Ring reveal + crisp Center Dot entrance
  * Stage 3: Brief "RESOLVE" wordmark fade-in
  * Stage 4: Fast, non-blocking handoff to Home / First-Time Welcome / Required Setup
@@ -103,10 +102,11 @@ fun BrandIntroScreen(
         latestOnIntroCompleted()
     }
 
+    val palette = LocalResolveExtendedPalette.current
     Box(
         modifier = modifier
             .fillMaxSize()
-            .background(ResolveColors.ForestBrandDeep)
+            .background(palette.surfaceSecondary)
             .windowInsetsPadding(WindowInsets.safeDrawing)
             .testTag("brand_intro_screen"),
         contentAlignment = Alignment.Center
@@ -128,12 +128,12 @@ fun BrandIntroScreen(
             Text(
                 text = "RESOLVE",
                 style = MaterialTheme.typography.headlineLarge.copy(
-                    fontFamily = PlusJakartaSansFamily,
+                    fontFamily = InterFamily,
                     fontSize = 24.sp,
                     fontWeight = FontWeight.SemiBold,
                     letterSpacing = 5.sp
                 ),
-                color = ResolveColors.TextPrimary,
+                color = palette.textPrimary,
                 textAlign = TextAlign.Center,
                 modifier = Modifier
                     .alpha(brandAlpha.value)
@@ -153,6 +153,7 @@ fun FirstTimeWelcomeScreen(
     onContinue: () -> Unit,
     modifier: Modifier = Modifier
 ) {
+    val palette = LocalResolveExtendedPalette.current
     val contentAlpha = remember { Animatable(if (reducedMotion) 1f else 0f) }
 
     LaunchedEffect(reducedMotion) {
@@ -164,14 +165,7 @@ fun FirstTimeWelcomeScreen(
     Box(
         modifier = modifier
             .fillMaxSize()
-            .background(
-                Brush.verticalGradient(
-                    colors = listOf(
-                        ResolveColors.ForestBrandDeep,
-                        ResolveColors.ForestDeep
-                    )
-                )
-            )
+            .background(palette.background)
             .windowInsetsPadding(WindowInsets.safeDrawing)
             .padding(horizontal = 24.dp, vertical = 20.dp)
             .testTag("first_time_welcome_screen"),
@@ -200,21 +194,21 @@ fun FirstTimeWelcomeScreen(
                 Text(
                     text = "RESOLVE",
                     style = MaterialTheme.typography.labelLarge.copy(
-                        fontFamily = PlusJakartaSansFamily,
+                        fontFamily = InterFamily,
                         fontWeight = FontWeight.SemiBold,
                         letterSpacing = 4.5.sp
                     ),
-                    color = ResolveColors.FocusMint
+                    color = palette.accentStrong
                 )
                 Spacer(modifier = Modifier.height(20.dp))
                 Text(
                     text = "Welcome to RESOLVE.",
                     style = MaterialTheme.typography.displayMedium.copy(
-                        fontFamily = PlusJakartaSansFamily,
+                        fontFamily = InterFamily,
                         fontSize = 28.sp,
                         fontWeight = FontWeight.Bold
                     ),
-                    color = ResolveColors.TextPrimary,
+                    color = palette.textPrimary,
                     textAlign = TextAlign.Center,
                     modifier = Modifier.testTag("welcome_title")
                 )
@@ -222,7 +216,7 @@ fun FirstTimeWelcomeScreen(
                 Text(
                     text = "Build focus. Stay consistent. Take control.",
                     style = MaterialTheme.typography.bodyLarge.copy(lineHeight = 24.sp),
-                    color = ResolveColors.TextSecondary,
+                    color = palette.textSecondary,
                     textAlign = TextAlign.Center,
                     modifier = Modifier.testTag("welcome_subtitle")
                 )
@@ -264,20 +258,14 @@ fun RequiredSetupScreen(
     onDeferSetupToHome: () -> Unit,
     modifier: Modifier = Modifier
 ) {
+    val palette = LocalResolveExtendedPalette.current
     var showRecoverySetupDialog by remember { mutableStateOf(false) }
     val setupReady = hasRecoveryCode && capabilities.canEnforceRealLock
 
     Box(
         modifier = modifier
             .fillMaxSize()
-            .background(
-                Brush.verticalGradient(
-                    colors = listOf(
-                        ResolveColors.ForestBrandDeep,
-                        ResolveColors.ForestDeep
-                    )
-                )
-            )
+            .background(palette.background)
             .windowInsetsPadding(WindowInsets.safeDrawing)
             .padding(horizontal = 20.dp, vertical = 18.dp)
             .testTag("required_setup_screen"),
@@ -301,12 +289,12 @@ fun RequiredSetupScreen(
                     Text(
                         text = "Essential Setup",
                         style = MaterialTheme.typography.headlineMedium,
-                        color = ResolveColors.TextPrimary
+                        color = palette.textPrimary
                     )
                     Text(
                         text = "Prepare RESOLVE for reliable focus sessions.",
                         style = MaterialTheme.typography.bodyMedium,
-                        color = ResolveColors.TextSecondary
+                        color = palette.textSecondary
                     )
                 }
             }
@@ -343,12 +331,12 @@ fun RequiredSetupScreen(
                 Button(
                     onClick = onCompleteSetup,
                     enabled = setupReady,
-                    shape = RoundedCornerShape(18.dp),
+                    shape = RoundedCornerShape(16.dp),
                     colors = ButtonDefaults.buttonColors(
-                        containerColor = ResolveColors.FocusMint,
-                        contentColor = ResolveColors.ForestDeep,
-                        disabledContainerColor = ResolveColors.ForestSurfaceElevated,
-                        disabledContentColor = ResolveColors.TextDisabled
+                        containerColor = palette.primaryButton,
+                        contentColor = palette.onPrimaryButton,
+                        disabledContainerColor = palette.surfaceElevated,
+                        disabledContentColor = palette.textMuted
                     ),
                     modifier = Modifier
                         .fillMaxWidth()
@@ -371,7 +359,7 @@ fun RequiredSetupScreen(
                     Text(
                         text = "Continue to Home (Finish Setup Later)",
                         style = MaterialTheme.typography.labelLarge,
-                        color = ResolveColors.TextSecondary
+                        color = palette.textSecondary
                     )
                 }
             }
@@ -401,15 +389,16 @@ private fun SetupRequirementCard(
     onAction: () -> Unit,
     actionTestTag: String
 ) {
+    val palette = LocalResolveExtendedPalette.current
     Column(
         modifier = Modifier
             .fillMaxWidth()
             .resolveGlassCard(
-                cornerRadius = 22.dp,
+                cornerRadius = 16.dp,
                 borderColor = if (isReady) {
-                    ResolveColors.FocusMint.copy(alpha = 0.50f)
+                    palette.success.copy(alpha = 0.45f)
                 } else {
-                    ResolveColors.ForestOutline
+                    palette.cardBorder
                 }
             )
             .padding(18.dp),
@@ -424,11 +413,11 @@ private fun SetupRequirementCard(
                     .size(36.dp)
                     .clip(CircleShape)
                     .background(
-                        if (isReady) ResolveColors.MintSoftContainer else ResolveColors.ForestSurfaceElevated
+                        if (isReady) palette.success else palette.surfaceElevated
                     )
                     .border(
                         1.dp,
-                        if (isReady) ResolveColors.FocusMint.copy(alpha = 0.45f) else ResolveColors.ForestOutline,
+                        if (isReady) palette.accentStrong.copy(alpha = 0.45f) else palette.cardBorder,
                         CircleShape
                     ),
                 contentAlignment = Alignment.Center
@@ -437,14 +426,14 @@ private fun SetupRequirementCard(
                     Icon(
                         imageVector = Icons.Outlined.CheckCircle,
                         contentDescription = "$title complete",
-                        tint = ResolveColors.FocusMint,
+                        tint = palette.onAccent,
                         modifier = Modifier.size(20.dp)
                     )
                 } else {
                     Text(
                         text = stepNumber,
                         style = MaterialTheme.typography.labelLarge,
-                        color = ResolveColors.TextPrimary
+                        color = palette.textPrimary
                     )
                 }
             }
@@ -457,20 +446,20 @@ private fun SetupRequirementCard(
                     Icon(
                         imageVector = icon,
                         contentDescription = null,
-                        tint = if (isReady) ResolveColors.FocusMint else ResolveColors.TextSecondary,
+                        tint = if (isReady) palette.accentStrong else palette.textSecondary,
                         modifier = Modifier.size(16.dp)
                     )
                     Text(
                         text = title,
                         style = MaterialTheme.typography.titleMedium,
-                        color = ResolveColors.TextPrimary
+                        color = palette.textPrimary
                     )
                 }
                 Spacer(modifier = Modifier.height(3.dp))
                 Text(
                     text = description,
                     style = MaterialTheme.typography.bodySmall,
-                    color = ResolveColors.TextSecondary
+                    color = palette.textSecondary
                 )
             }
         }
@@ -479,18 +468,19 @@ private fun SetupRequirementCard(
             OutlinedButton(
                 onClick = onAction,
                 shape = RoundedCornerShape(14.dp),
+                border = androidx.compose.foundation.BorderStroke(1.dp, palette.cardBorder),
                 modifier = Modifier
                     .fillMaxWidth()
                     .minimumInteractiveComponentSize()
                     .testTag(actionTestTag)
             ) {
-                Text(text = actionLabel, color = ResolveColors.FocusMint)
+                Text(text = actionLabel, color = palette.accentStrong)
             }
         } else {
             Text(
                 text = actionLabel,
                 style = MaterialTheme.typography.labelLarge,
-                color = ResolveColors.FocusMint,
+                color = palette.accentStrong,
                 modifier = Modifier.padding(start = 4.dp)
             )
         }

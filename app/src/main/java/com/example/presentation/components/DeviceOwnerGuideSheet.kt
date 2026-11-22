@@ -30,7 +30,7 @@ fun DeviceOwnerGuideSheet(
     val palette = LocalResolveExtendedPalette.current
     ModalBottomSheet(
         onDismissRequest = onDismiss,
-        containerColor = palette.cardBottom
+        containerColor = palette.surfaceSecondary
     ) {
         ProvideSafeTextToolbar {
             Column(
@@ -62,7 +62,7 @@ fun DeviceOwnerGuideSheet(
                 modifier = Modifier
                     .fillMaxWidth()
                     .clip(RoundedCornerShape(14.dp))
-                    .background(palette.background.copy(alpha = 0.7f))
+                    .background(palette.background)
                     .border(1.dp, palette.cardBorder, RoundedCornerShape(14.dp))
                     .padding(14.dp),
                 verticalArrangement = Arrangement.spacedBy(6.dp)
@@ -70,7 +70,7 @@ fun DeviceOwnerGuideSheet(
                 Text(
                     text = "Provision via ADB (personal device)",
                     style = MaterialTheme.typography.labelLarge,
-                    color = palette.accent
+                    color = palette.accentStrong
                 )
                 Text(
                     text = "adb shell dpm set-device-owner com.resolve.focus/com.example.devicepolicy.ResolveDeviceAdminReceiver",
