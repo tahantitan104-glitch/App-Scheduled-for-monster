@@ -381,9 +381,9 @@ fun ResolveAppShell(viewModel: ResolveViewModel) {
                                             },
                                             label = { Text(tab.label) },
                                             colors = NavigationRailItemDefaults.colors(
-                                                selectedIconColor = palette.accentStrong,
-                                                selectedTextColor = palette.accentStrong,
-                                                indicatorColor = palette.surfaceElevated,
+                                                selectedIconColor = palette.navPillContent,
+                                                selectedTextColor = palette.navPillContent,
+                                                indicatorColor = palette.navPillContainer,
                                                 unselectedIconColor = palette.textMuted,
                                                 unselectedTextColor = palette.textMuted
                                             )
@@ -917,7 +917,7 @@ private fun FloatingCapsuleNavDock(
                 val selected = currentRoute == tab.route
                 val pillColor by animateColorAsState(
                     targetValue = if (selected) {
-                        palette.surfaceElevated
+                        palette.navPillContainer
                     } else {
                         Color.Transparent
                     },
@@ -925,7 +925,7 @@ private fun FloatingCapsuleNavDock(
                     label = "nav_pill_color_${tab.route}"
                 )
                 val contentColor by animateColorAsState(
-                    targetValue = if (selected) palette.accentStrong else palette.textMuted,
+                    targetValue = if (selected) palette.navPillContent else palette.textMuted,
                     animationSpec = ResolveMotion.fastTween(reducedMotion),
                     label = "nav_content_color_${tab.route}"
                 )
@@ -948,7 +948,7 @@ private fun FloatingCapsuleNavDock(
                         .border(
                             width = if (selected) 1.dp else 0.dp,
                             color = if (selected) {
-                                palette.accentSecondary.copy(alpha = 0.38f)
+                                palette.navPillBorder
                             } else {
                                 Color.Transparent
                             },

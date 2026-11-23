@@ -1,8 +1,8 @@
 <resources>
-    <color name="forest_deep">#FF040B08</color>
-    <color name="forest_brand_deep">#FF06130F</color>
-    <color name="forest_secondary">#FF09120E</color>
-    <color name="forest_surface">#FF0E1A15</color>
+    <color name="forest_deep">#FF0A1713</color>
+    <color name="forest_brand_deep">#FF10251F</color>
+    <color name="forest_secondary">#FF10221C</color>
+    <color name="forest_surface">#FF152B23</color>
     <color name="mint_accent">#FF176B5B</color>
     <color name="focus_mint">#FF176B5B</color>
     <color name="sage_accent">#FF176B5B</color>

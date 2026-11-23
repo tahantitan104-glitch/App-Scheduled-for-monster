@@ -70,7 +70,7 @@ fun DeviceOwnerGuideSheet(
                 Text(
                     text = "Provision via ADB (personal device)",
                     style = MaterialTheme.typography.labelLarge,
-                    color = palette.accentStrong
+                    color = palette.textPrimary
                 )
                 Text(
                     text = "adb shell dpm set-device-owner com.resolve.focus/com.example.devicepolicy.ResolveDeviceAdminReceiver",

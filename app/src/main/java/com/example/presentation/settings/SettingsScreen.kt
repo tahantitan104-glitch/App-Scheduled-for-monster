@@ -303,7 +303,7 @@ fun SettingsScreen(
                             Text(
                                 text = "$readyCount / 6 system permissions ready",
                                 style = MaterialTheme.typography.bodyMedium.copy(fontFamily = JetBrainsMonoFamily),
-                                color = if (isGuardActive) palette.accentStrong else palette.warn
+                                color = if (isGuardActive) palette.textSecondary else palette.warn
                             )
                         }
                     }
@@ -377,7 +377,7 @@ fun SettingsScreen(
                             Text(
                                 text = "6 / 6 core guards active & connected.",
                                 style = MaterialTheme.typography.bodySmall,
-                                color = palette.accentStrong
+                                color = palette.textSecondary
                             )
                         }
                     }
@@ -517,7 +517,7 @@ fun SettingsScreen(
                     reason = "Ends an active restricted focus session only when verified.",
                     status = if (hasRecoveryCode) "$recoveryCodeLength-digit Configured" else "Not Configured",
                     isReady = hasRecoveryCode,
-                    statusColor = if (hasRecoveryCode) palette.accentStrong else palette.warn,
+                    statusColor = if (hasRecoveryCode) palette.accent else palette.warn,
                     actionLabel = if (hasRecoveryCode) "Update Code" else "Configure Code",
                     onAction = { showRecoverySetup = true },
                     testTag = "settings_recovery_action"
@@ -896,10 +896,12 @@ fun PermissionItemCard(
                 modifier = Modifier.weight(1f)
             )
             Spacer(Modifier.width(8.dp))
+            val badgeBg = if (isReady) palette.accent else statusColor.copy(alpha = 0.14f)
+            val badgeFg = if (isReady) palette.onAccent else statusColor
             Row(
                 modifier = Modifier
                     .clip(CircleShape)
-                    .background(statusColor.copy(alpha = 0.14f))
+                    .background(badgeBg)
                     .padding(horizontal = 10.dp, vertical = 4.dp),
                 verticalAlignment = Alignment.CenterVertically,
                 horizontalArrangement = Arrangement.spacedBy(5.dp)
@@ -907,13 +909,13 @@ fun PermissionItemCard(
                 Icon(
                     imageVector = if (isReady) Icons.Outlined.CheckCircle else Icons.Outlined.Info,
                     contentDescription = null,
-                    tint = statusColor,
+                    tint = badgeFg,
                     modifier = Modifier.size(14.dp)
                 )
                 Text(
                     text = status,
                     style = MaterialTheme.typography.labelMedium,
-                    color = statusColor
+                    color = badgeFg
                 )
             }
         }
@@ -925,8 +927,11 @@ fun PermissionItemCard(
         if (actionLabel != null) {
             OutlinedButton(
                 onClick = onAction,
-                colors = ButtonDefaults.outlinedButtonColors(contentColor = palette.accentStrong),
-                border = BorderStroke(1.dp, palette.accent.copy(alpha = 0.70f)),
+                colors = ButtonDefaults.outlinedButtonColors(
+                    containerColor = palette.accent,
+                    contentColor = palette.onAccent
+                ),
+                border = BorderStroke(1.dp, palette.accent),
                 shape = RoundedCornerShape(12.dp),
                 modifier = Modifier.testTag(testTag)
             ) {
@@ -944,22 +949,30 @@ fun SettingsSectionHeader(
     val palette = LocalResolveExtendedPalette.current
     Row(
         verticalAlignment = Alignment.CenterVertically,
-        horizontalArrangement = Arrangement.spacedBy(7.dp),
+        horizontalArrangement = Arrangement.spacedBy(8.dp),
         modifier = Modifier.padding(horizontal = 2.dp, vertical = 2.dp)
     ) {
-        Icon(
-            imageVector = icon,
-            contentDescription = null,
-            tint = palette.accentStrong,
-            modifier = Modifier.size(15.dp)
-        )
+        Box(
+            modifier = Modifier
+                .size(22.dp)
+                .clip(RoundedCornerShape(6.dp))
+                .background(palette.accent),
+            contentAlignment = Alignment.Center
+        ) {
+            Icon(
+                imageVector = icon,
+                contentDescription = null,
+                tint = palette.onAccent,
+                modifier = Modifier.size(13.dp)
+            )
+        }
         Text(
             text = title,
             style = MaterialTheme.typography.labelSmall.copy(
                 letterSpacing = 1.25.sp,
                 fontWeight = FontWeight.SemiBold
             ),
-            color = palette.accentStrong
+            color = palette.textPrimary
         )
     }
 }
@@ -1017,7 +1030,7 @@ private fun CraftedSignatureCard(
                             fontStyle = FontStyle.Italic,
                             fontWeight = FontWeight.Medium
                         ),
-                        color = palette.accentStrong,
+                        color = palette.textSecondary,
                         startTyping = hasEnteredView,
                         startDelayMillis = 80,
                         typingDurationMillis = 820,
@@ -1060,14 +1073,14 @@ private fun CraftedSignatureCard(
                 horizontalArrangement = Arrangement.spacedBy(8.dp),
                 modifier = Modifier.weight(1f)
             ) {
-                PulsingStatusDot(color = palette.accentStrong, size = 5.dp)
+                PulsingStatusDot(color = palette.accent, size = 5.dp)
                 KeyboardTypingText(
                     fullText = "Developed by Tahan Official",
                     style = MaterialTheme.typography.titleSmall.copy(
                         fontWeight = FontWeight.SemiBold,
                         letterSpacing = 0.35.sp
                     ),
-                    color = palette.accentStrong,
+                    color = palette.textPrimary,
                     startTyping = hasEnteredView,
                     startDelayMillis = 920,
                     typingDurationMillis = 680,
@@ -1079,8 +1092,11 @@ private fun CraftedSignatureCard(
             OutlinedButton(
                 onClick = onOpenAboutResolve,
                 shape = CircleShape,
-                border = BorderStroke(1.dp, palette.cardBorder),
-                colors = ButtonDefaults.outlinedButtonColors(contentColor = palette.accentStrong),
+                border = BorderStroke(1.dp, palette.accent),
+                colors = ButtonDefaults.outlinedButtonColors(
+                    containerColor = palette.accent,
+                    contentColor = palette.onAccent
+                ),
                 contentPadding = PaddingValues(horizontal = 12.dp, vertical = 6.dp),
                 modifier = Modifier.testTag("settings_open_about_btn")
             ) {

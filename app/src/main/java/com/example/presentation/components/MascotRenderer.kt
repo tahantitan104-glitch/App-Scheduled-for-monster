@@ -108,7 +108,8 @@ fun LockScreenMascotStage(
     reducedMotion: Boolean,
     isPaused: Boolean,
     mascotStageSize: Dp,
-    modifier: Modifier = Modifier
+    modifier: Modifier = Modifier,
+    bubbleSlotMinHeight: Dp = 54.dp
 ) {
     val effectiveState = when {
         controllerState.isCelebrating -> MascotAnimationState.CELEBRATING
@@ -125,7 +126,7 @@ fun LockScreenMascotStage(
         Box(
             modifier = Modifier
                 .fillMaxWidth()
-                .heightIn(min = 54.dp)
+                .heightIn(min = bubbleSlotMinHeight)
                 .padding(horizontal = 8.dp),
             contentAlignment = Alignment.BottomCenter
         ) {
@@ -144,7 +145,7 @@ fun LockScreenMascotStage(
             }
         }
 
-        Spacer(modifier = Modifier.height(6.dp))
+        Spacer(modifier = Modifier.height(if (bubbleSlotMinHeight < 50.dp) 4.dp else 6.dp))
 
         MascotRenderer(
             mascot = activeMascot,

@@ -232,7 +232,7 @@ fun TactilePrimaryButton(
         border = if (enabled) {
             androidx.compose.foundation.BorderStroke(
                 width = 1.dp,
-                color = palette.accentStrong.copy(alpha = 0.25f)
+                color = palette.primaryButtonPressed.copy(alpha = 0.7f)
             )
         } else {
             androidx.compose.foundation.BorderStroke(1.dp, palette.cardBorder)
@@ -282,13 +282,13 @@ fun Modifier.resolveGlassCard(
 fun resolveSwitchColors(): SwitchColors {
     val palette = LocalResolveExtendedPalette.current
     return SwitchDefaults.colors(
-        checkedThumbColor = palette.onPrimaryButton,
+        checkedThumbColor = palette.onAccent,
         checkedTrackColor = palette.accent,
         checkedBorderColor = Color.Transparent,
         uncheckedThumbColor = Color(0xFF93A39B),
         uncheckedTrackColor = palette.controlSurface,
         uncheckedBorderColor = palette.controlBorder,
-        disabledCheckedThumbColor = palette.onPrimaryButton.copy(alpha = 0.6f),
+        disabledCheckedThumbColor = palette.onAccent.copy(alpha = 0.6f),
         disabledCheckedTrackColor = palette.accent.copy(alpha = 0.45f),
         disabledUncheckedThumbColor = palette.textMuted,
         disabledUncheckedTrackColor = palette.cardBottom

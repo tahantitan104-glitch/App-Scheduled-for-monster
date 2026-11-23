@@ -130,7 +130,7 @@ fun SyncedAvatarBadge(
                         fontWeight = FontWeight.Bold,
                         fontSize = (size.value * 0.34f).sp
                     ),
-                    color = palette.accentStrong
+                    color = palette.textPrimary
                 )
             }
 
@@ -403,7 +403,7 @@ fun SettingsAccountSyncCard(
                                 Icon(
                                     imageVector = ResolveIcons.Edit,
                                     contentDescription = "Edit profile name",
-                                    tint = palette.accentStrong,
+                                    tint = palette.textSecondary,
                                     modifier = Modifier.size(16.dp)
                                 )
                             }
@@ -434,7 +434,7 @@ fun SettingsAccountSyncCard(
                         Text(
                             text = "Sync Status: Offline Mode • Works without an account",
                             style = MaterialTheme.typography.labelSmall,
-                            color = palette.accentStrong,
+                            color = palette.slateTealStrong,
                             maxLines = 1,
                             overflow = TextOverflow.Ellipsis
                         )
@@ -521,7 +521,7 @@ fun SettingsAccountSyncCard(
                                 Icon(
                                     imageVector = ResolveIcons.Edit,
                                     contentDescription = "Edit profile name",
-                                    tint = palette.accentStrong,
+                                    tint = palette.textSecondary,
                                     modifier = Modifier.size(16.dp)
                                 )
                             }
@@ -553,7 +553,7 @@ fun SettingsAccountSyncCard(
                             Text(
                                 text = syncLabel,
                                 style = MaterialTheme.typography.labelSmall,
-                                color = palette.accentStrong,
+                                color = palette.slateTealStrong,
                                 maxLines = 1,
                                 overflow = TextOverflow.Ellipsis
                             )
@@ -619,7 +619,7 @@ fun SettingsAccountSyncCard(
                                 ) {
                                     if (isUnlinking) {
                                         CircularProgressIndicator(
-                                            color = palette.accentStrong,
+                                            color = palette.slateTealStrong,
                                             strokeWidth = 1.5.dp,
                                             modifier = Modifier.size(12.dp)
                                         )
@@ -627,7 +627,7 @@ fun SettingsAccountSyncCard(
                                         Icon(
                                             imageVector = ResolveIcons.Devices,
                                             contentDescription = null,
-                                            tint = if (device.syncEnabled) palette.accentStrong else palette.textSecondary,
+                                            tint = if (device.syncEnabled) palette.slateTealStrong else palette.textSecondary,
                                             modifier = Modifier.size(13.dp)
                                         )
                                     }

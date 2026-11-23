@@ -79,6 +79,7 @@ fun BrandIntroScreen(
     val ringProgress = remember { Animatable(if (reducedMotion) 1f else 0f) }
     val ringAlpha = remember { Animatable(if (reducedMotion) 1f else 0.25f) }
     val dotAlpha = remember { Animatable(if (reducedMotion) 1f else 0f) }
+    val glowAlpha = remember { Animatable(if (reducedMotion) 1f else 0f) }
     val brandAlpha = remember { Animatable(if (reducedMotion) 1f else 0f) }
     val latestOnIntroCompleted by rememberUpdatedState(onIntroCompleted)
 
@@ -86,7 +87,7 @@ fun BrandIntroScreen(
         if (reducedMotion) {
             delay(220L)
         } else {
-            // Subtle Focus Ring sweep + central dot reveal + concise wordmark fade (~600ms total)
+            // Focus Ring sweep + central dot + radial glow reveal + concise wordmark fade (~650ms total)
             launch {
                 ringAlpha.animateTo(1f, tween(durationMillis = 200, easing = EaseOutCubic))
             }
@@ -94,10 +95,11 @@ fun BrandIntroScreen(
 
             launch {
                 dotAlpha.animateTo(1f, tween(durationMillis = 150, easing = EaseOutCubic))
+                glowAlpha.animateTo(1f, tween(durationMillis = 210, easing = EaseOutCubic))
             }
             delay(60L)
             brandAlpha.animateTo(1f, tween(durationMillis = 180, easing = EaseOutCubic))
-            delay(80L)
+            delay(100L)
         }
         latestOnIntroCompleted()
     }
@@ -106,7 +108,7 @@ fun BrandIntroScreen(
     Box(
         modifier = modifier
             .fillMaxSize()
-            .background(palette.surfaceSecondary)
+            .background(com.example.designsystem.ResolveColors.ForestBrandDeep)
             .windowInsetsPadding(WindowInsets.safeDrawing)
             .testTag("brand_intro_screen"),
         contentAlignment = Alignment.Center
@@ -117,11 +119,11 @@ fun BrandIntroScreen(
             modifier = Modifier.padding(horizontal = 32.dp)
         ) {
             FocusSymbolMark(
-                size = 92.dp,
+                size = 96.dp,
                 ringProgress = ringProgress.value,
                 ringAlpha = ringAlpha.value,
                 dotAlpha = dotAlpha.value,
-                glowAlpha = 0f,
+                glowAlpha = glowAlpha.value,
                 testTagName = "brand_intro_focus_symbol"
             )
             Spacer(modifier = Modifier.height(22.dp))
@@ -187,7 +189,8 @@ fun FirstTimeWelcomeScreen(
                 modifier = Modifier.fillMaxWidth()
             ) {
                 FocusSymbolMark(
-                    size = 96.dp,
+                    size = 104.dp,
+                    showBackdropCircle = true,
                     testTagName = "welcome_focus_symbol"
                 )
                 Spacer(modifier = Modifier.height(20.dp))
@@ -198,7 +201,7 @@ fun FirstTimeWelcomeScreen(
                         fontWeight = FontWeight.SemiBold,
                         letterSpacing = 4.5.sp
                     ),
-                    color = palette.accentStrong
+                    color = palette.textPrimary
                 )
                 Spacer(modifier = Modifier.height(20.dp))
                 Text(
@@ -284,7 +287,7 @@ fun RequiredSetupScreen(
                 verticalAlignment = Alignment.CenterVertically,
                 horizontalArrangement = Arrangement.spacedBy(12.dp)
             ) {
-                FocusSymbolMark(size = 44.dp, testTagName = "setup_focus_symbol")
+                FocusSymbolMark(size = 48.dp, showBackdropCircle = true, testTagName = "setup_focus_symbol")
                 Column {
                     Text(
                         text = "Essential Setup",
@@ -446,7 +449,7 @@ private fun SetupRequirementCard(
                     Icon(
                         imageVector = icon,
                         contentDescription = null,
-                        tint = if (isReady) palette.accentStrong else palette.textSecondary,
+                        tint = if (isReady) palette.textPrimary else palette.textSecondary,
                         modifier = Modifier.size(16.dp)
                     )
                     Text(
@@ -468,20 +471,27 @@ private fun SetupRequirementCard(
             OutlinedButton(
                 onClick = onAction,
                 shape = RoundedCornerShape(14.dp),
-                border = androidx.compose.foundation.BorderStroke(1.dp, palette.cardBorder),
+                colors = ButtonDefaults.outlinedButtonColors(
+                    containerColor = palette.accent,
+                    contentColor = palette.onAccent
+                ),
+                border = androidx.compose.foundation.BorderStroke(1.dp, palette.accent),
                 modifier = Modifier
                     .fillMaxWidth()
                     .minimumInteractiveComponentSize()
                     .testTag(actionTestTag)
             ) {
-                Text(text = actionLabel, color = palette.accentStrong)
+                Text(text = actionLabel, color = palette.onAccent)
             }
         } else {
             Text(
                 text = actionLabel,
                 style = MaterialTheme.typography.labelLarge,
-                color = palette.accentStrong,
-                modifier = Modifier.padding(start = 4.dp)
+                color = palette.onAccent,
+                modifier = Modifier
+                    .clip(CircleShape)
+                    .background(palette.accent)
+                    .padding(horizontal = 12.dp, vertical = 4.dp)
             )
         }
     }

@@ -367,8 +367,8 @@ fun HomeScreen(
                                 description = "Lock immediately for a chosen period.",
                                 icon = Icons.Outlined.Lock,
                                 accentBadge = "Immediate",
-                                accentColor = palette.onAccent,
-                                accentContainerColor = palette.accent,
+                                accentColor = palette.emeraldStrong,
+                                accentContainerColor = palette.emeraldContainer,
                                 onClick = onOpenInstantSetup,
                                 testTag = "mode_card_instant",
                                 modifier = Modifier
@@ -431,8 +431,8 @@ fun HomeScreen(
                                     description = "Restrict now for a chosen timer.",
                                     icon = Icons.Outlined.Lock,
                                     accentBadge = "Immediate",
-                                    accentColor = palette.onAccent,
-                                    accentContainerColor = palette.accent,
+                                    accentColor = palette.emeraldStrong,
+                                    accentContainerColor = palette.emeraldContainer,
                                     onClick = onOpenInstantSetup,
                                     testTag = "mode_card_instant",
                                     modifier = Modifier
@@ -661,7 +661,7 @@ private fun ProgressOverviewCard(
                     fontFamily = JetBrainsMonoFamily,
                     fontWeight = FontWeight.SemiBold
                 ),
-                color = palette.accentStrong
+                color = palette.textPrimary
             )
         }
 
@@ -821,7 +821,7 @@ private fun UsageAppRow(
                 Icon(
                     imageVector = ResolveIcons.Apps,
                     contentDescription = null,
-                    tint = palette.accentStrong,
+                    tint = palette.slateTealStrong,
                     modifier = Modifier.size(13.dp)
                 )
             }
@@ -1018,11 +1018,11 @@ private fun ActiveSessionBanner(
                     verticalAlignment = Alignment.CenterVertically,
                     horizontalArrangement = Arrangement.spacedBy(8.dp)
                 ) {
-                    PulsingStatusDot(color = palette.accentStrong, size = 7.dp)
+                    PulsingStatusDot(color = palette.accent, size = 7.dp)
                     Text(
                         text = "DELAYED LOCK — FREE USE WINDOW",
                         style = MaterialTheme.typography.labelSmall.copy(letterSpacing = 1.sp),
-                        color = palette.accentStrong
+                        color = palette.textPrimary
                     )
                 }
                 Text(
@@ -1057,11 +1057,11 @@ private fun ActiveSessionBanner(
                     verticalAlignment = Alignment.CenterVertically,
                     horizontalArrangement = Arrangement.spacedBy(8.dp)
                 ) {
-                    PulsingStatusDot(color = palette.accentStrong, size = 7.dp)
+                    PulsingStatusDot(color = palette.accent, size = 7.dp)
                     Text(
                         text = "LOCK ENFORCEMENT ACTIVE",
                         style = MaterialTheme.typography.labelSmall.copy(letterSpacing = 1.sp),
-                        color = palette.accentStrong
+                        color = palette.textPrimary
                     )
                 }
                 Text(
@@ -1120,7 +1120,7 @@ private fun ActiveSessionBanner(
                     Text(
                         text = label,
                         style = MaterialTheme.typography.titleMedium,
-                        color = palette.accentStrong
+                        color = palette.textPrimary
                     )
                     TextButton(onClick = onDismiss) {
                         Text("Clear", color = palette.textSecondary)

@@ -293,7 +293,7 @@ private fun WeeklyFocusChartCard(weeklyStats: List<DayFocusStat>) {
                     fontFamily = JetBrainsMonoFamily,
                     fontWeight = FontWeight.SemiBold
                 ),
-                color = palette.accentStrong
+                color = palette.textPrimary
             )
         }
 
@@ -350,7 +350,7 @@ private fun WeeklyFocusChartCard(weeklyStats: List<DayFocusStat>) {
                         style = MaterialTheme.typography.labelSmall,
                         color = when {
                             peakMinutes != null && day.focusMinutes == peakMinutes -> palette.champagneStrong
-                            day.focusMinutes > 0L -> palette.accentStrong
+                            day.focusMinutes > 0L -> palette.textPrimary
                             else -> palette.textSecondary
                         }
                     )
@@ -415,7 +415,7 @@ private fun ModeSplitBarRow(
             Text(
                 text = "$count (${(ratio * 100).toInt()}%)",
                 style = MaterialTheme.typography.labelSmall.copy(fontFamily = JetBrainsMonoFamily),
-                color = barColor
+                color = palette.textPrimary
             )
         }
         LinearProgressIndicator(
@@ -535,7 +535,7 @@ private fun HistoryStatColumn(label: String, value: String) {
         Text(
             text = value,
             style = MaterialTheme.typography.titleLarge.copy(fontFamily = JetBrainsMonoFamily),
-            color = palette.accentStrong
+            color = palette.textPrimary
         )
         Text(
             text = label,

@@ -132,7 +132,7 @@ fun AboutResolveScreen(
                                         fontStyle = FontStyle.Italic,
                                         fontWeight = FontWeight.Medium
                                     ),
-                                    color = palette.accentStrong,
+                                    color = palette.textSecondary,
                                     startTyping = true,
                                     startDelayMillis = 80,
                                     typingDurationMillis = 820,
@@ -162,7 +162,7 @@ fun AboutResolveScreen(
                             fontWeight = FontWeight.SemiBold,
                             letterSpacing = 0.35.sp
                         ),
-                        color = palette.accentStrong,
+                        color = palette.textPrimary,
                         startTyping = true,
                         startDelayMillis = 920,
                         typingDurationMillis = 680,

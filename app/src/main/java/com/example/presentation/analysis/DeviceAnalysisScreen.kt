@@ -284,8 +284,11 @@ fun DeviceAnalysisScreen(
                                     OutlinedButton(
                                         onClick = { onExecuteAction(item.actionType) },
                                         shape = RoundedCornerShape(12.dp),
-                                        border = BorderStroke(1.dp, palette.accentStrong.copy(alpha = 0.55f)),
-                                        colors = ButtonDefaults.outlinedButtonColors(contentColor = palette.accentStrong),
+                                        border = BorderStroke(1.dp, palette.accent),
+                                        colors = ButtonDefaults.outlinedButtonColors(
+                                            containerColor = palette.accent,
+                                            contentColor = palette.onAccent
+                                        ),
                                         modifier = Modifier.testTag("repair_fix_${item.id}")
                                     ) {
                                         Text(item.actionLabel)
@@ -417,7 +420,7 @@ fun DeviceAnalysisScreen(
                         Text(
                             text = dm.statusLabel,
                             style = MaterialTheme.typography.titleSmall,
-                            color = palette.accentStrong
+                            color = palette.textPrimary
                         )
                         Text(
                             text = dm.explanation,

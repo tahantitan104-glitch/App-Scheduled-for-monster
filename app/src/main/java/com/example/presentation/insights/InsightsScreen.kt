@@ -144,12 +144,12 @@ private fun InsightsSegmentTab(
 ) {
     val palette = LocalResolveExtendedPalette.current
     val bg by animateColorAsState(
-        targetValue = if (selected) palette.surfaceElevated else Color.Transparent,
+        targetValue = if (selected) palette.accent else Color.Transparent,
         animationSpec = tween(180),
         label = "insights_tab_bg_$testTag"
     )
     val fg by animateColorAsState(
-        targetValue = if (selected) palette.accentStrong else palette.textSecondary,
+        targetValue = if (selected) palette.onAccent else palette.textSecondary,
         animationSpec = tween(180),
         label = "insights_tab_fg_$testTag"
     )
@@ -161,7 +161,7 @@ private fun InsightsSegmentTab(
             .background(bg)
             .border(
                 width = if (selected) 1.dp else 0.dp,
-                color = if (selected) palette.accentSecondary.copy(alpha = 0.45f) else Color.Transparent,
+                color = if (selected) palette.accent else Color.Transparent,
                 shape = RoundedCornerShape(12.dp)
             )
             .clickable(role = Role.Tab, onClick = onClick)

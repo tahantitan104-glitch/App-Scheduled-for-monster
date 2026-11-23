@@ -122,7 +122,7 @@ fun DurationSelector(
                     Icon(
                         imageVector = ResolveIcons.Timer,
                         contentDescription = null,
-                        tint = palette.accentStrong,
+                        tint = palette.textPrimary,
                         modifier = Modifier.size(16.dp)
                     )
                 }
@@ -135,14 +135,13 @@ fun DurationSelector(
             Box(
                 modifier = Modifier
                     .clip(CircleShape)
-                    .background(palette.surfaceElevated)
-                    .border(1.dp, palette.cardBorder, CircleShape)
+                    .background(palette.accent)
                     .padding(horizontal = 10.dp, vertical = 4.dp)
             ) {
                 Text(
                     text = duration.formattedCompact(),
                     style = MaterialTheme.typography.labelMedium.copy(fontFamily = JetBrainsMonoFamily),
-                    color = palette.accentStrong
+                    color = palette.onAccent
                 )
             }
         }
@@ -194,7 +193,7 @@ fun DurationSelector(
                     Icon(
                         imageVector = Icons.Outlined.Edit,
                         contentDescription = "Edit duration directly",
-                        tint = palette.accentStrong,
+                        tint = palette.textPrimary,
                         modifier = Modifier.size(16.dp)
                     )
                 }
@@ -225,7 +224,7 @@ fun DurationSelector(
                     fontFamily = JetBrainsMonoFamily,
                     fontWeight = FontWeight.Bold
                 ),
-                color = palette.accentStrong.copy(alpha = 0.78f),
+                color = palette.textSecondary,
                 modifier = Modifier.padding(top = 16.dp)
             )
 
@@ -250,12 +249,12 @@ fun DurationSelector(
             items(QUICK_PRESETS, key = { it.label }) { preset ->
                 val isSelected = duration.totalMinutes == preset.totalMinutes
                 val chipContainer by animateColorAsState(
-                    targetValue = if (isSelected) palette.surfaceElevated else palette.surfaceSecondary,
+                    targetValue = if (isSelected) palette.accent else palette.surfaceSecondary,
                     animationSpec = tween(200),
                     label = "preset_bg"
                 )
                 val chipLabel by animateColorAsState(
-                    targetValue = if (isSelected) palette.accentStrong else palette.textSecondary,
+                    targetValue = if (isSelected) palette.onAccent else palette.textSecondary,
                     animationSpec = tween(200),
                     label = "preset_fg"
                 )
@@ -282,7 +281,7 @@ fun DurationSelector(
                         enabled = true,
                         selected = isSelected,
                         borderColor = palette.cardBorder,
-                        selectedBorderColor = palette.accentSecondary.copy(alpha = 0.65f)
+                        selectedBorderColor = palette.accent
                     ),
                     modifier = Modifier.testTag("${testTagPrefix}_preset_${preset.label}")
                 )
@@ -430,7 +429,7 @@ private fun IndependentWheelPicker(
                                 fontWeight = if (isCenter) FontWeight.Bold else FontWeight.Normal,
                                 fontFeatureSettings = "tnum"
                             ),
-                            color = if (isCenter) palette.accentStrong else palette.textSecondary,
+                            color = if (isCenter) palette.textPrimary else palette.textSecondary,
                             textAlign = TextAlign.Center,
                             modifier = Modifier.alpha(itemAlpha)
                         )
@@ -563,7 +562,7 @@ private fun DirectDurationEntryDialog(
                 },
                 modifier = Modifier.testTag("direct_duration_confirm")
             ) {
-                Text("Apply", color = palette.accentStrong)
+                Text("Apply", color = palette.textPrimary)
             }
         },
         dismissButton = {

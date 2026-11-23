@@ -563,13 +563,13 @@ fun SixCellSequentialPad(
                                             fontFamily = JetBrainsMonoFamily,
                                             fontWeight = FontWeight.SemiBold
                                         ),
-                                        color = if (isSelectedInSetup) palette.accentStrong else palette.textSecondary
+                                        color = if (isSelectedInSetup) palette.textPrimary else palette.textSecondary
                                     )
                                     if (orderPosition >= 0) {
                                         Text(
                                             text = "Step ${orderPosition + 1}",
                                             style = MaterialTheme.typography.labelSmall.copy(fontSize = 10.sp),
-                                            color = palette.accent
+                                            color = palette.slateTealStrong
                                         )
                                     }
                                 }
@@ -580,7 +580,7 @@ fun SixCellSequentialPad(
                                         .size(10.dp)
                                         .clip(CircleShape)
                                         .background(
-                                            if (isPulsing) palette.accentStrong
+                                            if (isPulsing) palette.onAccent
                                             else palette.cardBorder.copy(alpha = 0.7f)
                                         )
                                 )

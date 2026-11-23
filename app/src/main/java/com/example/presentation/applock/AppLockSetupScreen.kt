@@ -441,8 +441,8 @@ fun AppLockSetupScreen(
                                         },
                                         label = { Text(label) },
                                         colors = FilterChipDefaults.filterChipColors(
-                                            selectedContainerColor = palette.surfaceElevated,
-                                            selectedLabelColor = palette.accentStrong,
+                                            selectedContainerColor = palette.accent,
+                                            selectedLabelColor = palette.onAccent,
                                             containerColor = palette.surfaceSecondary,
                                             labelColor = palette.textSecondary
                                         ),
@@ -450,7 +450,7 @@ fun AppLockSetupScreen(
                                             enabled = true,
                                             selected = selected,
                                             borderColor = palette.cardBorder,
-                                            selectedBorderColor = palette.accentSecondary
+                                            selectedBorderColor = palette.accent
                                         ),
                                         modifier = Modifier.testTag("applock_method_${method.name.lowercase()}")
                                     )
@@ -471,10 +471,16 @@ fun AppLockSetupScreen(
                                             },
                                             label = { Text("${len.digits}-Digit PIN") },
                                             colors = FilterChipDefaults.filterChipColors(
-                                                selectedContainerColor = palette.surfaceElevated,
-                                                selectedLabelColor = palette.accentStrong,
+                                                selectedContainerColor = palette.accent,
+                                                selectedLabelColor = palette.onAccent,
                                                 containerColor = palette.surfaceSecondary,
                                                 labelColor = palette.textSecondary
+                                            ),
+                                            border = FilterChipDefaults.filterChipBorder(
+                                                enabled = true,
+                                                selected = selected,
+                                                borderColor = palette.cardBorder,
+                                                selectedBorderColor = palette.accent
                                             ),
                                             modifier = Modifier.testTag("applock_pin_length_${len.digits}")
                                         )
@@ -588,7 +594,7 @@ fun AppLockSetupScreen(
                             }
                             if (!isOwner) {
                                 TextButton(onClick = onOpenDeviceOwnerGuide) {
-                                    Text("Device Owner Info", color = palette.accentStrong)
+                                    Text("Device Owner Info", color = palette.textPrimary)
                                 }
                             }
                         }

@@ -3,24 +3,38 @@ package com.example.designsystem
 import androidx.compose.ui.graphics.Color
 
 object ResolveColors {
-    // Deep Dark Forest Green base & layered surface hierarchy
-    val ForestDeep = Color(0xFF040B08)          // Primary app background
-    val ForestSecondary = Color(0xFF09120E)     // Secondary dark forest / sheets / nav dock
-    val ForestBrandDeep = Color(0xFF06130F)     // Splash & brand intro canvas
-    val ForestSurface = Color(0xFF0E1A15)       // Primary card surface top
-    val ForestSurfaceElevated = Color(0xFF14241D) // Active/selected tiles & elevated surfaces
-    val ForestOutline = Color(0xFF1E3027)       // 1.dp hairline card border
-    val ForestDivider = Color(0xFF15241D)       // Subtle section & list divider
-    val ForestBorderGlow = Color(0xFF294437)    // Emphasized active border
-    val ForestGlass = Color(0xCC09120E)         // Translucent frosted modal/bar surface
+    // Rich Dark Forest Green base & layered surface hierarchy
+    val ForestDeep = Color(0xFF0A1713)          // Primary app background
+    val ForestSecondary = Color(0xFF10221C)     // Secondary dark forest / sheets / nav dock
+    val ForestBrandDeep = Color(0xFF10251F)     // Splash & brand intro canvas matching app icon
+    val ForestSurface = Color(0xFF152B23)       // Primary card surface top
+    val ForestSurfaceElevated = Color(0xFF1B362C) // Active/selected tiles & elevated surfaces
+    val ForestOutline = Color(0xFF28483B)       // 1.dp hairline card border
+    val ForestDivider = Color(0xFF1D362D)       // Subtle section & list divider
+    val ForestBorderGlow = Color(0xFF345E4E)    // Emphasized active border
+    val ForestGlass = Color(0xCC10221C)         // Translucent frosted modal/bar surface
 
-    // Rich Dark Teal Green accents (replacing Mint Green across focus & interactive actions)
-    val MintAccent = Color(0xFF176B5B)          // Primary CTA & active highlight (#176B5B)
-    val FocusMint = Color(0xFF176B5B)           // Success & active status highlight (#176B5B)
-    val MintBright = Color(0xFF2B9C86)          // Legible teal highlight for dark-surface text/icons
-    val SageAccent = Color(0xFF176B5B)          // Secondary teal accent (#176B5B)
-    val MintSoftContainer = Color(0xFF0B241E)   // Soft dark-teal container
+    // Dark Teal Green (#176B5B) for settings, switches & subtle active badges
+    val MintAccent = Color(0xFF176B5B)
+    val FocusMint = Color(0xFF176B5B)
+    val MintBright = Color(0xFF176B5B)
+    val SageAccent = Color(0xFF176B5B)
+    val MintSoftContainer = Color(0xFF112C24)
     val MintGlow = Color(0x40176B5B)
+
+    // Tasteful Mint Green for hero primary CTA buttons
+    val PrimaryMintCta = Color(0xFF5BD1A4)
+    val PrimaryMintCtaPressed = Color(0xFF47B88E)
+    val OnPrimaryMintCta = Color(0xFF071A14)
+
+    // Unique Instant Lock emerald pair matching Delayed/Schedule/App Lock card system
+    val InstantEmeraldStrong = Color(0xFF83E5BE)
+    val InstantEmeraldContainer = Color(0xFF123228)
+
+    // Muted dark-mint active navigation pill (calm opacity, crisp label & icon contrast)
+    val NavMintContainer = Color(0xFF173E32)
+    val NavMintBorder = Color(0xFF337860)
+    val NavMintContent = Color(0xFF8BE8C3)
 
     // Variant 1: Warm Champagne Gold (Flip Clock, schedules, milestones, version pills)
     val Champagne = Color(0xFFD4B781)
@@ -38,12 +52,12 @@ object ResolveColors {
     val CobaltContainer = Color(0xFF172236)
 
     // Variant 4: Graphite Slate Neutrals (secondary buttons, inactive toggles, nested rows)
-    val GraphiteControl = Color(0xFF121C19)
-    val GraphiteBorder = Color(0xFF23332F)
+    val GraphiteControl = Color(0xFF162822)
+    val GraphiteBorder = Color(0xFF2B473C)
 
     // Primary button & compatibility aliases
-    val ForestPrimary = MintAccent
-    val ForestPrimaryPressed = Color(0xFF125548)
+    val ForestPrimary = PrimaryMintCta
+    val ForestPrimaryPressed = PrimaryMintCtaPressed
     val SagePrimary = MintAccent
     val SageSecondary = SageAccent
     val SageSoft = MintBright
@@ -62,7 +76,7 @@ object ResolveColors {
 
     // Semantic statuses
     val SuccessGreen = FocusMint
-    val SuccessContainer = Color(0xFF0B241E)
+    val SuccessContainer = Color(0xFF112C24)
     val AmberWarn = Color(0xFFE8BA6B)
     val AmberContainer = Color(0xFF2C2214)
     val ErrorCoral = Color(0xFFEC7A7A)

@@ -152,6 +152,7 @@ class LockScreenActivity : ComponentActivity() {
 
     private var hasLoadedTiltPreference by mutableStateOf(false)
     private var isTiltModeEnabled by mutableStateOf(false)
+    private var sensorForcedLandscape = false
     private var isActivityResumed = false
     private val orientationHandler = Handler(Looper.getMainLooper())
     private var orientationListener: OrientationEventListener? = null
@@ -458,14 +459,22 @@ class LockScreenActivity : ComponentActivity() {
 
         if (!isTiltModeEnabled) {
             stopOrientationListener()
+            sensorForcedLandscape = false
             if (!isFinishing && requestedOrientation != ActivityInfo.SCREEN_ORIENTATION_PORTRAIT) {
-                requestedOrientation = ActivityInfo.SCREEN_ORIENTATION_PORTRAIT
+                runCatching { requestedOrientation = ActivityInfo.SCREEN_ORIENTATION_PORTRAIT }
             }
             return
         }
 
-        if (transitionedToEnabled && requestedOrientation == ActivityInfo.SCREEN_ORIENTATION_PORTRAIT) {
-            requestedOrientation = ActivityInfo.SCREEN_ORIENTATION_UNSPECIFIED
+        // Tilt mode is active: use FULL_USER instead of pinning PORTRAIT when upright so both
+        // system Auto-Rotate and streaming emulator rotate controls switch smoothly to landscape.
+        if (!isFinishing &&
+            (transitionedToEnabled ||
+                requestedOrientation == ActivityInfo.SCREEN_ORIENTATION_PORTRAIT ||
+                requestedOrientation == ActivityInfo.SCREEN_ORIENTATION_UNSPECIFIED)
+        ) {
+            sensorForcedLandscape = false
+            runCatching { requestedOrientation = ActivityInfo.SCREEN_ORIENTATION_FULL_USER }
         }
 
         if (!isActivityResumed) {
@@ -480,34 +489,53 @@ class LockScreenActivity : ComponentActivity() {
             ) {
                 override fun onOrientationChanged(orientation: Int) {
                     val candidate = resolveLockScreenCandidateOrientation(orientation) ?: return
-                    if (candidate == requestedOrientation) {
+                    val targetOrientation = when (candidate) {
+                        ActivityInfo.SCREEN_ORIENTATION_LANDSCAPE,
+                        ActivityInfo.SCREEN_ORIENTATION_REVERSE_LANDSCAPE -> candidate
+                        ActivityInfo.SCREEN_ORIENTATION_PORTRAIT -> {
+                            // Only unlock back to FULL_USER if accelerometer tilt previously forced
+                            // landscape (e.g. OS Auto-Rotate is off). Upright idle must not fight
+                            // explicit system/emulator rotation.
+                            if (!sensorForcedLandscape) return
+                            ActivityInfo.SCREEN_ORIENTATION_FULL_USER
+                        }
+                        else -> return
+                    }
+
+                    if (targetOrientation == requestedOrientation) {
                         pendingOrientationRunnable?.let { orientationHandler.removeCallbacks(it) }
                         pendingOrientationRunnable = null
                         pendingTargetOrientation = null
                         return
                     }
-                    if (candidate != pendingTargetOrientation) {
+
+                    if (targetOrientation != pendingTargetOrientation) {
                         pendingOrientationRunnable?.let { orientationHandler.removeCallbacks(it) }
-                        pendingTargetOrientation = candidate
+                        pendingTargetOrientation = targetOrientation
                         val task = Runnable {
-                            if (!isFinishing && isTiltModeEnabled && requestedOrientation != candidate) {
-                                requestedOrientation = candidate
+                            if (!isFinishing && isTiltModeEnabled && requestedOrientation != targetOrientation) {
+                                sensorForcedLandscape =
+                                    targetOrientation == ActivityInfo.SCREEN_ORIENTATION_LANDSCAPE ||
+                                    targetOrientation == ActivityInfo.SCREEN_ORIENTATION_REVERSE_LANDSCAPE
+                                runCatching { requestedOrientation = targetOrientation }
                             }
                             pendingOrientationRunnable = null
                             pendingTargetOrientation = null
                         }
                         pendingOrientationRunnable = task
-                        orientationHandler.postDelayed(task, 240L)
+                        orientationHandler.postDelayed(task, 200L)
                     }
                 }
             }
         }
 
         val listener = orientationListener
-        if (listener != null && listener.canDetectOrientation()) {
-            listener.enable()
+        val canDetect = runCatching { listener?.canDetectOrientation() == true }.getOrDefault(false)
+        if (listener != null && canDetect) {
+            runCatching { listener.enable() }
         } else if (!isFinishing && requestedOrientation != ActivityInfo.SCREEN_ORIENTATION_FULL_USER) {
-            requestedOrientation = ActivityInfo.SCREEN_ORIENTATION_FULL_USER
+            sensorForcedLandscape = false
+            runCatching { requestedOrientation = ActivityInfo.SCREEN_ORIENTATION_FULL_USER }
         }
     }
 
@@ -515,7 +543,7 @@ class LockScreenActivity : ComponentActivity() {
         pendingOrientationRunnable?.let { orientationHandler.removeCallbacks(it) }
         pendingOrientationRunnable = null
         pendingTargetOrientation = null
-        orientationListener?.disable()
+        runCatching { orientationListener?.disable() }
     }
 }
 
@@ -633,8 +661,8 @@ internal fun SignatureLockScreen(
             lockReminderEnabled &&
             lockReminderText.isNotBlank()
         val mascotStageSize = when {
-            isLandscape && availableHeight < 390.dp -> 110.dp
-            isLandscape -> 134.dp
+            isLandscape && availableHeight < 390.dp -> 100.dp
+            isLandscape -> 122.dp
             compactHeight -> 122.dp
             else -> 184.dp
         }
@@ -748,7 +776,7 @@ internal fun SignatureLockScreen(
                                 fontWeight = FontWeight.SemiBold,
                                 letterSpacing = 1.0.sp
                             ),
-                            color = palette.accentStrong,
+                            color = palette.textPrimary,
                             maxLines = 1,
                             overflow = TextOverflow.Ellipsis
                         )
@@ -761,7 +789,7 @@ internal fun SignatureLockScreen(
                         horizontalArrangement = Arrangement.spacedBy(20.dp),
                         verticalAlignment = Alignment.CenterVertically
                     ) {
-                        // Left Section: Masked Mascot and Focus Timer, vertically centered with balanced spacing
+                        // Left Section: Masked Mascot and Focus Timer, slightly elevated for balanced framing
                         Box(
                             modifier = Modifier
                                 .weight(1f)
@@ -771,16 +799,18 @@ internal fun SignatureLockScreen(
                             Column(
                                 modifier = Modifier
                                     .fillMaxWidth()
-                                    .verticalScroll(rememberScrollState()),
+                                    .verticalScroll(rememberScrollState())
+                                    .padding(bottom = 14.dp),
                                 horizontalAlignment = Alignment.CenterHorizontally,
-                                verticalArrangement = Arrangement.spacedBy(10.dp, Alignment.CenterVertically)
+                                verticalArrangement = Arrangement.spacedBy(6.dp, Alignment.CenterVertically)
                             ) {
                                 LockScreenMascotStage(
                                     activeMascot = mascotType,
                                     controllerState = mascotControllerState,
                                     reducedMotion = reducedMotion,
                                     isPaused = isAnimationPaused,
-                                    mascotStageSize = mascotStageSize
+                                    mascotStageSize = mascotStageSize,
+                                    bubbleSlotMinHeight = 38.dp
                                 )
                                 LockScreenCountdownCard(
                                     remainingMillis = remainingMillis,
@@ -876,7 +906,7 @@ internal fun SignatureLockScreen(
                             "$modeText  •  $tierText"
                         },
                         style = MaterialTheme.typography.labelSmall.copy(letterSpacing = 1.1.sp),
-                        color = palette.accentStrong
+                        color = palette.textPrimary
                     )
                 }
 
@@ -999,7 +1029,7 @@ internal fun SignatureLockScreen(
                                 color = palette.primaryButton,
                                 border = BorderStroke(
                                     1.dp,
-                                    palette.accentStrong.copy(alpha = 0.35f)
+                                    palette.primaryButtonPressed.copy(alpha = 0.7f)
                                 ),
                                 modifier = Modifier
                                     .minimumInteractiveComponentSize()
@@ -1184,7 +1214,7 @@ private fun AllowedAppLaunchRow(
             Icon(
                 imageVector = ResolveIcons.Apps,
                 contentDescription = null,
-                tint = palette.accentStrong,
+                tint = palette.slateTealStrong,
                 modifier = Modifier.size(32.dp)
             )
         }
@@ -1266,7 +1296,7 @@ private fun LockScreenReminderAnchor(
                         fontWeight = FontWeight.Medium,
                         lineHeight = 18.sp
                     ),
-                    color = palette.accentStrong.copy(alpha = 0.92f),
+                    color = palette.textPrimary.copy(alpha = 0.92f),
                     textAlign = TextAlign.Center,
                     maxLines = 3,
                     overflow = TextOverflow.Ellipsis,
@@ -1317,7 +1347,7 @@ private fun LockScreenCountdownCard(
             Icon(
                 imageVector = Icons.Outlined.Lock,
                 contentDescription = null,
-                tint = palette.accentStrong,
+                tint = palette.textSecondary,
                 modifier = Modifier.size(12.dp)
             )
             Text(
@@ -1413,7 +1443,7 @@ private fun LandscapeVerticalActionButtons(
                 interactionSource = phoneInteraction,
                 shape = RoundedCornerShape(13.dp),
                 color = palette.primaryButton,
-                border = BorderStroke(1.dp, palette.accentStrong.copy(alpha = 0.35f)),
+                border = BorderStroke(1.dp, palette.primaryButtonPressed.copy(alpha = 0.7f)),
                 modifier = Modifier
                     .fillMaxWidth()
                     .heightIn(min = 48.dp)

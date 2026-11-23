@@ -692,7 +692,7 @@ fun MoreScreen(
                                     "Set emergency unlock code for restricted sessions"
                                 },
                                 style = MaterialTheme.typography.bodySmall,
-                                color = if (hasRecoveryCode) palette.accentStrong else palette.warn
+                                color = if (hasRecoveryCode) palette.textSecondary else palette.warn
                             )
                         }
                         Icon(
@@ -897,7 +897,7 @@ fun MoreScreen(
                                         fontStyle = FontStyle.Italic,
                                         fontWeight = FontWeight.Medium
                                     ),
-                                    color = palette.accentStrong,
+                                    color = palette.textSecondary,
                                     startTyping = isAboutVisible || aboutExpanded,
                                     startDelayMillis = 120,
                                     typingDurationMillis = 2200,
@@ -911,7 +911,7 @@ fun MoreScreen(
                         Icon(
                             imageVector = if (aboutExpanded) ResolveIcons.ExpandLess else ResolveIcons.ExpandMore,
                             contentDescription = if (aboutExpanded) "Collapse About RESOLVE" else "Expand About RESOLVE",
-                            tint = palette.accentStrong,
+                            tint = palette.textSecondary,
                             modifier = Modifier.size(24.dp)
                         )
                     }
@@ -921,14 +921,14 @@ fun MoreScreen(
                         verticalAlignment = Alignment.CenterVertically,
                         horizontalArrangement = Arrangement.spacedBy(8.dp)
                     ) {
-                        PulsingStatusDot(color = palette.accentStrong, size = 5.dp)
+                        PulsingStatusDot(color = palette.accent, size = 5.dp)
                         KeyboardTypingText(
                             fullText = "Developed by Tahan Official",
                             style = MaterialTheme.typography.titleSmall.copy(
                                 fontWeight = FontWeight.SemiBold,
                                 letterSpacing = 0.35.sp
                             ),
-                            color = palette.accentStrong,
+                            color = palette.textPrimary,
                             startTyping = isAboutVisible || aboutExpanded,
                             startDelayMillis = 2400,
                             typingDurationMillis = 1900,

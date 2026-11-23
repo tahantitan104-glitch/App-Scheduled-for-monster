@@ -1196,12 +1196,16 @@ private fun FlipTimerPage(
                         Text(
                             text = "Custom Duration (H : M : S)",
                             style = MaterialTheme.typography.titleSmall,
-                            color = FlipClockPalette.PrimaryCtaText
+                            color = FlipClockPalette.AccentSoft
                         )
                         Text(
                             text = "Pick",
                             style = MaterialTheme.typography.labelLarge,
-                            color = FlipClockPalette.SageLabel
+                            color = FlipClockPalette.PrimaryCtaText,
+                            modifier = Modifier
+                                .clip(CircleShape)
+                                .background(FlipClockPalette.PrimaryCta)
+                                .padding(horizontal = 12.dp, vertical = 4.dp)
                         )
                     }
                 }
@@ -1235,14 +1239,14 @@ private fun FlipTimerPage(
                         Text(
                             text = preset.name,
                             style = MaterialTheme.typography.bodyLarge.copy(fontWeight = FontWeight.Medium),
-                            color = if (selected) FlipClockPalette.PrimaryCtaText else FlipClockPalette.AccentSoft,
+                            color = if (selected) FlipClockPalette.SageLabel else FlipClockPalette.AccentSoft,
                             maxLines = 1,
                             overflow = TextOverflow.Ellipsis
                         )
                         Text(
                             text = formatDurationWords(preset.durationSeconds),
                             style = MaterialTheme.typography.labelMedium,
-                            color = if (selected) FlipClockPalette.SageLabel else FlipClockPalette.SubTextGrey
+                            color = if (selected) FlipClockPalette.AccentSoft else FlipClockPalette.SubTextGrey
                         )
                     }
                 }

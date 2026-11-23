@@ -6,6 +6,7 @@ import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.ExperimentalLayoutApi
 import androidx.compose.foundation.layout.FlowRow
@@ -732,15 +733,26 @@ fun FlipClockSettingsSheet(
 
 @Composable
 private fun SettingsSectionLabel(label: String) {
-    Text(
-        text = label,
-        style = MaterialTheme.typography.labelMedium.copy(
-            letterSpacing = 1.1.sp,
-            fontWeight = FontWeight.SemiBold
-        ),
-        color = FlipClockPalette.SageLabel,
+    Row(
+        verticalAlignment = Alignment.CenterVertically,
+        horizontalArrangement = Arrangement.spacedBy(8.dp),
         modifier = Modifier.padding(top = 6.dp, bottom = 2.dp)
-    )
+    ) {
+        Box(
+            modifier = Modifier
+                .size(width = 4.dp, height = 14.dp)
+                .clip(CircleShape)
+                .background(FlipClockPalette.SageLabel)
+        )
+        Text(
+            text = label,
+            style = MaterialTheme.typography.labelMedium.copy(
+                letterSpacing = 1.1.sp,
+                fontWeight = FontWeight.SemiBold
+            ),
+            color = FlipClockPalette.AccentSoft
+        )
+    }
 }
 
 @Composable

@@ -6,6 +6,7 @@ import androidx.compose.runtime.Composable
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.geometry.Size
+import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.StrokeCap
 import androidx.compose.ui.graphics.drawscope.Stroke
@@ -16,14 +17,14 @@ import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 
 /**
- * Refined Pure-Flat geometric RESOLVE Focus Symbol drawn natively via Compose Canvas:
- * - Symmetrical open geometric Focus Ring with architectural upper-right break (-26° to -64°, sweep 322°)
- * - Crisp flat negative space and central Dark Teal Green Focus Dot
- * - Pure flat aesthetic: zero gradients, shadows, 3D depth, or glow artifacts.
- * Matches ic_launcher_foreground.xml and ic_resolve_splash.xml 1:1.
+ * Geometric RESOLVE Focus Symbol drawn natively via Compose Canvas:
+ * - Soft radial center glow behind the focal dot
+ * - Mint-emerald open geometric Focus Ring with upper-right gap (-14° clockwise 323° to -51°)
+ * - Crisp Central Focus Point dot (#75E0B5)
+ * Matches ic_launcher_foreground.xml, ic_resolve_splash.xml, and the brand logo PNG 1:1.
  */
-private val RefinedFlatRingLight = Color(0xFFF2F5F1)
-private val RefinedFlatDotTeal = Color(0xFF176B5B)
+private val FocusSymbolMint = Color(0xFF75E0B5)
+private val FocusSymbolBackdrop = Color(0xFF10251F)
 
 @Composable
 fun FocusSymbolMark(
@@ -32,7 +33,8 @@ fun FocusSymbolMark(
     ringProgress: Float = 1f,
     ringAlpha: Float = 1f,
     dotAlpha: Float = 1f,
-    glowAlpha: Float = 0f,
+    glowAlpha: Float = 1f,
+    showBackdropCircle: Boolean = false,
     testTagName: String = "focus_symbol_mark"
 ) {
     Canvas(
@@ -44,18 +46,44 @@ fun FocusSymbolMark(
         val center = Offset(this.size.width / 2f, this.size.height / 2f)
         val unit = this.size.minDimension
 
-        // Proportional to 108x108 adaptive safe-zone master (r=25/72 ~ 0.347, stroke=5.5/72 ~ 0.076, dot=6.2/72 ~ 0.086)
-        val ringRadius = unit * 0.347f
-        val ringStroke = unit * 0.076f
-        val dotRadius = unit * 0.086f
+        if (showBackdropCircle) {
+            drawCircle(
+                color = FocusSymbolBackdrop,
+                radius = unit * 0.50f,
+                center = center
+            )
+        }
+
+        val scaleFactor = if (showBackdropCircle) 1f else 1.28f
+        val ringRadius = unit * 0.320f * scaleFactor
+        val ringStroke = unit * 0.067f * scaleFactor
+        val dotRadius = unit * 0.077f * scaleFactor
+        val glowRadius = unit * 0.225f * scaleFactor
+
+        val clampedGlowAlpha = glowAlpha.coerceIn(0f, 1f)
+        if (clampedGlowAlpha > 0.005f) {
+            drawCircle(
+                brush = Brush.radialGradient(
+                    colors = listOf(
+                        FocusSymbolMint.copy(alpha = 0.07f * clampedGlowAlpha),
+                        FocusSymbolMint.copy(alpha = 0.02f * clampedGlowAlpha),
+                        Color.Transparent
+                    ),
+                    center = center,
+                    radius = glowRadius
+                ),
+                radius = glowRadius,
+                center = center
+            )
+        }
 
         val clampedRingProgress = ringProgress.coerceIn(0f, 1f)
         val clampedRingAlpha = ringAlpha.coerceIn(0f, 1f)
         if (clampedRingProgress > 0.005f && clampedRingAlpha > 0.005f) {
-            val totalSweep = 322f
+            val totalSweep = 323f
             drawArc(
-                color = RefinedFlatRingLight.copy(alpha = clampedRingAlpha),
-                startAngle = -26f,
+                color = FocusSymbolMint.copy(alpha = clampedRingAlpha),
+                startAngle = -14f,
                 sweepAngle = totalSweep * clampedRingProgress,
                 useCenter = false,
                 topLeft = Offset(center.x - ringRadius, center.y - ringRadius),
@@ -67,7 +95,7 @@ fun FocusSymbolMark(
         val clampedDotAlpha = dotAlpha.coerceIn(0f, 1f)
         if (clampedDotAlpha > 0.005f) {
             drawCircle(
-                color = RefinedFlatDotTeal.copy(alpha = clampedDotAlpha),
+                color = FocusSymbolMint.copy(alpha = clampedDotAlpha),
                 radius = dotRadius,
                 center = center
             )

@@ -48,18 +48,18 @@ object FlipClockPalette {
     val SubTextGrey = Color(0xFFA2ACA5)
     val SeamBlack = Color(0xFF000000)
 
-    // Darker Deep Forest + Dark Teal Green (#176B5B) control chrome tokens
-    val PanelDark = Color(0xFF09120E)
-    val PanelElevated = Color(0xFF0E1A15)
-    val PanelActive = Color(0xFF14241D)
-    val PanelOutline = Color(0xFF1E3027)
-    val DividerSubtle = Color(0xFF15241D)
-    val PrimaryCta = Color(0xFF176B5B)
-    val PrimaryCtaText = Color(0xFFF2F5F1)
+    // Rich Dark Forest Green control chrome tokens + tasteful Mint CTA
+    val PanelDark = Color(0xFF10221C)
+    val PanelElevated = Color(0xFF152B23)
+    val PanelActive = Color(0xFF1B362C)
+    val PanelOutline = Color(0xFF28483B)
+    val DividerSubtle = Color(0xFF1D362D)
+    val PrimaryCta = Color(0xFF5BD1A4)
+    val PrimaryCtaText = Color(0xFF071A14)
     val SageAccent = Color(0xFF176B5B)
-    val SageLabel = Color(0xFF2B9C86)
+    val SageLabel = Color(0xFF5BD1A4)
     val AccentSoft = Color(0xFFF2F5F1)
-    val TimerIndicator = Color(0xFF176B5B)
+    val TimerIndicator = Color(0xFF5BD1A4)
 }
 
 private val FlipPageEasing = CubicBezierEasing(0.22f, 0.61f, 0.36f, 1.0f)

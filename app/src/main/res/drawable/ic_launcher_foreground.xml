@@ -1,20 +1,35 @@
 <?xml version="1.0" encoding="utf-8"?>
 <vector xmlns:android="http://schemas.android.com/apk/res/android"
+    xmlns:aapt="http://schemas.android.com/aapt"
     android:width="108dp"
     android:height="108dp"
     android:viewportWidth="108"
     android:viewportHeight="108">
 
-    <!-- Pure flat geometric Focus Ring: symmetrical 38 deg upper-right interruption (-26 deg to -64 deg, sweep 322 deg) -->
+    <!-- Subtle radial center glow behind the focus point matching the brand mark -->
+    <path android:pathData="M54,38 a16,16 0 1,0 0,32 a16,16 0 1,0 0,-32 z">
+        <aapt:attr name="android:fillColor">
+            <gradient
+                android:centerX="54"
+                android:centerY="54"
+                android:centerColor="#0475E0B5"
+                android:endColor="#0075E0B5"
+                android:gradientRadius="16"
+                android:startColor="#1075E0B5"
+                android:type="radial" />
+        </aapt:attr>
+    </path>
+
+    <!-- Mint-emerald open Focus Ring: upper-right gap centered at -32.5 deg (-14 deg clockwise 323 deg to -51 deg) -->
     <path
         android:fillColor="@android:color/transparent"
-        android:pathData="M76.47,43.04 A25,25 0 1,1 64.96,31.53"
-        android:strokeColor="#F2F5F1"
+        android:pathData="M76.32,48.44 A23,23 0 1,1 68.47,36.13"
+        android:strokeColor="#75E0B5"
         android:strokeLineCap="round"
-        android:strokeWidth="5.5" />
+        android:strokeWidth="4.9" />
 
-    <!-- Flat refined Central Focus Point dot -->
+    <!-- Mint-emerald Central Focus Point dot -->
     <path
-        android:fillColor="#176B5B"
-        android:pathData="M54,47.8 a6.2,6.2 0 1,0 0,12.4 a6.2,6.2 0 1,0 0,-12.4 z" />
+        android:fillColor="#75E0B5"
+        android:pathData="M54,48.4 a5.6,5.6 0 1,0 0,11.2 a5.6,5.6 0 1,0 0,-11.2 z" />
 </vector>

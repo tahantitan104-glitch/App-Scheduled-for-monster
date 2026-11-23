@@ -235,7 +235,7 @@ fun ModesScreen(
                             "Android System Dark Mode: OFF"
                         },
                         style = MaterialTheme.typography.labelMedium,
-                        color = if (report.isSystemNightModeActive) palette.accentStrong else palette.warn
+                        color = if (report.isSystemNightModeActive) palette.slateTealStrong else palette.warn
                     )
 
                     FlowRow(
@@ -446,7 +446,7 @@ private fun ModePerAppSheet(
                                 Text(
                                     text = status.badgeLabel,
                                     style = MaterialTheme.typography.labelSmall,
-                                    color = if (isSupported) palette.accentStrong else palette.textMuted
+                                    color = if (isSupported) palette.slateTealStrong else palette.textMuted
                                 )
                             }
                             Switch(

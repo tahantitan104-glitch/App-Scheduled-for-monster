@@ -626,13 +626,16 @@ private fun DelayedPresetsSection(
             OutlinedButton(
                 onClick = onCreatePresetClick,
                 shape = RoundedCornerShape(12.dp),
-                border = androidx.compose.foundation.BorderStroke(1.dp, palette.accentStrong.copy(alpha = 0.55f)),
+                colors = ButtonDefaults.outlinedButtonColors(
+                    containerColor = palette.accent,
+                    contentColor = palette.onAccent
+                ),
+                border = androidx.compose.foundation.BorderStroke(1.dp, palette.accent),
                 modifier = Modifier.testTag("delayed_new_preset_button")
             ) {
                 Text(
                     text = "+ New",
-                    style = MaterialTheme.typography.labelMedium,
-                    color = palette.accentStrong
+                    style = MaterialTheme.typography.labelMedium
                 )
             }
         }
@@ -668,7 +671,7 @@ private fun DelayedPresetsSection(
                             Text(
                                 text = preset.name,
                                 style = MaterialTheme.typography.titleSmall.copy(fontWeight = FontWeight.SemiBold),
-                                color = if (isSelected) palette.accentStrong else palette.textPrimary,
+                                color = palette.textPrimary,
                                 maxLines = 1,
                                 overflow = TextOverflow.Ellipsis
                             )
@@ -838,13 +841,13 @@ private fun SyncTargetScopeCard(
                 modifier = Modifier
                     .size(38.dp)
                     .clip(RoundedCornerShape(11.dp))
-                    .background(palette.surfaceElevated),
+                    .background(if (syncAcrossDevices) palette.accent else palette.surfaceElevated),
                 contentAlignment = Alignment.Center
             ) {
                 Icon(
                     imageVector = ResolveIcons.Sync,
                     contentDescription = null,
-                    tint = palette.accentStrong,
+                    tint = if (syncAcrossDevices) palette.onAccent else palette.textSecondary,
                     modifier = Modifier.size(20.dp)
                 )
             }
@@ -858,7 +861,7 @@ private fun SyncTargetScopeCard(
                 Text(
                     text = if (syncAcrossDevices) "Selected: All Linked Devices" else "Selected: This Phone Only",
                     style = MaterialTheme.typography.bodySmall,
-                    color = if (syncAcrossDevices) palette.accentStrong else palette.textSecondary
+                    color = if (syncAcrossDevices) palette.textPrimary else palette.textSecondary
                 )
             }
             Switch(
@@ -878,10 +881,16 @@ private fun SyncTargetScopeCard(
                 onClick = { onSyncAcrossDevicesChanged(false) },
                 label = { Text("This Phone Only") },
                 colors = FilterChipDefaults.filterChipColors(
-                    selectedContainerColor = palette.surfaceElevated,
-                    selectedLabelColor = palette.accentStrong,
+                    selectedContainerColor = palette.accent,
+                    selectedLabelColor = palette.onAccent,
                     containerColor = palette.surfaceSecondary,
                     labelColor = palette.textSecondary
+                ),
+                border = FilterChipDefaults.filterChipBorder(
+                    enabled = true,
+                    selected = !syncAcrossDevices,
+                    borderColor = palette.cardBorder,
+                    selectedBorderColor = palette.accent
                 ),
                 modifier = Modifier.testTag("${scopePrefix}_scope_local_chip")
             )
@@ -890,10 +899,16 @@ private fun SyncTargetScopeCard(
                 onClick = { onSyncAcrossDevicesChanged(true) },
                 label = { Text("All Linked Devices") },
                 colors = FilterChipDefaults.filterChipColors(
-                    selectedContainerColor = palette.surfaceElevated,
-                    selectedLabelColor = palette.accentStrong,
+                    selectedContainerColor = palette.accent,
+                    selectedLabelColor = palette.onAccent,
                     containerColor = palette.surfaceSecondary,
                     labelColor = palette.textSecondary
+                ),
+                border = FilterChipDefaults.filterChipBorder(
+                    enabled = true,
+                    selected = syncAcrossDevices,
+                    borderColor = palette.cardBorder,
+                    selectedBorderColor = palette.accent
                 ),
                 modifier = Modifier.testTag("${scopePrefix}_scope_all_chip")
             )
@@ -1052,15 +1067,22 @@ fun ScheduleLockSetupScreen(
                                 ScheduleType.DAILY to "Daily",
                                 ScheduleType.CUSTOM_WEEKLY to "Weekly"
                             ).forEach { (type, label) ->
+                                val selectedType = scheduleType == type
                                 FilterChip(
-                                    selected = scheduleType == type,
+                                    selected = selectedType,
                                     onClick = { scheduleType = type },
                                     label = { Text(label) },
                                     colors = FilterChipDefaults.filterChipColors(
-                                        selectedContainerColor = palette.surfaceElevated,
-                                        selectedLabelColor = palette.accentStrong,
+                                        selectedContainerColor = palette.accent,
+                                        selectedLabelColor = palette.onAccent,
                                         containerColor = palette.surfaceSecondary,
                                         labelColor = palette.textSecondary
+                                    ),
+                                    border = FilterChipDefaults.filterChipBorder(
+                                        enabled = true,
+                                        selected = selectedType,
+                                        borderColor = palette.cardBorder,
+                                        selectedBorderColor = palette.accent
                                     ),
                                     modifier = Modifier.testTag("schedule_type_${type.name}")
                                 )
@@ -1102,10 +1124,16 @@ fun ScheduleLockSetupScreen(
                                             Text(day.getDisplayName(TextStyle.SHORT, Locale.getDefault()))
                                         },
                                         colors = FilterChipDefaults.filterChipColors(
-                                            selectedContainerColor = palette.surfaceElevated,
-                                            selectedLabelColor = palette.accentStrong,
+                                            selectedContainerColor = palette.accent,
+                                            selectedLabelColor = palette.onAccent,
                                             containerColor = palette.surfaceSecondary,
                                             labelColor = palette.textSecondary
+                                        ),
+                                        border = FilterChipDefaults.filterChipBorder(
+                                            enabled = true,
+                                            selected = selected,
+                                            borderColor = palette.cardBorder,
+                                            selectedBorderColor = palette.accent
                                         )
                                     )
                                 }
@@ -1450,13 +1478,13 @@ private fun ScheduleStrictModeRow(
                 modifier = Modifier
                     .size(38.dp)
                     .clip(RoundedCornerShape(11.dp))
-                    .background(if (isStrictMode) palette.warnContainer else palette.surfaceElevated),
+                    .background(if (isStrictMode) palette.warnContainer else palette.accent),
                 contentAlignment = Alignment.Center
             ) {
                 Icon(
                     imageVector = ResolveIcons.Shield,
                     contentDescription = null,
-                    tint = if (isStrictMode) palette.warn else palette.accentStrong,
+                    tint = if (isStrictMode) palette.warn else palette.onAccent,
                     modifier = Modifier.size(20.dp)
                 )
             }
@@ -1557,7 +1585,7 @@ private fun ReviewSummaryCard(lines: List<String>) {
         Text(
             text = "SESSION SUMMARY",
             style = MaterialTheme.typography.labelSmall,
-            color = palette.accentStrong
+            color = palette.textPrimary
         )
         lines.forEach { line ->
             Text(

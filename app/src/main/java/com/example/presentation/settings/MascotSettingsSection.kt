@@ -248,7 +248,7 @@ fun MascotAppearanceCard(
             Text(
                 text = "PREVIEW ANIMATIONS",
                 style = MaterialTheme.typography.labelSmall.copy(letterSpacing = 1.0.sp),
-                color = palette.accentStrong
+                color = palette.textSecondary
             )
             FlowRow(
                 horizontalArrangement = Arrangement.spacedBy(8.dp),
@@ -528,18 +528,18 @@ private fun PreviewActionChip(
             )
         },
         colors = FilterChipDefaults.filterChipColors(
-            selectedContainerColor = palette.surfaceElevated,
-            selectedLabelColor = palette.accentStrong,
-            selectedLeadingIconColor = palette.accentStrong,
+            selectedContainerColor = palette.accent,
+            selectedLabelColor = palette.onAccent,
+            selectedLeadingIconColor = palette.onAccent,
             containerColor = palette.cardBottom,
             labelColor = palette.textSecondary,
-            iconColor = palette.accent
+            iconColor = palette.textSecondary
         ),
         border = FilterChipDefaults.filterChipBorder(
             enabled = true,
             selected = active,
             borderColor = palette.cardBorder,
-            selectedBorderColor = palette.accentSecondary
+            selectedBorderColor = palette.accent
         ),
         modifier = Modifier.testTag(testTag)
     )
@@ -689,7 +689,7 @@ fun FocusMessagesManagerSheet(
                     Text(
                         text = "MESSAGE FREQUENCY",
                         style = MaterialTheme.typography.labelSmall.copy(letterSpacing = 1.1.sp),
-                        color = palette.accentStrong
+                        color = palette.textSecondary
                     )
                     FlowRow(
                         horizontalArrangement = Arrangement.spacedBy(8.dp),
@@ -702,8 +702,8 @@ fun FocusMessagesManagerSheet(
                                 onClick = { onSelectFrequency(freq) },
                                 label = { Text(freq.label) },
                                 colors = FilterChipDefaults.filterChipColors(
-                                    selectedContainerColor = palette.surfaceElevated,
-                                    selectedLabelColor = palette.accentStrong,
+                                    selectedContainerColor = palette.accent,
+                                    selectedLabelColor = palette.onAccent,
                                     containerColor = palette.cardBottom,
                                     labelColor = palette.textSecondary
                                 ),
@@ -711,7 +711,7 @@ fun FocusMessagesManagerSheet(
                                     enabled = true,
                                     selected = selected,
                                     borderColor = palette.cardBorder,
-                                    selectedBorderColor = palette.accentSecondary
+                                    selectedBorderColor = palette.accent
                                 ),
                                 modifier = Modifier.testTag("focus_message_frequency_${freq.storageKey}")
                             )
@@ -745,8 +745,11 @@ fun FocusMessagesManagerSheet(
 
                     OutlinedButton(
                         onClick = onRestoreDefaults,
-                        colors = ButtonDefaults.outlinedButtonColors(contentColor = palette.accentStrong),
-                        border = BorderStroke(1.dp, palette.cardBorder),
+                        colors = ButtonDefaults.outlinedButtonColors(
+                            containerColor = palette.accent,
+                            contentColor = palette.onAccent
+                        ),
+                        border = BorderStroke(1.dp, palette.accent),
                         shape = RoundedCornerShape(12.dp),
                         modifier = Modifier.testTag("focus_message_restore_defaults_button")
                     ) {
@@ -1013,7 +1016,7 @@ fun LockReminderEditorSheet(
                         Text(
                             text = "DISPLAY STYLE",
                             style = MaterialTheme.typography.labelSmall.copy(letterSpacing = 1.1.sp),
-                            color = palette.accentStrong
+                            color = palette.textSecondary
                         )
                         FlowRow(
                             horizontalArrangement = Arrangement.spacedBy(8.dp),
@@ -1029,8 +1032,8 @@ fun LockReminderEditorSheet(
                                     },
                                     label = { Text(styleOption.label) },
                                     colors = FilterChipDefaults.filterChipColors(
-                                        selectedContainerColor = palette.surfaceElevated,
-                                        selectedLabelColor = palette.accentStrong,
+                                        selectedContainerColor = palette.accent,
+                                        selectedLabelColor = palette.onAccent,
                                         containerColor = palette.cardBottom,
                                         labelColor = palette.textSecondary
                                     ),
@@ -1038,7 +1041,7 @@ fun LockReminderEditorSheet(
                                         enabled = true,
                                         selected = selected,
                                         borderColor = palette.cardBorder,
-                                        selectedBorderColor = palette.accentSecondary
+                                        selectedBorderColor = palette.accent
                                     ),
                                     modifier = Modifier.testTag("lock_reminder_style_${styleOption.storageKey}")
                                 )
@@ -1079,7 +1082,7 @@ fun LockReminderEditorSheet(
                         Text(
                             text = "PREVIEW ON LOCK SCREEN",
                             style = MaterialTheme.typography.labelSmall.copy(letterSpacing = 1.1.sp),
-                            color = palette.accentStrong
+                            color = palette.textSecondary
                         )
                         Box(
                             modifier = Modifier
@@ -1121,7 +1124,7 @@ fun LockReminderEditorSheet(
                                         fontStyle = FontStyle.Italic,
                                         fontWeight = FontWeight.Medium
                                     ),
-                                    color = palette.accentStrong,
+                                    color = palette.textPrimary,
                                     textAlign = TextAlign.Center
                                 )
                             }
@@ -1133,7 +1136,7 @@ fun LockReminderEditorSheet(
                         Text(
                             text = "EFFECTIVE PRESETS",
                             style = MaterialTheme.typography.labelSmall.copy(letterSpacing = 1.1.sp),
-                            color = palette.accentStrong
+                            color = palette.textSecondary
                         )
                         DefaultLockReminders.presets.forEachIndexed { idx, preset ->
                             val isSelected = trimmed == preset
@@ -1142,12 +1145,12 @@ fun LockReminderEditorSheet(
                                     .fillMaxWidth()
                                     .clip(RoundedCornerShape(12.dp))
                                     .background(
-                                        if (isSelected) palette.surfaceElevated
+                                        if (isSelected) palette.accent
                                         else palette.cardBottom
                                     )
                                     .border(
                                         1.dp,
-                                        if (isSelected) palette.accentSecondary else palette.cardBorder,
+                                        if (isSelected) palette.accent else palette.cardBorder,
                                         RoundedCornerShape(12.dp)
                                     )
                                     .clickable { draftText = preset }
@@ -1157,7 +1160,7 @@ fun LockReminderEditorSheet(
                                 Text(
                                     text = preset,
                                     style = MaterialTheme.typography.bodySmall.copy(fontStyle = FontStyle.Italic),
-                                    color = if (isSelected) palette.accentStrong else palette.textPrimary
+                                    color = if (isSelected) palette.onAccent else palette.textPrimary
                                 )
                             }
                         }
