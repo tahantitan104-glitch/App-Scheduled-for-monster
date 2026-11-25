@@ -38,6 +38,8 @@ import com.example.designsystem.LocalResolveExtendedPalette
 import com.example.domain.model.DailyAppUsageSummary
 import com.example.domain.model.LockSchedule
 import com.example.domain.model.SessionHistoryRecord
+import com.example.presentation.components.ResolveMotion
+import com.example.presentation.components.rememberEffectiveReducedMotion
 import com.example.presentation.history.HistoryScreen
 import com.example.presentation.schedule.ScheduleScreen
 
@@ -57,9 +59,11 @@ fun InsightsScreen(
     onToggleSchedule: (LockSchedule, Boolean) -> Unit,
     onDeleteSchedule: (Long) -> Unit,
     modifier: Modifier = Modifier,
-    initialSection: InsightsSection = InsightsSection.HISTORY
+    initialSection: InsightsSection = InsightsSection.HISTORY,
+    reducedMotion: Boolean = false
 ) {
     val palette = LocalResolveExtendedPalette.current
+    val effectiveReducedMotion = rememberEffectiveReducedMotion(reducedMotion)
     var activeSection by rememberSaveable { mutableStateOf(initialSection) }
 
     Column(
@@ -72,7 +76,7 @@ fun InsightsScreen(
         // Segmented toggle organizing History & Schedule cleanly under Insights
         Box(
             modifier = Modifier
-                .widthIn(max = 680.dp)
+                .widthIn(max = 820.dp)
                 .fillMaxWidth()
                 .padding(horizontal = 20.dp, vertical = 12.dp)
         ) {
@@ -89,6 +93,7 @@ fun InsightsScreen(
                     label = "History (${records.size})",
                     selected = activeSection == InsightsSection.HISTORY,
                     onClick = { activeSection = InsightsSection.HISTORY },
+                    reducedMotion = effectiveReducedMotion,
                     testTag = "insights_tab_history",
                     modifier = Modifier.weight(1f)
                 )
@@ -96,6 +101,7 @@ fun InsightsScreen(
                     label = "Schedule (${schedules.size})",
                     selected = activeSection == InsightsSection.SCHEDULE,
                     onClick = { activeSection = InsightsSection.SCHEDULE },
+                    reducedMotion = effectiveReducedMotion,
                     testTag = "insights_tab_schedule",
                     modifier = Modifier.weight(1f)
                 )
@@ -105,7 +111,8 @@ fun InsightsScreen(
         AnimatedContent(
             targetState = activeSection,
             transitionSpec = {
-                fadeIn(tween(200)) togetherWith fadeOut(tween(160))
+                fadeIn(ResolveMotion.fastTween(effectiveReducedMotion)) togetherWith
+                    fadeOut(ResolveMotion.exitTween(effectiveReducedMotion))
             },
             label = "insights_section_switch",
             modifier = Modifier
@@ -139,18 +146,19 @@ private fun InsightsSegmentTab(
     label: String,
     selected: Boolean,
     onClick: () -> Unit,
+    reducedMotion: Boolean,
     testTag: String,
     modifier: Modifier = Modifier
 ) {
     val palette = LocalResolveExtendedPalette.current
     val bg by animateColorAsState(
         targetValue = if (selected) palette.accent else Color.Transparent,
-        animationSpec = tween(180),
+        animationSpec = ResolveMotion.fastTween(reducedMotion),
         label = "insights_tab_bg_$testTag"
     )
     val fg by animateColorAsState(
         targetValue = if (selected) palette.onAccent else palette.textSecondary,
-        animationSpec = tween(180),
+        animationSpec = ResolveMotion.fastTween(reducedMotion),
         label = "insights_tab_fg_$testTag"
     )
 

@@ -9,6 +9,7 @@ import android.media.AudioFormat
 import android.media.AudioManager
 import android.media.AudioTrack
 import android.os.BatteryManager
+import android.os.Build
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
 import org.json.JSONObject
@@ -53,7 +54,7 @@ object FlipClockTelemetry {
         val percent = if (level >= 0 && scale > 0) {
             ((level * 100f) / scale).toInt().coerceIn(0, 100)
         } else {
-            val bm = context.getSystemService(BatteryManager::class.java)
+            val bm = context.getSystemService(Context.BATTERY_SERVICE) as? BatteryManager
             bm?.getIntProperty(BatteryManager.BATTERY_PROPERTY_CAPACITY)?.takeIf { it in 0..100 } ?: return null
         }
         val charging = status == BatteryManager.BATTERY_STATUS_CHARGING ||
@@ -62,7 +63,7 @@ object FlipClockTelemetry {
     }.getOrNull()
 
     fun readUpcomingAlarmLabel(context: Context, use24Hour: Boolean): String? = runCatching {
-        val alarmManager = context.getSystemService(AlarmManager::class.java) ?: return null
+        val alarmManager = context.getSystemService(Context.ALARM_SERVICE) as? AlarmManager ?: return null
         val triggerMs = alarmManager.nextAlarmClock?.triggerTime ?: return null
         val pattern = if (use24Hour) "EEE HH:mm" else "EEE h:mm a"
         val formatter = SimpleDateFormat(pattern, Locale.getDefault())
@@ -168,28 +169,37 @@ class FlipTickerAudioPlayer(context: Context) {
 
     fun playTickIfPermitted() {
         runCatching {
-            val am = appContext.getSystemService(AudioManager::class.java)
+            val am = appContext.getSystemService(Context.AUDIO_SERVICE) as? AudioManager
             if (am != null && am.ringerMode != AudioManager.RINGER_MODE_NORMAL) {
                 return
             }
             val byteSize = pcmSamples.size * 2
-            val track = AudioTrack.Builder()
-                .setAudioAttributes(
-                    AudioAttributes.Builder()
-                        .setUsage(AudioAttributes.USAGE_ASSISTANCE_SONIFICATION)
-                        .setContentType(AudioAttributes.CONTENT_TYPE_SONIFICATION)
-                        .build()
-                )
-                .setAudioFormat(
-                    AudioFormat.Builder()
-                        .setEncoding(AudioFormat.ENCODING_PCM_16BIT)
-                        .setSampleRate(sampleRate)
-                        .setChannelMask(AudioFormat.CHANNEL_OUT_MONO)
-                        .build()
-                )
-                .setTransferMode(AudioTrack.MODE_STATIC)
-                .setBufferSizeInBytes(byteSize)
+            val audioAttrs = AudioAttributes.Builder()
+                .setUsage(AudioAttributes.USAGE_ASSISTANCE_SONIFICATION)
+                .setContentType(AudioAttributes.CONTENT_TYPE_SONIFICATION)
                 .build()
+            val audioFormat = AudioFormat.Builder()
+                .setEncoding(AudioFormat.ENCODING_PCM_16BIT)
+                .setSampleRate(sampleRate)
+                .setChannelMask(AudioFormat.CHANNEL_OUT_MONO)
+                .build()
+            val track = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.M) {
+                AudioTrack.Builder()
+                    .setAudioAttributes(audioAttrs)
+                    .setAudioFormat(audioFormat)
+                    .setTransferMode(AudioTrack.MODE_STATIC)
+                    .setBufferSizeInBytes(byteSize)
+                    .build()
+            } else {
+                @Suppress("DEPRECATION")
+                AudioTrack(
+                    audioAttrs,
+                    audioFormat,
+                    byteSize,
+                    AudioTrack.MODE_STATIC,
+                    AudioManager.AUDIO_SESSION_ID_GENERATE
+                )
+            }
 
             track.write(pcmSamples, 0, pcmSamples.size)
             track.setVolume(0.22f)

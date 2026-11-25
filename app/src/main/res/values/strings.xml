@@ -6,6 +6,9 @@
     <string name="accessibility_service_description">Detects which app is currently in the foreground during an active Resolve lock session so blocked apps stay restricted while your allowed apps and phone calls remain usable.</string>
     <string name="notification_channel_session_name">Active Focus Session</string>
     <string name="notification_channel_session_desc">Keeps Resolve\'s free-use countdown and lock enforcement timing accurate.</string>
+    <string name="notification_channel_sync_name">Multi-Device Sync</string>
+    <string name="notification_channel_sync_desc">Keeps cross-device focus lock sync active and responsive in the background.</string>
+    <string name="notification_sync_active_title">Resolve Multi-Device Sync</string>
     <string name="developer_credit">Developed by Tahan Official</string>
     <string name="nav_vision_label">Modes</string>
     <string name="nav_modes_label">Modes</string>

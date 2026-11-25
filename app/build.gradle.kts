@@ -14,10 +14,10 @@ android {
 
   defaultConfig {
     applicationId = "com.resolve.focus"
-    minSdk = 23
+    minSdk = 22
     targetSdk = 36
-    versionCode = 2
-    versionName = "1.0.1"
+    versionCode = 9
+    versionName = "1.0.8"
 
     testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
   }
@@ -126,6 +126,7 @@ dependencies {
   implementation(libs.androidx.credentials)
   implementation(libs.androidx.credentials.play.services)
   implementation(libs.googleid)
+  implementation(libs.play.services.auth)
   // implementation(libs.firebase.appcheck.recaptcha)
   // implementation(libs.firebase.appcheck.debug)
   implementation(libs.kotlinx.coroutines.android)

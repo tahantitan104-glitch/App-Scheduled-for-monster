@@ -66,7 +66,9 @@ data class RemoteLockBroadcast(
     val scheduleId: String = "",
     val occurrenceId: String = "",
     val isStrictMode: Boolean = false,
-    val showFlipClockShortcut: Boolean = false
+    val showFlipClockShortcut: Boolean = false,
+    val allowSelectedApps: Boolean = true,
+    val phoneAccessEnabled: Boolean = true
 )
 
 class LockSessionEngine(
@@ -461,7 +463,8 @@ class LockSessionEngine(
         allowedPackages: List<String>,
         phoneAccessEnabled: Boolean,
         isStrictMode: Boolean = false,
-        showFlipClockShortcut: Boolean = false
+        showFlipClockShortcut: Boolean = false,
+        serverClockOffsetMs: Long = 0L
     ): EngineStartResult {
         var delayedShouldStartTicker = false
         var immediateShouldLaunchLock = false
@@ -469,13 +472,14 @@ class LockSessionEngine(
         val result = mutex.withLock {
             val nowWall = clockProvider.wallClockMs()
             val nowElapsed = clockProvider.elapsedRealtimeMs()
+            val serverNowWall = nowWall + serverClockOffsetMs
             val mode = command.resolveLockMode()
 
-            // Reject stale/expired commands before anything else
-            if (command.lockExpirationWallMs > 0L && command.lockExpirationWallMs <= nowWall) {
+            // Reject stale/expired commands relative to server-calibrated clock
+            if (command.lockExpirationWallMs > 0L && command.lockExpirationWallMs <= serverNowWall) {
                 return@withLock EngineStartResult.Blocked("")
             }
-            if (command.issuedAtWallMs > 0L && (nowWall - command.issuedAtWallMs) > 24L * 60L * 60L * 1000L) {
+            if (command.issuedAtWallMs > 0L && (serverNowWall - command.issuedAtWallMs) > 24L * 60L * 60L * 1000L) {
                 return@withLock EngineStartResult.Blocked("")
             }
 
@@ -509,12 +513,19 @@ class LockSessionEngine(
             }
 
             if (mode == LockMode.DELAYED) {
-                val freeDeadline = command.freeUseDeadlineWallMs
-                val lockExpire = command.lockExpirationWallMs
+                val freeDeadlineServer = command.freeUseDeadlineWallMs
+                val lockExpireServer = command.lockExpirationWallMs
                 val lockMins = command.lockDurationMinutes.coerceIn(1L, 1440L)
-                if (freeDeadline > nowWall) {
-                    val remainingFreeMs = (freeDeadline - nowWall).coerceAtLeast(1_000L)
+                if (freeDeadlineServer > serverNowWall) {
+                    val remainingFreeMs = (freeDeadlineServer - serverNowWall).coerceAtLeast(1_000L)
                     val remainingFreeMins = ((remainingFreeMs + 59_999L) / 60_000L).coerceAtLeast(1L)
+                    val localFreeDeadlineWall = nowWall + remainingFreeMs
+                    val localLockExpireWall = if (lockExpireServer > freeDeadlineServer) {
+                        nowWall + (lockExpireServer - serverNowWall)
+                    } else {
+                        localFreeDeadlineWall + lockMins * 60_000L
+                    }
+                    val localLockExpireElapsed = nowElapsed + (localLockExpireWall - nowWall).coerceAtLeast(1_000L)
                     val sessionId = UUID.randomUUID().toString()
                     val delayedSession = ActiveSession(
                         sessionId = sessionId,
@@ -527,8 +538,10 @@ class LockSessionEngine(
                         lockDurationMinutes = lockMins,
                         createdAtWallMs = nowWall,
                         freeUseStartedElapsedMs = nowElapsed,
-                        freeUseDeadlineWallMs = freeDeadline,
+                        freeUseDeadlineWallMs = localFreeDeadlineWall,
                         freeUseDeadlineElapsedMs = nowElapsed + remainingFreeMs,
+                        lockExpirationWallMs = localLockExpireWall,
+                        lockExpirationElapsedMs = localLockExpireElapsed,
                         bootCountAtStart = preferencesRepository.getBootGeneration(),
                         isStrictMode = isStrictMode,
                         showFlipClockShortcut = showFlipClockShortcut
@@ -536,16 +549,19 @@ class LockSessionEngine(
                     _activeSession.value = delayedSession
                     _remainingMillis.value = remainingFreeMs
                     sessionRepository.saveActiveSession(delayedSession)
-                    alarmScheduler.scheduleDelayedLockTransition(sessionId, freeDeadline)
+                    alarmScheduler.scheduleDelayedLockTransition(sessionId, localFreeDeadlineWall)
                     platformBridge.startMonitorService()
+                    syncRecoveryJobInternal()
+                    updateProtectionStatusInternal()
                     delayedShouldStartTicker = true
                     if (command.occurrenceId.isNotBlank()) {
                         preferencesRepository.recordProcessedOccurrenceId(command.occurrenceId)
                     }
                     return@withLock EngineStartResult.Started
-                } else if (lockExpire > nowWall) {
-                    val remainingLockMs = (lockExpire - nowWall).coerceAtLeast(1_000L)
+                } else if (lockExpireServer > serverNowWall) {
+                    val remainingLockMs = (lockExpireServer - serverNowWall).coerceAtLeast(1_000L)
                     val remainingLockMins = ((remainingLockMs + 59_999L) / 60_000L).coerceAtLeast(1L)
+                    val localLockExpireWall = nowWall + remainingLockMs
                     val session = ActiveSession(
                         sessionId = UUID.randomUUID().toString(),
                         mode = LockMode.DELAYED,
@@ -556,15 +572,19 @@ class LockSessionEngine(
                         freeUseDurationMinutes = 0L,
                         lockDurationMinutes = remainingLockMins,
                         createdAtWallMs = nowWall,
-                        lockExpirationWallMs = lockExpire,
+                        lockExpirationWallMs = localLockExpireWall,
                         lockExpirationElapsedMs = nowElapsed + remainingLockMs,
                         bootCountAtStart = preferencesRepository.getBootGeneration(),
                         isStrictMode = isStrictMode,
                         showFlipClockShortcut = showFlipClockShortcut
                     )
                     immediateShouldLaunchLock = transitionToPendingLockInternal(session)
-                    if (immediateShouldLaunchLock && command.occurrenceId.isNotBlank()) {
-                        preferencesRepository.recordProcessedOccurrenceId(command.occurrenceId)
+                    if (immediateShouldLaunchLock) {
+                        syncRecoveryJobInternal()
+                        updateProtectionStatusInternal()
+                        if (command.occurrenceId.isNotBlank()) {
+                            preferencesRepository.recordProcessedOccurrenceId(command.occurrenceId)
+                        }
                     }
                     return@withLock if (immediateShouldLaunchLock) {
                         EngineStartResult.Started
@@ -575,8 +595,8 @@ class LockSessionEngine(
                     return@withLock EngineStartResult.Blocked("")
                 }
             } else {
-                val baseExpireWall = if (command.lockExpirationWallMs > nowWall) {
-                    command.lockExpirationWallMs
+                val baseExpireWall = if (command.lockExpirationWallMs > serverNowWall) {
+                    nowWall + (command.lockExpirationWallMs - serverNowWall)
                 } else {
                     nowWall + command.lockDurationMinutes.coerceIn(1L, 1440L) * 60_000L
                 }
@@ -604,8 +624,12 @@ class LockSessionEngine(
                     showFlipClockShortcut = showFlipClockShortcut
                 )
                 immediateShouldLaunchLock = transitionToPendingLockInternal(session)
-                if (immediateShouldLaunchLock && command.occurrenceId.isNotBlank()) {
-                    preferencesRepository.recordProcessedOccurrenceId(command.occurrenceId)
+                if (immediateShouldLaunchLock) {
+                    syncRecoveryJobInternal()
+                    updateProtectionStatusInternal()
+                    if (command.occurrenceId.isNotBlank()) {
+                        preferencesRepository.recordProcessedOccurrenceId(command.occurrenceId)
+                    }
                 }
                 return@withLock if (immediateShouldLaunchLock) {
                     EngineStartResult.Started
@@ -684,7 +708,9 @@ class LockSessionEngine(
                     scheduleId = stableSchedId,
                     occurrenceId = occurrenceId,
                     isStrictMode = schedule.isStrictMode,
-                    showFlipClockShortcut = schedule.showFlipClockShortcut
+                    showFlipClockShortcut = schedule.showFlipClockShortcut,
+                    allowSelectedApps = schedule.allowSelectedApps,
+                    phoneAccessEnabled = schedule.phoneAccessEnabled
                 )
             }
             transitioned

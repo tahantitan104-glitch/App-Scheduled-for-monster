@@ -89,8 +89,17 @@ class FlipTimerNotificationHelper(private val context: Context) {
             .setContentIntent(contentIntent)
             .build()
 
-        runCatching {
-            NotificationManagerCompat.from(context).notify(NOTIFICATION_ID, notification)
+        try {
+            val canPost = Build.VERSION.SDK_INT < Build.VERSION_CODES.TIRAMISU ||
+                ContextCompat.checkSelfPermission(
+                    context,
+                    Manifest.permission.POST_NOTIFICATIONS
+                ) == PackageManager.PERMISSION_GRANTED
+            if (canPost) {
+                NotificationManagerCompat.from(context).notify(NOTIFICATION_ID, notification)
+            }
+        } catch (_: SecurityException) {
+            // Ignored gracefully if notification permission is revoked mid-flight.
         }
     }
 
@@ -111,12 +120,10 @@ class FlipTimerNotificationHelper(private val context: Context) {
                 ?: RingtoneManager.getDefaultUri(RingtoneManager.TYPE_ALARM)
                 ?: return@runCatching false
             val ringtone = RingtoneManager.getRingtone(context, uri) ?: return@runCatching false
-            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.LOLLIPOP) {
-                ringtone.audioAttributes = AudioAttributes.Builder()
-                    .setUsage(AudioAttributes.USAGE_ALARM)
-                    .setContentType(AudioAttributes.CONTENT_TYPE_SONIFICATION)
-                    .build()
-            }
+            ringtone.audioAttributes = AudioAttributes.Builder()
+                .setUsage(AudioAttributes.USAGE_ALARM)
+                .setContentType(AudioAttributes.CONTENT_TYPE_SONIFICATION)
+                .build()
             ringtone.play()
             true
         }.getOrDefault(false)

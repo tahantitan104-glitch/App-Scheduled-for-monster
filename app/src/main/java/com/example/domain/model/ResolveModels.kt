@@ -222,8 +222,8 @@ data class FlipClockSettings(
         const val MIN_ZOOM_FRACTION = 0.50f
         const val MAX_ZOOM_FRACTION = 1.40f
         const val DEFAULT_ZOOM_FRACTION = 1.00f
-        const val MIN_BRIGHTNESS_PERCENT = 15f
-        const val MAX_BRIGHTNESS_PERCENT = 85f
+        const val MIN_BRIGHTNESS_PERCENT = 1f
+        const val MAX_BRIGHTNESS_PERCENT = 100f
     }
 }
 
@@ -509,6 +509,7 @@ data class SystemCapabilityStatus(
     val notificationsEnabled: Boolean = false,
     val hasNotificationPolicyAccess: Boolean = false,
     val androidSdkInt: Int = 28,
+    val isNotificationPolicySupported: Boolean = androidSdkInt >= 23,
     val manufacturer: String = "",
     val model: String = ""
 ) {

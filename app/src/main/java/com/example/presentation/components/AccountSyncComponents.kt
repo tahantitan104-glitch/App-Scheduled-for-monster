@@ -1,6 +1,9 @@
 package com.example.presentation.components
 
+import android.content.Intent
 import android.net.Uri
+import android.os.Build
+import android.provider.MediaStore
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.PickVisualMediaRequest
 import androidx.activity.result.contract.ActivityResultContracts
@@ -49,6 +52,7 @@ import androidx.compose.material3.minimumInteractiveComponentSize
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.produceState
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
@@ -56,6 +60,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.ImageBitmap
 import androidx.compose.ui.graphics.asImageBitmap
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.LocalContext
@@ -79,12 +84,26 @@ fun SyncedAvatarBadge(
     isUploading: Boolean = false,
     showEditBadge: Boolean = false,
     onClick: (() -> Unit)? = null,
-    modifier: Modifier = Modifier
+    modifier: Modifier = Modifier,
+    photoUrl: String = ""
 ) {
     val palette = LocalResolveExtendedPalette.current
+    val context = LocalContext.current
     val decodedBitmap = remember(avatarBase64) {
         AvatarImageProcessor.decodeAvatarBitmap(avatarBase64)?.asImageBitmap()
     }
+    val remoteBitmap by produceState<ImageBitmap?>(
+        initialValue = null,
+        key1 = photoUrl,
+        key2 = decodedBitmap == null
+    ) {
+        value = if (decodedBitmap == null && photoUrl.isNotBlank()) {
+            AvatarImageProcessor.fetchGooglePhotoBitmap(context, photoUrl)?.asImageBitmap()
+        } else {
+            null
+        }
+    }
+    val displayBitmap = decodedBitmap ?: remoteBitmap
     val initials = remember(displayName) {
         val parts = displayName.trim().split(Regex("\\s+")).filter { it.isNotBlank() }
         when {
@@ -116,9 +135,9 @@ fun SyncedAvatarBadge(
                 .border(1.5.dp, palette.accent.copy(alpha = 0.55f), CircleShape),
             contentAlignment = Alignment.Center
         ) {
-            if (decodedBitmap != null) {
+            if (displayBitmap != null) {
                 Image(
-                    bitmap = decodedBitmap,
+                    bitmap = displayBitmap,
                     contentDescription = "$displayName profile photo",
                     contentScale = ContentScale.Crop,
                     modifier = Modifier.fillMaxSize()
@@ -180,7 +199,9 @@ fun HomeOptionalSyncBanner(
     isAuthBusy: Boolean,
     onConnectGoogle: () -> Unit,
     onDismiss: () -> Unit,
-    modifier: Modifier = Modifier
+    modifier: Modifier = Modifier,
+    isSyncSupported: Boolean = true,
+    syncUnsupportedReason: String? = null
 ) {
     val palette = LocalResolveExtendedPalette.current
     Column(
@@ -226,9 +247,13 @@ fun HomeOptionalSyncBanner(
                         color = palette.textPrimary
                     )
                     Text(
-                        text = "Offline mode works anytime without signing in.",
+                        text = if (isSyncSupported) {
+                            "Offline mode works anytime without signing in."
+                        } else {
+                            "Not Supported on This Device"
+                        },
                         style = MaterialTheme.typography.labelSmall,
-                        color = palette.cobaltStrong
+                        color = if (isSyncSupported) palette.cobaltStrong else palette.warn
                     )
                 }
             }
@@ -248,7 +273,11 @@ fun HomeOptionalSyncBanner(
         }
 
         Text(
-            text = "Connect a Google account on 2+ phones to sync Focus Locks across devices — while keeping Mascots, Allowed Apps & preferences separate on each phone.",
+            text = if (isSyncSupported) {
+                "Connect a Google account on 2+ devices to sync Focus Locks seamlessly — while keeping Mascots, Allowed Apps & preferences separate on each device."
+            } else {
+                syncUnsupportedReason ?: "Google Play Services is unavailable on this device. Local Focus Lock and Flip Clock continue working offline."
+            },
             style = MaterialTheme.typography.bodySmall,
             color = palette.textSecondary
         )
@@ -260,11 +289,13 @@ fun HomeOptionalSyncBanner(
         ) {
             Button(
                 onClick = onConnectGoogle,
-                enabled = !isAuthBusy,
+                enabled = isSyncSupported && !isAuthBusy,
                 shape = RoundedCornerShape(14.dp),
                 colors = ButtonDefaults.buttonColors(
                     containerColor = palette.primaryButton,
-                    contentColor = palette.onPrimaryButton
+                    contentColor = palette.onPrimaryButton,
+                    disabledContainerColor = palette.controlSurface,
+                    disabledContentColor = palette.textMuted
                 ),
                 modifier = Modifier
                     .weight(1f)
@@ -280,7 +311,11 @@ fun HomeOptionalSyncBanner(
                     Spacer(Modifier.width(8.dp))
                 }
                 Text(
-                    text = if (isAuthBusy) "Connecting…" else "Connect Google",
+                    text = when {
+                        !isSyncSupported -> "Unavailable Here"
+                        isAuthBusy -> "Connecting…"
+                        else -> "Connect Google"
+                    },
                     style = MaterialTheme.typography.labelLarge
                 )
             }
@@ -314,12 +349,31 @@ fun SettingsAccountSyncCard(
     onClearAvatar: () -> Unit,
     modifier: Modifier = Modifier,
     onUnlinkDevice: (String) -> Unit = {},
-    onUpdateProfileName: (String) -> Unit = {}
+    onUpdateProfileName: (String) -> Unit = {},
+    onPickAvatarError: (String) -> Unit = {},
+    syncReadinessHint: String? = null,
+    isSyncReady: Boolean = true
 ) {
     val palette = LocalResolveExtendedPalette.current
+    val context = LocalContext.current
     val photoPickerLauncher = rememberLauncherForActivityResult(
         contract = ActivityResultContracts.PickVisualMedia()
     ) { uri ->
+        if (uri != null) {
+            onPickAvatarUri(uri)
+        }
+    }
+    val legacyImagePickerLauncher = rememberLauncherForActivityResult(
+        contract = ActivityResultContracts.GetContent()
+    ) { uri ->
+        if (uri != null) {
+            onPickAvatarUri(uri)
+        }
+    }
+    val legacyGalleryPickLauncher = rememberLauncherForActivityResult(
+        contract = ActivityResultContracts.StartActivityForResult()
+    ) { result ->
+        val uri = result.data?.data
         if (uri != null) {
             onPickAvatarUri(uri)
         }
@@ -343,10 +397,36 @@ fun SettingsAccountSyncCard(
             if (signedIn) "Resolve Focus Account" else "Focus Explorer"
         }
         val launchPhotoPicker: () -> Unit = {
-            runCatching {
-                photoPickerLauncher.launch(
-                    PickVisualMediaRequest(ActivityResultContracts.PickVisualMedia.ImageOnly)
-                )
+            val canUseModernPicker = Build.VERSION.SDK_INT >= Build.VERSION_CODES.R &&
+                runCatching { ActivityResultContracts.PickVisualMedia.isPhotoPickerAvailable(context) }
+                    .getOrDefault(false)
+            val modernLaunched = if (canUseModernPicker) {
+                runCatching {
+                    photoPickerLauncher.launch(
+                        PickVisualMediaRequest(ActivityResultContracts.PickVisualMedia.ImageOnly)
+                    )
+                }.isSuccess
+            } else {
+                false
+            }
+            if (!modernLaunched) {
+                val getContentLaunched = runCatching {
+                    legacyImagePickerLauncher.launch("image/*")
+                }.isSuccess
+                if (!getContentLaunched) {
+                    val galleryLaunched = runCatching {
+                        val pickIntent = Intent(
+                            Intent.ACTION_PICK,
+                            MediaStore.Images.Media.EXTERNAL_CONTENT_URI
+                        ).apply {
+                            type = "image/*"
+                        }
+                        legacyGalleryPickLauncher.launch(pickIntent)
+                    }.isSuccess
+                    if (!galleryLaunched) {
+                        onPickAvatarError("No gallery or photo picker app available on this device.")
+                    }
+                }
             }
         }
 
@@ -371,6 +451,7 @@ fun SettingsAccountSyncCard(
                     SyncedAvatarBadge(
                         displayName = resolvedName,
                         avatarBase64 = state.avatarBase64,
+                        photoUrl = state.photoUrl,
                         size = 54.dp,
                         isUploading = state.isAvatarUploading,
                         showEditBadge = true,
@@ -431,41 +512,100 @@ fun SettingsAccountSyncCard(
                         )
 
                         Spacer(Modifier.height(2.dp))
+                        if (state.isSyncSupported) {
+                            Text(
+                                text = "Sync Status: Offline Mode • Works without an account",
+                                style = MaterialTheme.typography.labelSmall,
+                                color = palette.slateTealStrong,
+                                maxLines = 1,
+                                overflow = TextOverflow.Ellipsis
+                            )
+                        } else {
+                            Text(
+                                text = "Not Supported on This Device",
+                                style = MaterialTheme.typography.labelSmall.copy(fontWeight = FontWeight.SemiBold),
+                                color = palette.warn,
+                                modifier = Modifier
+                                    .clip(CircleShape)
+                                    .background(palette.warnContainer)
+                                    .padding(horizontal = 8.dp, vertical = 2.dp)
+                                    .testTag("sync_unsupported_badge")
+                            )
+                        }
+                    }
+                }
+
+                if (!state.isSyncSupported) {
+                    Text(
+                        text = state.syncUnsupportedReason
+                            ?: "Requires Google Play Services for Google Sign-In and cloud sync.",
+                        style = MaterialTheme.typography.bodySmall,
+                        color = palette.textSecondary
+                    )
+                }
+
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.spacedBy(10.dp),
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    OutlinedButton(
+                        onClick = launchPhotoPicker,
+                        enabled = !state.isAvatarUploading,
+                        shape = RoundedCornerShape(14.dp),
+                        border = androidx.compose.foundation.BorderStroke(1.dp, palette.cardBorder),
+                        modifier = Modifier
+                            .height(48.dp)
+                            .testTag("settings_add_photo_button")
+                    ) {
+                        Icon(
+                            imageVector = ResolveIcons.AddAPhoto,
+                            contentDescription = null,
+                            tint = palette.textPrimary,
+                            modifier = Modifier.size(16.dp)
+                        )
+                        Spacer(Modifier.width(6.dp))
                         Text(
-                            text = "Sync Status: Offline Mode • Works without an account",
-                            style = MaterialTheme.typography.labelSmall,
-                            color = palette.slateTealStrong,
+                            text = if (state.avatarBase64.isBlank()) "Add Photo" else "Change Photo",
+                            style = MaterialTheme.typography.labelLarge,
+                            color = palette.textPrimary
+                        )
+                    }
+
+                    Button(
+                        onClick = onSignInClick,
+                        enabled = state.isSyncSupported && !state.isAuthBusy,
+                        shape = RoundedCornerShape(14.dp),
+                        colors = ButtonDefaults.buttonColors(
+                            containerColor = palette.primaryButton,
+                            contentColor = palette.onPrimaryButton,
+                            disabledContainerColor = palette.controlSurface,
+                            disabledContentColor = palette.textMuted
+                        ),
+                        modifier = Modifier
+                            .weight(1f)
+                            .height(48.dp)
+                            .testTag("settings_google_signin_button")
+                    ) {
+                        if (state.isAuthBusy) {
+                            CircularProgressIndicator(
+                                color = palette.onPrimaryButton,
+                                strokeWidth = 2.dp,
+                                modifier = Modifier.size(18.dp)
+                            )
+                            Spacer(Modifier.width(8.dp))
+                        }
+                        Text(
+                            text = when {
+                                !state.isSyncSupported -> "Not Supported on This Device"
+                                state.isAuthBusy -> "Connecting…"
+                                else -> "Sign In with Google"
+                            },
+                            style = MaterialTheme.typography.titleSmall,
                             maxLines = 1,
                             overflow = TextOverflow.Ellipsis
                         )
                     }
-                }
-
-                Button(
-                    onClick = onSignInClick,
-                    enabled = !state.isAuthBusy,
-                    shape = RoundedCornerShape(14.dp),
-                    colors = ButtonDefaults.buttonColors(
-                        containerColor = palette.primaryButton,
-                        contentColor = palette.onPrimaryButton
-                    ),
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .height(48.dp)
-                        .testTag("settings_google_signin_button")
-                ) {
-                    if (state.isAuthBusy) {
-                        CircularProgressIndicator(
-                            color = palette.onPrimaryButton,
-                            strokeWidth = 2.dp,
-                            modifier = Modifier.size(18.dp)
-                        )
-                        Spacer(Modifier.width(8.dp))
-                    }
-                    Text(
-                        text = if (state.isAuthBusy) "Connecting Google Account…" else "Sign In with Google for Sync",
-                        style = MaterialTheme.typography.titleSmall
-                    )
                 }
             }
         } else {
@@ -489,6 +629,7 @@ fun SettingsAccountSyncCard(
                     SyncedAvatarBadge(
                         displayName = resolvedName,
                         avatarBase64 = state.avatarBase64,
+                        photoUrl = state.photoUrl,
                         size = 56.dp,
                         isUploading = state.isAvatarUploading,
                         showEditBadge = true,
@@ -683,16 +824,72 @@ fun SettingsAccountSyncCard(
                     )
                 }
 
+                if (state.syncLockEnabled && !syncReadinessHint.isNullOrBlank()) {
+                    Row(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .clip(RoundedCornerShape(12.dp))
+                            .background(
+                                if (isSyncReady) palette.accentSoftContainer.copy(alpha = 0.45f)
+                                else palette.warnContainer
+                            )
+                            .border(
+                                1.dp,
+                                if (isSyncReady) palette.emeraldStrong.copy(alpha = 0.35f)
+                                else palette.warn.copy(alpha = 0.40f),
+                                RoundedCornerShape(12.dp)
+                            )
+                            .padding(horizontal = 12.dp, vertical = 9.dp)
+                            .testTag("settings_sync_readiness_banner"),
+                        verticalAlignment = Alignment.CenterVertically,
+                        horizontalArrangement = Arrangement.spacedBy(8.dp)
+                    ) {
+                        Icon(
+                            imageVector = if (isSyncReady) Icons.Outlined.CheckCircle else Icons.Outlined.Info,
+                            contentDescription = null,
+                            tint = if (isSyncReady) palette.emeraldStrong else palette.warn,
+                            modifier = Modifier.size(16.dp)
+                        )
+                        Text(
+                            text = syncReadinessHint,
+                            style = MaterialTheme.typography.labelSmall,
+                            color = if (isSyncReady) palette.emeraldStrong else palette.warn
+                        )
+                    }
+                }
+
                 Row(
                     modifier = Modifier.fillMaxWidth(),
-                    horizontalArrangement = Arrangement.SpaceBetween,
+                    horizontalArrangement = Arrangement.spacedBy(8.dp),
                     verticalAlignment = Alignment.CenterVertically
                 ) {
-                    FeatureTipNote(
-                        text = "Tap photo or edit icon anytime.",
-                        icon = ResolveIcons.AddAPhoto,
-                        modifier = Modifier.weight(1f)
-                    )
+                    OutlinedButton(
+                        onClick = launchPhotoPicker,
+                        enabled = !state.isAvatarUploading,
+                        shape = RoundedCornerShape(12.dp),
+                        border = androidx.compose.foundation.BorderStroke(
+                            1.dp,
+                            palette.cardBorder
+                        ),
+                        modifier = Modifier
+                            .minimumInteractiveComponentSize()
+                            .testTag("settings_add_photo_button")
+                    ) {
+                        Icon(
+                            imageVector = ResolveIcons.AddAPhoto,
+                            contentDescription = null,
+                            tint = palette.textPrimary,
+                            modifier = Modifier.size(16.dp)
+                        )
+                        Spacer(Modifier.width(6.dp))
+                        Text(
+                            text = if (state.avatarBase64.isBlank()) "Add Photo" else "Change Photo",
+                            style = MaterialTheme.typography.labelMedium,
+                            color = palette.textPrimary
+                        )
+                    }
+
+                    Spacer(Modifier.weight(1f))
 
                     OutlinedButton(
                         onClick = onSignOutClick,
@@ -702,7 +899,9 @@ fun SettingsAccountSyncCard(
                             1.dp,
                             palette.cardBorder
                         ),
-                        modifier = Modifier.testTag("settings_google_signout_button")
+                        modifier = Modifier
+                            .minimumInteractiveComponentSize()
+                            .testTag("settings_google_signout_button")
                     ) {
                         Icon(
                             imageVector = ResolveIcons.Logout,

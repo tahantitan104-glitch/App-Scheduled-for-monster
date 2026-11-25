@@ -252,7 +252,7 @@ class MascotAnimationController(
             it.copy(
                 activeMascot = config.activeMascot,
                 animationState = MascotAnimationState.CELEBRATING,
-                microAnimation = if (config.reducedMotionEnabled) MascotMicroAnimation.NONE else MascotMicroAnimation.SMALL_HOP,
+                microAnimation = MascotMicroAnimation.NONE,
                 isBlinking = false,
                 peekProgress = 1f,
                 isCelebrating = true,
@@ -356,7 +356,7 @@ class MascotAnimationController(
                     when (random.nextInt(5)) {
                         0 -> MascotAnimationState.GENTLE_FLOAT to MascotMicroAnimation.NONE
                         1 -> MascotAnimationState.CURIOUS_SWAY to MascotMicroAnimation.NONE
-                        2 -> MascotAnimationState.HAPPY_BOUNCE to MascotMicroAnimation.NONE
+                        2 -> MascotAnimationState.GENTLE_DRIZZLE to MascotMicroAnimation.NONE
                         3 -> MascotAnimationState.CURIOUS to MascotMicroAnimation.NONE
                         else -> MascotAnimationState.HEAD_EAR_ATTENTION to MascotMicroAnimation.NONE
                     }
@@ -365,7 +365,7 @@ class MascotAnimationController(
                         0 -> MascotAnimationState.HEAD_EAR_ATTENTION to MascotMicroAnimation.EAR_WIGGLE
                         1 -> MascotAnimationState.CURIOUS to MascotMicroAnimation.NONE
                         2 -> MascotAnimationState.TURNING to MascotMicroAnimation.NONE
-                        3 -> MascotAnimationState.IDLE to MascotMicroAnimation.SMALL_HOP
+                        3 -> MascotAnimationState.IDLE to MascotMicroAnimation.GENTLE_WAVE
                         else -> MascotAnimationState.IDLE to MascotMicroAnimation.EAR_WIGGLE
                     }
                 }

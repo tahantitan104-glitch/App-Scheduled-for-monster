@@ -124,7 +124,7 @@ fun DeviceAnalysisScreen(
         LazyColumn(
             state = listState,
             modifier = Modifier
-                .widthIn(max = 680.dp)
+                .widthIn(max = 760.dp)
                 .fillMaxSize()
                 .testTag("device_analysis_list"),
             contentPadding = PaddingValues(horizontal = 20.dp, vertical = 16.dp),

@@ -164,7 +164,7 @@ class AppLockAuthActivity : ComponentActivity() {
                         } else {
                             runCatching { moveTaskToBack(true) }
                         }
-                        finishAndRemoveTask()
+                        safeFinishAndRemoveTask()
                     },
                     onOpenEmergencyPhone = {
                         container.phoneAccessManager.launchSystemDialer()
@@ -192,7 +192,12 @@ class AppLockAuthActivity : ComponentActivity() {
             flags = Intent.FLAG_ACTIVITY_NEW_TASK
         }
         runCatching { startActivity(homeIntent) }
-        finishAndRemoveTask()
+        safeFinishAndRemoveTask()
+    }
+
+    private fun safeFinishAndRemoveTask() {
+        if (isFinishing) return
+        runCatching { finishAndRemoveTask() }.onFailure { runCatching { finish() } }
     }
 
     companion object {

@@ -58,7 +58,7 @@ fun AboutResolveScreen(
     ) {
         LazyColumn(
             modifier = Modifier
-                .widthIn(max = 680.dp)
+                .widthIn(max = 760.dp)
                 .fillMaxSize(),
             contentPadding = PaddingValues(horizontal = 20.dp, vertical = 16.dp),
             verticalArrangement = Arrangement.spacedBy(12.dp)
@@ -132,10 +132,11 @@ fun AboutResolveScreen(
                                         fontStyle = FontStyle.Italic,
                                         fontWeight = FontWeight.Medium
                                     ),
-                                    color = palette.textSecondary,
+                                    color = palette.emeraldStrong,
+                                    highlightTipColor = palette.navPillContent,
                                     startTyping = true,
-                                    startDelayMillis = 80,
-                                    typingDurationMillis = 820,
+                                    startDelayMillis = 100,
+                                    typingDurationMillis = 1850,
                                     reducedMotion = reducedMotion
                                 )
                             }
@@ -163,9 +164,10 @@ fun AboutResolveScreen(
                             letterSpacing = 0.35.sp
                         ),
                         color = palette.textPrimary,
+                        highlightTipColor = palette.navPillContent,
                         startTyping = true,
-                        startDelayMillis = 920,
-                        typingDurationMillis = 680,
+                        startDelayMillis = 1980,
+                        typingDurationMillis = 1450,
                         reducedMotion = reducedMotion,
                         modifier = Modifier.testTag("about_developer_credit")
                     )
@@ -218,7 +220,7 @@ fun AboutResolveScreen(
                     title = "6. Developer Information",
                     body = "Developed by Tahan Official\n" +
                         "Application Package: ${BuildConfig.APPLICATION_ID}\n" +
-                        "Version: v${BuildConfig.VERSION_NAME} (${BuildConfig.VERSION_CODE})"
+                        "Version: v${BuildConfig.VERSION_NAME}"
                 )
             }
         }
@@ -246,7 +248,7 @@ private fun AboutInfoCard(
         Text(
             text = body,
             style = MaterialTheme.typography.bodyMedium,
-            color = palette.textSecondary,
+            color = palette.emeraldStrong,
             lineHeight = 20.sp
         )
     }

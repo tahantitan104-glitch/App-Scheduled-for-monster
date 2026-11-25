@@ -34,6 +34,11 @@ class NotificationControlManager(
     val protectionState: StateFlow<NotificationProtectionState> = _protectionState.asStateFlow()
 
     suspend fun onSessionEnforcementStarted(sessionId: String): NotificationProtectionState {
+        if (Build.VERSION.SDK_INT < Build.VERSION_CODES.M) {
+            _protectionState.value = NotificationProtectionState.INACTIVE
+            return NotificationProtectionState.INACTIVE
+        }
+
         val config = preferencesRepository.getNotificationControlConfigSnapshot()
         if (!config.enabled || !config.autoActivateDuringSessions) {
             _protectionState.value = NotificationProtectionState.INACTIVE
@@ -95,6 +100,11 @@ class NotificationControlManager(
     }
 
     suspend fun reconcileDuringActiveSession(sessionId: String): NotificationProtectionState {
+        if (Build.VERSION.SDK_INT < Build.VERSION_CODES.M) {
+            _protectionState.value = NotificationProtectionState.INACTIVE
+            return NotificationProtectionState.INACTIVE
+        }
+
         val stored = preferencesRepository.getNotificationSessionState()
         if (stored == null || stored.sessionId != sessionId) {
             val config = preferencesRepository.getNotificationControlConfigSnapshot()
@@ -165,30 +175,32 @@ class NotificationControlManager(
         nm: NotificationManager,
         config: NotificationControlConfig
     ): AppliedDndOutcome {
+        if (Build.VERSION.SDK_INT < Build.VERSION_CODES.M) {
+            return AppliedDndOutcome(appliedFilter = 0, zenRuleId = "")
+        }
+
         var categories = 0
         if (config.allowCalls) {
             categories = categories or NotificationManager.Policy.PRIORITY_CATEGORY_CALLS or
                 NotificationManager.Policy.PRIORITY_CATEGORY_REPEAT_CALLERS
         }
-        if (config.allowAlarms) {
+        if (config.allowAlarms && Build.VERSION.SDK_INT >= Build.VERSION_CODES.P) {
             categories = categories or NotificationManager.Policy.PRIORITY_CATEGORY_ALARMS
         }
 
-        val targetFilter = if (categories == 0) {
+        val targetFilter = if (!config.allowCalls && !config.allowAlarms) {
             NotificationManager.INTERRUPTION_FILTER_NONE
         } else {
             NotificationManager.INTERRUPTION_FILTER_PRIORITY
         }
 
-        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.M) {
-            runCatching {
-                val policy = NotificationManager.Policy(
-                    categories,
-                    NotificationManager.Policy.PRIORITY_SENDERS_ANY,
-                    NotificationManager.Policy.PRIORITY_SENDERS_STARRED
-                )
-                nm.notificationPolicy = policy
-            }
+        runCatching {
+            val policy = NotificationManager.Policy(
+                categories,
+                NotificationManager.Policy.PRIORITY_SENDERS_ANY,
+                NotificationManager.Policy.PRIORITY_SENDERS_STARRED
+            )
+            nm.notificationPolicy = policy
         }
 
         var ruleId = ""

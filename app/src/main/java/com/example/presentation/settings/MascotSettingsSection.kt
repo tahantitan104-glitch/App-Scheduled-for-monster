@@ -273,13 +273,13 @@ fun MascotAppearanceCard(
                         }
                     )
                     PreviewActionChip(
-                        label = "Soft Hop",
-                        active = previewMicro == MascotMicroAnimation.SMALL_HOP,
-                        testTag = "mascot_preview_soft_hop",
+                        label = "Gentle Welcome Wave",
+                        active = previewMicro == MascotMicroAnimation.GENTLE_WAVE,
+                        testTag = "mascot_preview_gentle_welcome_wave",
                         onClick = {
                             triggerPreviewReaction(
                                 MascotAnimationState.IDLE,
-                                MascotMicroAnimation.SMALL_HOP
+                                MascotMicroAnimation.GENTLE_WAVE
                             )
                         }
                     )
@@ -332,10 +332,10 @@ fun MascotAppearanceCard(
                         onClick = { triggerPreviewReaction(MascotAnimationState.CURIOUS_SWAY) }
                     )
                     PreviewActionChip(
-                        label = "Happy Bounce",
-                        active = previewState == MascotAnimationState.HAPPY_BOUNCE,
-                        testTag = "mascot_preview_happy_bounce",
-                        onClick = { triggerPreviewReaction(MascotAnimationState.HAPPY_BOUNCE) }
+                        label = "Gentle Cloud Drizzle",
+                        active = previewState == MascotAnimationState.GENTLE_DRIZZLE,
+                        testTag = "mascot_preview_gentle_drizzle",
+                        onClick = { triggerPreviewReaction(MascotAnimationState.GENTLE_DRIZZLE) }
                     )
                 }
             }

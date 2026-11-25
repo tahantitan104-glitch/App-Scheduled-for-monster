@@ -1,6 +1,7 @@
 package com.example.di
 
 import android.content.Context
+import android.os.Build
 import com.example.data.local.ResolveDatabase
 import com.example.data.preferences.MascotPreferencesRepository
 import com.example.data.preferences.ResolvePreferencesRepository
@@ -35,7 +36,9 @@ import com.example.service.SessionRecoveryJobService
 import com.example.session.LockSessionEngine
 import com.example.session.SessionPlatformBridge
 import com.example.sync.CloudAccountRepository
+import com.example.sync.CloudSyncGateway
 import com.example.sync.MultiDeviceSyncCoordinator
+import com.example.sync.RestCloudAccountRepository
 import com.example.telephony.PhoneAccessManager
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
@@ -196,8 +199,12 @@ class AppContainer(private val appContext: Context) {
         )
     }
 
-    val cloudAccountRepository: CloudAccountRepository by lazy {
-        CloudAccountRepository(appContext)
+    val cloudAccountRepository: CloudSyncGateway by lazy {
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.M) {
+            CloudAccountRepository(appContext)
+        } else {
+            RestCloudAccountRepository(appContext, preferencesRepository)
+        }
     }
 
     val multiDeviceSyncCoordinator: MultiDeviceSyncCoordinator by lazy {

@@ -5,10 +5,10 @@ import androidx.compose.animation.AnimatedContent
 import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.animation.animateColorAsState
 import androidx.compose.animation.core.animateFloatAsState
+import androidx.compose.animation.expandHorizontally
 import androidx.compose.animation.fadeIn
 import androidx.compose.animation.fadeOut
-import androidx.compose.animation.scaleIn
-import androidx.compose.animation.scaleOut
+import androidx.compose.animation.shrinkHorizontally
 import androidx.compose.animation.slideInHorizontally
 import androidx.compose.animation.slideInVertically
 import androidx.compose.animation.slideOutHorizontally
@@ -22,10 +22,12 @@ import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.BoxWithConstraints
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.WindowInsets
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.navigationBarsPadding
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.safeDrawing
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.widthIn
 import androidx.compose.foundation.shape.RoundedCornerShape
@@ -41,6 +43,7 @@ import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Text
 import androidx.compose.material3.minimumInteractiveComponentSize
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
@@ -71,6 +74,7 @@ import androidx.navigation.compose.composable
 import androidx.navigation.compose.currentBackStackEntryAsState
 import androidx.navigation.compose.rememberNavController
 import androidx.navigation.navArgument
+import com.example.designsystem.LocalResolveBottomDockClearance
 import com.example.designsystem.LocalResolveExtendedPalette
 import com.example.domain.model.DurationSelection
 import com.example.domain.model.FlipClockPage
@@ -264,17 +268,8 @@ fun ResolveAppShell(viewModel: ResolveViewModel) {
     AnimatedContent(
         targetState = startupStage,
         transitionSpec = {
-            if (reducedMotion) {
-                fadeIn(ResolveMotion.fastTween(true)) togetherWith
-                    fadeOut(ResolveMotion.exitTween(true))
-            } else {
-                (fadeIn(ResolveMotion.standardTween(false)) +
-                    scaleIn(
-                        initialScale = 0.975f,
-                        animationSpec = ResolveMotion.standardTween(false)
-                    )) togetherWith
-                    fadeOut(ResolveMotion.exitTween(false))
-            }
+            fadeIn(ResolveMotion.fastTween(reducedMotion)) togetherWith
+                fadeOut(ResolveMotion.exitTween(reducedMotion))
         },
         label = "startup_stage_transition"
     ) { stage ->
@@ -327,204 +322,180 @@ fun ResolveAppShell(viewModel: ResolveViewModel) {
                     modifier = Modifier.fillMaxSize()
                 ) {
                     val useNavigationRail = maxWidth >= 600.dp || maxWidth > maxHeight
+                    val dockClearance = if (!useNavigationRail) 88.dp else 0.dp
 
-                    Scaffold(
-                        containerColor = palette.background,
-                        bottomBar = {
-                            AnimatedVisibility(
-                                visible = isTopLevelDestination && !useNavigationRail,
-                                enter = if (reducedMotion) {
-                                    fadeIn(ResolveMotion.fastTween(true))
-                                } else {
-                                    fadeIn(ResolveMotion.fastTween(false)) +
-                                        slideInVertically(ResolveMotion.intOffsetSlideTween(false)) { it / 2 }
-                                },
-                                exit = if (reducedMotion) {
-                                    fadeOut(ResolveMotion.exitTween(true))
-                                } else {
-                                    fadeOut(ResolveMotion.exitTween(false)) +
-                                        slideOutVertically(ResolveMotion.intOffsetSlideTween(false)) { it / 2 }
-                                }
-                            ) {
-                                FloatingCapsuleNavDock(
-                                    tabs = TOP_LEVEL_TABS,
-                                    currentRoute = currentRoute,
-                                    reducedMotion = reducedMotion,
-                                    onSelectTab = { route ->
-                                        haptic.performHapticFeedback(HapticFeedbackType.TextHandleMove)
-                                        navigateToTab(route)
-                                    }
-                                )
-                            }
-                        }
-                    ) { innerPadding ->
-                        Row(
-                            modifier = Modifier
-                                .fillMaxSize()
-                                .padding(innerPadding)
-                        ) {
-                            if (isTopLevelDestination && useNavigationRail) {
-                                NavigationRail(containerColor = palette.surfaceSecondary) {
-                                    TOP_LEVEL_TABS.forEach { tab ->
-                                        val selected = currentRoute == tab.route
-                                        NavigationRailItem(
-                                            selected = selected,
-                                            onClick = {
-                                                haptic.performHapticFeedback(HapticFeedbackType.TextHandleMove)
-                                                navigateToTab(tab.route)
-                                            },
-                                            icon = {
-                                                Icon(
-                                                    imageVector = if (selected) tab.selectedIcon else tab.unselectedIcon,
-                                                    contentDescription = tab.label
-                                                )
-                                            },
-                                            label = { Text(tab.label) },
-                                            colors = NavigationRailItemDefaults.colors(
-                                                selectedIconColor = palette.navPillContent,
-                                                selectedTextColor = palette.navPillContent,
-                                                indicatorColor = palette.navPillContainer,
-                                                unselectedIconColor = palette.textMuted,
-                                                unselectedTextColor = palette.textMuted
-                                            )
-                                        )
-                                    }
-                                }
-                            }
-
-                            NavHost(
-                                navController = navController,
-                                startDestination = ResolveRoutes.HOME,
-                                enterTransition = {
-                                    val fromRoute = initialState.destination.route
-                                    val toRoute = targetState.destination.route
-                                    val fromTab = tabIndexForRoute(fromRoute)
-                                    val toTab = tabIndexForRoute(toRoute)
-                                    when {
-                                        reducedMotion -> fadeIn(ResolveMotion.fastTween(true))
-                                        isSubScreenRoute(toRoute) ->
-                                            slideInHorizontally(ResolveMotion.intOffsetSlideTween(false)) { it / 5 } +
-                                                fadeIn(ResolveMotion.subScreenTween(false)) +
-                                                scaleIn(
-                                                    initialScale = 0.97f,
-                                                    animationSpec = ResolveMotion.subScreenTween(false)
-                                                )
-                                        fromTab >= 0 && toTab >= 0 && fromTab != toTab -> {
-                                            val direction = if (toTab > fromTab) 1 else -1
-                                            slideInHorizontally(ResolveMotion.intOffsetSlideTween(false)) {
-                                                direction * (it / 10)
-                                            } +
-                                                fadeIn(ResolveMotion.standardTween(false)) +
-                                                scaleIn(
-                                                    initialScale = 0.975f,
-                                                    animationSpec = ResolveMotion.standardTween(false)
-                                                )
-                                        }
-                                        else ->
-                                            fadeIn(ResolveMotion.standardTween(false)) +
-                                                scaleIn(
-                                                    initialScale = 0.975f,
-                                                    animationSpec = ResolveMotion.standardTween(false)
-                                                )
-                                    }
-                                },
-                                exitTransition = {
-                                    val fromRoute = initialState.destination.route
-                                    val toRoute = targetState.destination.route
-                                    val fromTab = tabIndexForRoute(fromRoute)
-                                    val toTab = tabIndexForRoute(toRoute)
-                                    when {
-                                        reducedMotion -> fadeOut(ResolveMotion.exitTween(true))
-                                        isSubScreenRoute(toRoute) ->
-                                            slideOutHorizontally(ResolveMotion.intOffsetSlideTween(false)) { -it / 10 } +
-                                                fadeOut(ResolveMotion.exitTween(false))
-                                        fromTab >= 0 && toTab >= 0 && fromTab != toTab -> {
-                                            val direction = if (toTab > fromTab) -1 else 1
-                                            slideOutHorizontally(ResolveMotion.intOffsetSlideTween(false)) {
-                                                direction * (it / 10)
-                                            } +
-                                                fadeOut(ResolveMotion.exitTween(false))
-                                        }
-                                        else -> fadeOut(ResolveMotion.exitTween(false))
-                                    }
-                                },
-                                popEnterTransition = {
-                                    if (reducedMotion) {
-                                        fadeIn(ResolveMotion.fastTween(true))
-                                    } else {
-                                        slideInHorizontally(ResolveMotion.intOffsetSlideTween(false)) { -it / 10 } +
-                                            fadeIn(ResolveMotion.subScreenTween(false))
-                                    }
-                                },
-                                popExitTransition = {
-                                    if (reducedMotion) {
-                                        fadeOut(ResolveMotion.exitTween(true))
-                                    } else {
-                                        slideOutHorizontally(ResolveMotion.intOffsetSlideTween(false)) { it / 5 } +
+                    CompositionLocalProvider(LocalResolveBottomDockClearance provides dockClearance) {
+                        Box(modifier = Modifier.fillMaxSize()) {
+                            Scaffold(
+                                containerColor = palette.background,
+                                contentWindowInsets = WindowInsets.safeDrawing
+                            ) { innerPadding ->
+                                Row(
+                                    modifier = Modifier
+                                        .fillMaxSize()
+                                        .padding(innerPadding)
+                                ) {
+                                    AnimatedVisibility(
+                                        visible = isTopLevelDestination && useNavigationRail,
+                                        enter = if (reducedMotion) {
+                                            fadeIn(ResolveMotion.fastTween(true))
+                                        } else {
+                                            fadeIn(ResolveMotion.fastTween(false)) +
+                                                expandHorizontally(ResolveMotion.fastTween(false))
+                                        },
+                                        exit = if (reducedMotion) {
+                                            fadeOut(ResolveMotion.exitTween(true))
+                                        } else {
                                             fadeOut(ResolveMotion.exitTween(false)) +
-                                            scaleOut(
-                                                targetScale = 0.975f,
-                                                animationSpec = ResolveMotion.exitTween(false)
-                                            )
+                                                shrinkHorizontally(ResolveMotion.exitTween(false))
+                                        }
+                                    ) {
+                                        NavigationRail(
+                                            containerColor = palette.surfaceSecondary,
+                                            windowInsets = WindowInsets(0, 0, 0, 0)
+                                        ) {
+                                            TOP_LEVEL_TABS.forEach { tab ->
+                                                val selected = currentRoute == tab.route
+                                                NavigationRailItem(
+                                                    selected = selected,
+                                                    onClick = {
+                                                        haptic.performHapticFeedback(HapticFeedbackType.TextHandleMove)
+                                                        navigateToTab(tab.route)
+                                                    },
+                                                    icon = {
+                                                        Icon(
+                                                            imageVector = if (selected) tab.selectedIcon else tab.unselectedIcon,
+                                                            contentDescription = tab.label
+                                                        )
+                                                    },
+                                                    label = { Text(tab.label) },
+                                                    colors = NavigationRailItemDefaults.colors(
+                                                        selectedIconColor = palette.navPillContent,
+                                                        selectedTextColor = palette.navPillContent,
+                                                        indicatorColor = palette.navPillContainer,
+                                                        unselectedIconColor = palette.textMuted,
+                                                        unselectedTextColor = palette.textMuted
+                                                    )
+                                                )
+                                            }
+                                        }
                                     }
-                                },
-                                modifier = Modifier.fillMaxSize()
-                            ) {
-                                composable(ResolveRoutes.HOME) {
-                                    HomeScreen(
-                                        activeSession = activeSession,
-                                        remainingMillis = remainingMillis,
-                                        capabilities = capabilities,
-                                        onOpenInstantSetup = { navigateSafely(ResolveRoutes.INSTANT_SETUP) },
-                                        onOpenDelayedSetup = { navigateSafely(ResolveRoutes.DELAYED_SETUP) },
-                                        onOpenScheduleSetup = { navigateSafely(ResolveRoutes.scheduleSetup()) },
-                                        onOpenDeviceOwnerGuide = {
-                                            if (!capabilities.canEnforceRealLock) {
-                                                navigateSafely(ResolveRoutes.SETTINGS)
-                                            } else {
-                                                showDeviceOwnerGuide = true
+
+                                    NavHost(
+                                        navController = navController,
+                                        startDestination = ResolveRoutes.HOME,
+                                        enterTransition = {
+                                            val fromRoute = initialState.destination.route
+                                            val toRoute = targetState.destination.route
+                                            val fromTab = tabIndexForRoute(fromRoute)
+                                            val toTab = tabIndexForRoute(toRoute)
+                                            when {
+                                                reducedMotion -> fadeIn(ResolveMotion.fastTween(true))
+                                                isSubScreenRoute(toRoute) ->
+                                                    slideInHorizontally(ResolveMotion.intOffsetSlideTween(false)) { it / 10 } +
+                                                        fadeIn(ResolveMotion.subScreenTween(false))
+                                                fromTab >= 0 && toTab >= 0 && fromTab != toTab -> {
+                                                    val direction = if (toTab > fromTab) 1 else -1
+                                                    slideInHorizontally(ResolveMotion.tabSlideTween(false)) {
+                                                        direction * (it / 16)
+                                                    } + fadeIn(ResolveMotion.standardTween(false))
+                                                }
+                                                else -> fadeIn(ResolveMotion.standardTween(false))
                                             }
                                         },
-                                        onReturnToLockScreen = { viewModel.openLockScreenIfLocked() },
-                                        onDismissTerminalSession = { viewModel.dismissTerminalSession() },
-                                        onOpenAppLockSetup = { navigateSafely(ResolveRoutes.APP_LOCK_SETUP) },
-                                        historyRecords = history,
-                                        dailyAppUsage = dailyAppUsage,
-                                        loadAppIcon = { viewModel.loadAppIcon(it) },
-                                        onGrantUsageAccess = { viewModel.openUsageAccessSettings() },
-                                        mascotType = mascotPreferences.selectedMascot,
-                                        bunnyPeekEntranceSeen = mascotPreferences.bunnyPeekEntranceSeen,
-                                        onBunnyPeekEntranceSeen = { viewModel.markBunnyPeekEntranceSeen() },
-                                        reducedMotion = reducedMotion,
-                                        accountSyncState = accountSyncState,
-                                        syncPromoDismissed = syncPromoDismissed,
-                                        onConnectGoogleAccount = { viewModel.signInWithGoogle(context) },
-                                        onDismissSyncPromo = { viewModel.dismissSyncPromoBanner() },
-                                        onOpenAccountSettings = { navigateSafely(ResolveRoutes.SETTINGS) },
-                                        protectionStatus = protectionStatus,
-                                        onProtectionAction = { viewModel.executeProtectionAction(it) }
-                                    )
-                                }
-
-                                composable(ResolveRoutes.INSIGHTS) {
-                                    InsightsScreen(
-                                        records = history,
-                                        schedules = schedules,
-                                        dailyAppUsage = dailyAppUsage,
-                                        onGrantUsageAccess = { viewModel.openUsageAccessSettings() },
-                                        onAddSchedule = { navigateSafely(ResolveRoutes.scheduleSetup()) },
-                                        onEditSchedule = { schedule ->
-                                            viewModel.updateScheduleLockDuration(
-                                                DurationSelection.fromTotalMinutes(schedule.lockDurationMinutes)
+                                        exitTransition = {
+                                            val fromRoute = initialState.destination.route
+                                            val toRoute = targetState.destination.route
+                                            val fromTab = tabIndexForRoute(fromRoute)
+                                            val toTab = tabIndexForRoute(toRoute)
+                                            when {
+                                                reducedMotion -> fadeOut(ResolveMotion.exitTween(true))
+                                                isSubScreenRoute(toRoute) ->
+                                                    slideOutHorizontally(ResolveMotion.intOffsetSlideTween(false)) { -it / 14 } +
+                                                        fadeOut(ResolveMotion.exitTween(false))
+                                                fromTab >= 0 && toTab >= 0 && fromTab != toTab -> {
+                                                    val direction = if (toTab > fromTab) -1 else 1
+                                                    slideOutHorizontally(ResolveMotion.tabSlideTween(false)) {
+                                                        direction * (it / 16)
+                                                    } + fadeOut(ResolveMotion.exitTween(false))
+                                                }
+                                                else -> fadeOut(ResolveMotion.exitTween(false))
+                                            }
+                                        },
+                                        popEnterTransition = {
+                                            if (reducedMotion) {
+                                                fadeIn(ResolveMotion.fastTween(true))
+                                            } else {
+                                                slideInHorizontally(ResolveMotion.intOffsetSlideTween(false)) { -it / 14 } +
+                                                    fadeIn(ResolveMotion.subScreenTween(false))
+                                            }
+                                        },
+                                        popExitTransition = {
+                                            if (reducedMotion) {
+                                                fadeOut(ResolveMotion.exitTween(true))
+                                            } else {
+                                                slideOutHorizontally(ResolveMotion.intOffsetSlideTween(false)) { it / 10 } +
+                                                    fadeOut(ResolveMotion.exitTween(false))
+                                            }
+                                        },
+                                        modifier = Modifier.fillMaxSize()
+                                    ) {
+                                        composable(ResolveRoutes.HOME) {
+                                            HomeScreen(
+                                                activeSession = activeSession,
+                                                remainingMillis = remainingMillis,
+                                                capabilities = capabilities,
+                                                onOpenInstantSetup = { navigateSafely(ResolveRoutes.INSTANT_SETUP) },
+                                                onOpenDelayedSetup = { navigateSafely(ResolveRoutes.DELAYED_SETUP) },
+                                                onOpenScheduleSetup = { navigateSafely(ResolveRoutes.scheduleSetup()) },
+                                                onOpenDeviceOwnerGuide = {
+                                                    if (!capabilities.canEnforceRealLock) {
+                                                        navigateSafely(ResolveRoutes.SETTINGS)
+                                                    } else {
+                                                        showDeviceOwnerGuide = true
+                                                    }
+                                                },
+                                                onReturnToLockScreen = { viewModel.openLockScreenIfLocked() },
+                                                onDismissTerminalSession = { viewModel.dismissTerminalSession() },
+                                                onOpenAppLockSetup = { navigateSafely(ResolveRoutes.APP_LOCK_SETUP) },
+                                                historyRecords = history,
+                                                dailyAppUsage = dailyAppUsage,
+                                                loadAppIcon = { viewModel.loadAppIcon(it) },
+                                                onGrantUsageAccess = { viewModel.openUsageAccessSettings() },
+                                                mascotType = mascotPreferences.selectedMascot,
+                                                bunnyPeekEntranceSeen = mascotPreferences.bunnyPeekEntranceSeen,
+                                                onBunnyPeekEntranceSeen = { viewModel.markBunnyPeekEntranceSeen() },
+                                                reducedMotion = reducedMotion,
+                                                accountSyncState = accountSyncState,
+                                                syncPromoDismissed = syncPromoDismissed,
+                                                onConnectGoogleAccount = { viewModel.signInWithGoogle(context) },
+                                                onDismissSyncPromo = { viewModel.dismissSyncPromoBanner() },
+                                                onOpenAccountSettings = { navigateSafely(ResolveRoutes.SETTINGS) },
+                                                protectionStatus = protectionStatus,
+                                                onProtectionAction = { viewModel.executeProtectionAction(it) }
                                             )
-                                            navigateSafely(ResolveRoutes.scheduleSetup(schedule.id))
-                                        },
-                                        onToggleSchedule = { schedule, enabled ->
-                                            viewModel.toggleScheduleEnabled(schedule, enabled)
-                                        },
-                                        onDeleteSchedule = { id -> viewModel.deleteSchedule(id) }
-                                    )
-                                }
+                                        }
+
+                                        composable(ResolveRoutes.INSIGHTS) {
+                                            InsightsScreen(
+                                                records = history,
+                                                schedules = schedules,
+                                                dailyAppUsage = dailyAppUsage,
+                                                onGrantUsageAccess = { viewModel.openUsageAccessSettings() },
+                                                onAddSchedule = { navigateSafely(ResolveRoutes.scheduleSetup()) },
+                                                onEditSchedule = { schedule ->
+                                                    viewModel.updateScheduleLockDuration(
+                                                        DurationSelection.fromTotalMinutes(schedule.lockDurationMinutes)
+                                                    )
+                                                    navigateSafely(ResolveRoutes.scheduleSetup(schedule.id))
+                                                },
+                                                onToggleSchedule = { schedule, enabled ->
+                                                    viewModel.toggleScheduleEnabled(schedule, enabled)
+                                                },
+                                                onDeleteSchedule = { id -> viewModel.deleteSchedule(id) },
+                                                reducedMotion = reducedMotion
+                                            )
+                                        }
 
                                 composable(ResolveRoutes.MODES) {
                                     ModesScreen(
@@ -599,7 +570,8 @@ fun ResolveAppShell(viewModel: ResolveViewModel) {
                                         onUpdateProfileName = { viewModel.updateProfileName(it) },
                                         onUpdateProfilePhoto = { viewModel.updateProfilePhoto(it) },
                                         onClearProfilePhoto = { viewModel.clearProfilePhoto() },
-                                        onUnlinkDevice = { viewModel.unlinkDevice(it) }
+                                        onUnlinkDevice = { viewModel.unlinkDevice(it) },
+                                        onPickAvatarError = { viewModel.reportSyncMessage(it) }
                                     )
                                 }
 
@@ -637,6 +609,8 @@ fun ResolveAppShell(viewModel: ResolveViewModel) {
                                         onUpdateProfilePhoto = { viewModel.updateProfilePhoto(it) },
                                         onClearProfilePhoto = { viewModel.clearProfilePhoto() },
                                         onUnlinkDevice = { viewModel.unlinkDevice(it) },
+                                        onUpdateProfileName = { viewModel.updateProfileName(it) },
+                                        onPickAvatarError = { viewModel.reportSyncMessage(it) },
                                         protectionStatus = protectionStatus,
                                         onProtectionAction = { viewModel.executeProtectionAction(it) },
                                         notificationControlConfig = notificationControlConfig,
@@ -857,12 +831,41 @@ fun ResolveAppShell(viewModel: ResolveViewModel) {
                         }
                     }
 
-                    ResolveNotificationHost(
-                        controller = notificationController,
-                        reducedMotion = reducedMotion,
-                        bottomClearance = if (isTopLevelDestination && !useNavigationRail) 92.dp else 16.dp,
-                        modifier = Modifier.align(Alignment.BottomCenter)
-                    )
+                            AnimatedVisibility(
+                                visible = isTopLevelDestination && !useNavigationRail,
+                                enter = if (reducedMotion) {
+                                    fadeIn(ResolveMotion.fastTween(true))
+                                } else {
+                                    fadeIn(ResolveMotion.fastTween(false)) +
+                                        slideInVertically(ResolveMotion.intOffsetSlideTween(false)) { it / 2 }
+                                },
+                                exit = if (reducedMotion) {
+                                    fadeOut(ResolveMotion.exitTween(true))
+                                } else {
+                                    fadeOut(ResolveMotion.exitTween(false)) +
+                                        slideOutVertically(ResolveMotion.intOffsetSlideTween(false)) { it / 2 }
+                                },
+                                modifier = Modifier.align(Alignment.BottomCenter)
+                            ) {
+                                FloatingCapsuleNavDock(
+                                    tabs = TOP_LEVEL_TABS,
+                                    currentRoute = currentRoute,
+                                    reducedMotion = reducedMotion,
+                                    onSelectTab = { route ->
+                                        haptic.performHapticFeedback(HapticFeedbackType.TextHandleMove)
+                                        navigateToTab(route)
+                                    }
+                                )
+                            }
+
+                            ResolveNotificationHost(
+                                controller = notificationController,
+                                reducedMotion = reducedMotion,
+                                bottomClearance = if (isTopLevelDestination && !useNavigationRail) 92.dp else 16.dp,
+                                modifier = Modifier.align(Alignment.BottomCenter)
+                            )
+                        }
+                    }
                 }
             }
         }

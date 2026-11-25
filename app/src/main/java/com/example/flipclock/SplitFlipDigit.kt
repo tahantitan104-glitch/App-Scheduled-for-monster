@@ -12,6 +12,7 @@ import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.layout.wrapContentHeight
 import androidx.compose.foundation.shape.GenericShape
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
@@ -72,13 +73,13 @@ private val BottomHalfClipShape: Shape = GenericShape { size, _ ->
     addRect(Rect(left = 0f, top = size.height * 0.5f, right = size.width, bottom = size.height))
 }
 
-// Empirically verified optical midpoint ratio of Manrope numerals (0..9) above baseline (capH ~ 0.72 * em)
-private const val MANROPE_NUMERAL_MID_RATIO = 0.360f
+// Mathematically verified optical midpoint ratio of Fjalla One numerals (0..9) above baseline (capH ~ 0.849 * em)
+private const val FJALLA_NUMERAL_MID_RATIO = 0.4170f
 
 /**
  * Borderless pure-black split-flap numeral group:
  * - Zero rectangular box, zero border, zero background card plate at rest
- * - Bold rounded geometric sans-serif numerals (Manrope ExtraBold, tabular figures) directly on #000000
+ * - Bold condensed grotesque numerals (Fjalla One, tabular alignment) directly on #000000
  * - Per-digit 3D split-flap animation so ONLY the digit(s) that changed flip
  * - Both halves occupy the exact full digit bounds and clip strictly at 50% height with TransformOrigin(0.5f, 0.5f)
  * - [showFlipAxis] toggles visual seam appearance ONLY without altering the 50% hinge geometry
@@ -92,12 +93,13 @@ fun SplitFlipCard(
     modifier: Modifier = Modifier,
     @Suppress("UNUSED_PARAMETER") cornerRadius: Dp = 0.dp,
     seamThickness: Dp = 3.2.dp,
+    digitGap: Dp = 4.dp,
     digitColor: Color = FlipClockPalette.DigitGrey,
     showFlipAxis: Boolean = true
 ) {
     val normalized = value.ifEmpty { "0" }
     val digits = normalized.toCharArray()
-    val slotGap = if (digits.size > 1) 4.dp else 0.dp
+    val slotGap = if (digits.size > 1) digitGap else 0.dp
 
     Box(
         modifier = modifier
@@ -108,10 +110,9 @@ fun SplitFlipCard(
     ) {
         if (digits.size == 1) {
             key("single_${digits.size}") {
-                val singleSlotWidth = (cardWidth * 0.60f).coerceAtLeast(cardHeight * 0.58f)
                 SplitFlipSingleDigit(
                     digit = digits[0],
-                    digitWidth = singleSlotWidth,
+                    digitWidth = cardWidth.coerceAtLeast(24.dp),
                     cardHeight = cardHeight,
                     fontSize = fontSize,
                     seamThickness = seamThickness,
@@ -187,7 +188,7 @@ private fun SplitFlipSingleDigit(
     val digitTextStyle = remember(fontSize) {
         TextStyle(
             fontFamily = FlipClockDisplayFamily,
-            fontWeight = FontWeight.ExtraBold,
+            fontWeight = FontWeight.Bold,
             fontSize = fontSize,
             lineHeight = fontSize,
             fontFeatureSettings = "tnum",
@@ -208,7 +209,7 @@ private fun SplitFlipSingleDigit(
             softWrap = false,
             maxLines = 1
         ).firstBaseline
-        val numeralVisualMidInLayout = referenceBaseline - (MANROPE_NUMERAL_MID_RATIO * fontSizePx)
+        val numeralVisualMidInLayout = referenceBaseline - (FJALLA_NUMERAL_MID_RATIO * fontSizePx)
         (cardHeightPx * 0.5f) - numeralVisualMidInLayout
     }
 
@@ -335,9 +336,11 @@ private fun FullCardClippedDigitFace(
             textAlign = TextAlign.Center,
             maxLines = 1,
             softWrap = false,
-            modifier = Modifier.graphicsLayer {
-                translationY = translationYPx
-            }
+            modifier = Modifier
+                .wrapContentHeight(unbounded = true)
+                .graphicsLayer {
+                    translationY = translationYPx
+                }
         )
     }
 }

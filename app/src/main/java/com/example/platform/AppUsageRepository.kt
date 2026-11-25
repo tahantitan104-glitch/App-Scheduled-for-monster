@@ -3,6 +3,8 @@ package com.example.platform
 import android.app.usage.UsageStatsManager
 import android.content.Context
 import android.content.Intent
+import android.content.pm.PackageManager
+import android.os.Build
 import com.example.domain.model.DailyAppUsageItem
 import com.example.domain.model.DailyAppUsageSummary
 import com.example.domain.time.ClockProvider
@@ -109,8 +111,13 @@ class AppUsageRepository(
         val intent = Intent(Intent.ACTION_MAIN).apply {
             addCategory(Intent.CATEGORY_LAUNCHER)
         }
+        val flags = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.M) {
+            PackageManager.MATCH_ALL
+        } else {
+            0
+        }
         return runCatching {
-            context.packageManager.queryIntentActivities(intent, 0)
+            context.packageManager.queryIntentActivities(intent, flags)
                 .mapNotNull { it.activityInfo?.packageName }
                 .toSet()
         }.getOrDefault(emptySet())

@@ -83,7 +83,9 @@ service cloud.firestore {
               (!('scheduleId' in data) || (data.scheduleId is string && data.scheduleId.size() <= 128)) &&
               (!('occurrenceId' in data) || (data.occurrenceId is string && data.occurrenceId.size() <= 128)) &&
               (!('strictMode' in data) || data.strictMode is bool) &&
-              (!('showFlipClockShortcut' in data) || data.showFlipClockShortcut is bool);
+              (!('showFlipClockShortcut' in data) || data.showFlipClockShortcut is bool) &&
+              (!('allowSelectedApps' in data) || data.allowSelectedApps is bool) &&
+              (!('phoneAccessEnabled' in data) || data.phoneAccessEnabled is bool);
     }
 
     function isValidDelayedPreset(data) {
@@ -299,6 +301,8 @@ service cloud.firestore {
                               'occurrenceId',
                               'strictMode',
                               'showFlipClockShortcut',
+                              'allowSelectedApps',
+                              'phoneAccessEnabled',
                               'createdAt',
                               'updatedAt'
                             ]) &&
@@ -360,6 +364,8 @@ service cloud.firestore {
                               'occurrenceId',
                               'strictMode',
                               'showFlipClockShortcut',
+                              'allowSelectedApps',
+                              'phoneAccessEnabled',
                               'updatedAt'
                             ])) ||
                            (syncDocId == 'flip_clock_settings' &&
@@ -421,6 +427,8 @@ service cloud.firestore {
                            'occurrenceId',
                            'strictMode',
                            'showFlipClockShortcut',
+                           'allowSelectedApps',
+                           'phoneAccessEnabled',
                            'createdAt',
                            'updatedAt'
                          ]) &&

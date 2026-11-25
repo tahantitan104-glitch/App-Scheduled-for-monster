@@ -140,6 +140,7 @@ fun ResolveBunnyMascot(
             animationState == MascotAnimationState.CELEBRATING -> activeWave * 6.5f
             microAnimation == MascotMicroAnimation.SHY -> -7f
             microAnimation == MascotMicroAnimation.SLEEPY -> 5f
+            microAnimation == MascotMicroAnimation.GENTLE_WAVE -> -3.5f + activeWave * 1.5f
             else -> breathSin * 1.4f
         },
         animationSpec = spring(dampingRatio = Spring.DampingRatioMediumBouncy, stiffness = Spring.StiffnessLow),
@@ -166,7 +167,7 @@ fun ResolveBunnyMascot(
             animationState == MascotAnimationState.POINTING -> 0.96f
             animationState == MascotAnimationState.CELEBRATING -> 0.72f + 0.18f * activeWave
             animationState == MascotAnimationState.HAPPY_DANCE -> 0.56f + 0.24f * activeWave
-            microAnimation == MascotMicroAnimation.GENTLE_WAVE -> 0.78f + 0.16f * activeWave
+            microAnimation == MascotMicroAnimation.GENTLE_WAVE -> 0.84f
             microAnimation == MascotMicroAnimation.SHY -> 0.36f
             else -> 0f
         },
@@ -210,14 +211,12 @@ fun ResolveBunnyMascot(
                 !animateMotion -> 0f
                 animationState == MascotAnimationState.CELEBRATING -> -kotlin.math.abs(activeWave) * 0.055f
                 animationState == MascotAnimationState.HAPPY_DANCE -> -kotlin.math.abs(activeWave) * 0.048f
-                microAnimation == MascotMicroAnimation.SMALL_HOP -> -kotlin.math.abs(activeWave) * 0.042f
                 else -> breathSin * 0.006f
             }
             val scaleStretchY = when {
                 !animateMotion -> 1f
                 animationState == MascotAnimationState.CELEBRATING ||
-                    animationState == MascotAnimationState.HAPPY_DANCE ||
-                    microAnimation == MascotMicroAnimation.SMALL_HOP -> 1f + (-bounceY * 1.1f)
+                    animationState == MascotAnimationState.HAPPY_DANCE -> 1f + (-bounceY * 1.1f)
                 else -> 1f + breathSin * 0.015f
             }
             val scaleSquashX = 1f / scaleStretchY
@@ -225,6 +224,7 @@ fun ResolveBunnyMascot(
             val earWiggleBoost = when {
                 !animateMotion -> 0f
                 microAnimation == MascotMicroAnimation.EAR_WIGGLE -> activeWave * 11f
+                microAnimation == MascotMicroAnimation.GENTLE_WAVE -> 4f + breathSin * 2f
                 animationState == MascotAnimationState.HEAD_EAR_ATTENTION -> 7f + activeWave * 3f
                 animationState == MascotAnimationState.CURIOUS -> -5f
                 animationState == MascotAnimationState.CELEBRATING ||
@@ -235,6 +235,7 @@ fun ResolveBunnyMascot(
             val bentEarDynamic = when {
                 !animateMotion -> 0f
                 microAnimation == MascotMicroAnimation.EAR_WIGGLE -> -activeWave * 9f
+                microAnimation == MascotMicroAnimation.GENTLE_WAVE -> -2f - breathSin * 1.6f
                 animationState == MascotAnimationState.CURIOUS -> 8f
                 animationState == MascotAnimationState.CELEBRATING ||
                     animationState == MascotAnimationState.HAPPY_DANCE -> -activeWave * 7f
@@ -254,6 +255,7 @@ fun ResolveBunnyMascot(
                 !animateMotion -> 0f
                 animationState == MascotAnimationState.CELEBRATING -> 0.9f
                 animationState == MascotAnimationState.POINTING -> 0.55f
+                microAnimation == MascotMicroAnimation.GENTLE_WAVE -> 0.42f
                 else -> 0.25f + 0.15f * breathSin
             }
 
@@ -279,10 +281,18 @@ fun ResolveBunnyMascot(
                     else -> 0f
                 },
                 mouthMood = mood,
-                cheekAlpha = if (microAnimation == MascotMicroAnimation.SHY) 0.66f else 0.48f,
+                cheekAlpha = when (microAnimation) {
+                    MascotMicroAnimation.SHY -> 0.66f
+                    MascotMicroAnimation.GENTLE_WAVE -> 0.56f
+                    else -> 0.48f
+                },
                 leftPawRaise = leftPawRaiseTarget,
                 rightPawRaise = rightPawRaiseTarget,
-                rightPawPointAngleDeg = if (animationState == MascotAnimationState.POINTING) -10f else activeWave * 8f,
+                rightPawPointAngleDeg = when {
+                    animationState == MascotAnimationState.POINTING -> -10f
+                    microAnimation == MascotMicroAnimation.GENTLE_WAVE -> -6f + activeWave * 22f
+                    else -> activeWave * 8f
+                },
                 pawsOnWallStrength = 0f,
                 wallMode = if (showWallOverride) BunnyWallMode.BESIDE_WALL else BunnyWallMode.NONE,
                 wallAlpha = if (showWallOverride) 1f else 0f,

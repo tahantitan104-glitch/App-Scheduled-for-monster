@@ -17,16 +17,19 @@ import com.example.domain.scheduling.ScheduleCalculator
 import com.example.domain.time.ClockProvider
 import com.example.flipclock.FlipClockManager
 import com.example.flipclock.FlipPresetSyncEvent
+import com.example.service.ResolveSyncService
 import com.example.session.EngineStartResult
 import com.example.session.LockSessionEngine
-import com.google.firebase.auth.FirebaseUser
-import com.google.firebase.firestore.FirebaseFirestoreException
+import android.util.Log
 import kotlinx.coroutines.CancellationException
+import kotlinx.coroutines.CoroutineExceptionHandler
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.NonCancellable
 import kotlinx.coroutines.SupervisorJob
+import kotlinx.coroutines.delay
+import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.MutableSharedFlow
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.SharedFlow
@@ -35,6 +38,7 @@ import kotlinx.coroutines.flow.asSharedFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.catch
 import kotlinx.coroutines.flow.first
+import kotlinx.coroutines.flow.retryWhen
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.sync.Mutex
@@ -58,7 +62,26 @@ class MultiDeviceSyncCoordinator(
     private val flipTimerPresetRepository: FlipTimerPresetRepository? = null,
     private val flipClockManager: FlipClockManager? = null
 ) {
-    private val scope = CoroutineScope(SupervisorJob() + Dispatchers.Main.immediate)
+    private val syncExceptionHandler = CoroutineExceptionHandler { _, throwable ->
+        Log.w("SyncCoord", "Recovered from sync coroutine error", throwable)
+        isLocalAvatarWriteInFlight = false
+        val unsupported = throwable is LinkageError
+        _uiState.update { state ->
+            state.copy(
+                isAuthBusy = false,
+                isAvatarUploading = false,
+                unlinkingDeviceId = null,
+                isSyncSupported = if (unsupported) false else state.isSyncSupported,
+                syncUnsupportedReason = if (unsupported) {
+                    "Account sync is not supported on this Android version or Play Services build."
+                } else {
+                    state.syncUnsupportedReason
+                }
+            )
+        }
+    }
+
+    private val scope = CoroutineScope(SupervisorJob() + Dispatchers.Main.immediate + syncExceptionHandler)
     private val commandMutex = Mutex()
 
     private val _uiState = MutableStateFlow(AccountSyncUiState())
@@ -84,6 +107,9 @@ class MultiDeviceSyncCoordinator(
 
     @Volatile
     private var pendingRemoteAvatarClear: Boolean = false
+
+    @Volatile
+    private var hasSeenRemoteNonBlankAvatar: Boolean = false
 
     private data class FlipSyncedSignature(
         val use24HourFormat: Boolean,
@@ -131,12 +157,15 @@ class MultiDeviceSyncCoordinator(
 
         scope.launch {
             delayedPresetRepository?.ensureBuiltInPresets()
+            val supportStatus = GoogleSignInHelper.checkSyncSupport(appContext)
             val deviceId = preferencesRepository.getOrCreateDeviceInstallId()
             val syncEnabled = preferencesRepository.isSyncLockEnabledSnapshot()
             val localName = preferencesRepository.getLocalProfileNameSnapshot()
             val localAvatar = preferencesRepository.getLocalAvatarBase64Snapshot()
             _uiState.update {
                 it.copy(
+                    isSyncSupported = supportStatus.isSupported,
+                    syncUnsupportedReason = supportStatus.unsupportedReason,
                     displayName = localName.ifBlank { it.displayName },
                     avatarBase64 = localAvatar.ifBlank { it.avatarBase64 },
                     thisDeviceId = deviceId,
@@ -150,6 +179,7 @@ class MultiDeviceSyncCoordinator(
             preferencesRepository.syncLockEnabledFlow.collect { enabled ->
                 _uiState.update { it.copy(syncLockEnabled = enabled) }
                 val uid = activeUid
+                updateSyncServiceState(signedIn = !uid.isNullOrBlank(), syncEnabled = enabled)
                 if (!uid.isNullOrBlank()) {
                     val deviceId = preferencesRepository.getOrCreateDeviceInstallId()
                     gateway.updateDeviceSyncEnabled(
@@ -174,7 +204,9 @@ class MultiDeviceSyncCoordinator(
                     scheduleId = broadcast.scheduleId,
                     occurrenceId = broadcast.occurrenceId,
                     strictMode = broadcast.isStrictMode,
-                    showFlipClockShortcut = broadcast.showFlipClockShortcut
+                    showFlipClockShortcut = broadcast.showFlipClockShortcut,
+                    allowSelectedApps = broadcast.allowSelectedApps,
+                    phoneAccessEnabled = broadcast.phoneAccessEnabled
                 )
             }
         }
@@ -218,22 +250,44 @@ class MultiDeviceSyncCoordinator(
         }
 
         authObserveJob = scope.launch {
-            gateway.authState.collect { user ->
-                handleAuthUserChanged(user)
+            try {
+                gateway.authState
+                    .catch { error ->
+                        if (error is CancellationException) throw error
+                        Log.w("SyncCoord", "Auth state stream safely stopped", error)
+                        if (error is LinkageError) {
+                            _uiState.update {
+                                it.copy(
+                                    isSyncSupported = false,
+                                    syncUnsupportedReason = "Account sync is not supported on this Android version or Play Services build."
+                                )
+                            }
+                        }
+                    }
+                    .collect { user ->
+                        handleAuthUserChanged(user)
+                    }
+            } catch (t: Throwable) {
+                if (t is CancellationException) throw t
+                Log.w("SyncCoord", "Auth observer stopped cleanly", t)
             }
         }
     }
 
-    private suspend fun handleAuthUserChanged(user: FirebaseUser?) {
+    private suspend fun handleAuthUserChanged(user: CloudAuthSession?) {
         if (user == null) {
             stopUserListeners()
             activeUid = null
+            hasSeenRemoteNonBlankAvatar = false
+            updateSyncServiceState(signedIn = false, syncEnabled = _uiState.value.syncLockEnabled)
             val localName = preferencesRepository.getLocalProfileNameSnapshot()
             val localAvatar = preferencesRepository.getLocalAvatarBase64Snapshot()
             _uiState.update {
                 AccountSyncUiState(
                     isSignedIn = false,
                     isAuthBusy = false,
+                    isSyncSupported = it.isSyncSupported,
+                    syncUnsupportedReason = it.syncUnsupportedReason,
                     displayName = localName,
                     avatarBase64 = localAvatar,
                     thisDeviceId = it.thisDeviceId,
@@ -251,6 +305,7 @@ class MultiDeviceSyncCoordinator(
 
         stopUserListeners()
         activeUid = uid
+        hasSeenRemoteNonBlankAvatar = false
         val deviceId = preferencesRepository.getOrCreateDeviceInstallId()
         val deviceName = resolveReadableDeviceName()
         val syncEnabled = preferencesRepository.isSyncLockEnabledSnapshot()
@@ -268,7 +323,7 @@ class MultiDeviceSyncCoordinator(
                         ?: "Resolve Focus User"
                 },
                 email = user.email.orEmpty(),
-                photoUrl = user.photoUrl?.toString().orEmpty(),
+                photoUrl = user.photoUrl.orEmpty(),
                 avatarBase64 = localAvatar.ifBlank { it.avatarBase64 },
                 thisDeviceId = deviceId,
                 thisDeviceName = deviceName,
@@ -288,6 +343,19 @@ class MultiDeviceSyncCoordinator(
         }
 
         startUserListeners(uid, deviceId)
+        updateSyncServiceState(signedIn = true, syncEnabled = syncEnabled)
+    }
+
+    private fun <T> Flow<T>.retryOnTransientFirestoreError(): Flow<T> = retryWhen { cause, attempt ->
+        if (cause is CancellationException) return@retryWhen false
+        val isAuthOrPermDenied = CloudAccountRepository.isAuthOrPermissionError(cause)
+        if (isAuthOrPermDenied || attempt >= 6) {
+            false
+        } else {
+            val backoffMs = ((attempt + 1).coerceAtMost(5) * 2_500L)
+            delay(backoffMs)
+            true
+        }
     }
 
     private fun startUserListeners(uid: String, localDeviceId: String) {
@@ -295,11 +363,9 @@ class MultiDeviceSyncCoordinator(
             // 1. Profile & Synced Avatar stream
             launch {
                 gateway.observeUserProfile(uid)
+                    .retryOnTransientFirestoreError()
                     .catch { error ->
-                        val fsErr = generateSequence(error) { it.cause }
-                            .filterIsInstance<FirebaseFirestoreException>()
-                            .firstOrNull()
-                        if (fsErr == null && error is CancellationException) throw error
+                        if (error is CancellationException) throw error
                         _uiState.update {
                             it.copy(errorMessage = CloudAccountRepository.unwrapFirestoreErrorMessage(error, "Sync interrupted."))
                         }
@@ -312,6 +378,7 @@ class MultiDeviceSyncCoordinator(
                                 preferencesRepository.setLocalProfileName(remoteName)
                             }
                             if (remoteAvatar.isNotBlank() && !pendingRemoteAvatarClear) {
+                                hasSeenRemoteNonBlankAvatar = true
                                 preferencesRepository.setLocalAvatarBase64(remoteAvatar)
                                 _uiState.update {
                                     it.copy(
@@ -324,8 +391,22 @@ class MultiDeviceSyncCoordinator(
                                 }
                             } else {
                                 val localAvatar = preferencesRepository.getLocalAvatarBase64Snapshot()
-                                if (localAvatar.isNotBlank() && !pendingRemoteAvatarClear && !isLocalAvatarWriteInFlight) {
-                                    // Local avatar was saved offline before sign-in -> push up to Firestore instead of erasing
+                                if (remoteAvatar.isBlank() && hasSeenRemoteNonBlankAvatar && !isLocalAvatarWriteInFlight) {
+                                    // Another linked device cleared the custom profile photo
+                                    hasSeenRemoteNonBlankAvatar = false
+                                    pendingRemoteAvatarClear = false
+                                    preferencesRepository.setLocalAvatarBase64("")
+                                    _uiState.update {
+                                        it.copy(
+                                            displayName = remoteName.ifBlank { it.displayName },
+                                            email = profile.email.ifBlank { it.email },
+                                            photoUrl = profile.photoUrl.ifBlank { it.photoUrl },
+                                            avatarBase64 = "",
+                                            errorMessage = null
+                                        )
+                                    }
+                                } else if (localAvatar.isNotBlank() && !pendingRemoteAvatarClear && !isLocalAvatarWriteInFlight) {
+                                    // Local avatar was saved offline before sign-in -> push up to cloud instead of erasing
                                     isLocalAvatarWriteInFlight = true
                                     scope.launch {
                                         try {
@@ -365,11 +446,9 @@ class MultiDeviceSyncCoordinator(
             // 2. Linked Devices stream
             launch {
                 gateway.observeDevices(uid)
+                    .retryOnTransientFirestoreError()
                     .catch { error ->
-                        val fsErr = generateSequence(error) { it.cause }
-                            .filterIsInstance<FirebaseFirestoreException>()
-                            .firstOrNull()
-                        if (fsErr == null && error is CancellationException) throw error
+                        if (error is CancellationException) throw error
                     }
                     .collect { devices ->
                         _uiState.update { state ->
@@ -381,11 +460,9 @@ class MultiDeviceSyncCoordinator(
             // 3A. Versioned lock_commands stream
             launch {
                 gateway.observeRecentLockCommands(uid)
+                    .retryOnTransientFirestoreError()
                     .catch { error ->
-                        val fsErr = generateSequence(error) { it.cause }
-                            .filterIsInstance<FirebaseFirestoreException>()
-                            .firstOrNull()
-                        if (fsErr == null && error is CancellationException) throw error
+                        if (error is CancellationException) throw error
                     }
                     .collect { commands ->
                         // Process newest valid unseen commands cleanly in ascending order
@@ -398,11 +475,9 @@ class MultiDeviceSyncCoordinator(
             // 3B. Legacy sync/lock_command stream for backward parity
             launch {
                 gateway.observeLatestLockCommand(uid)
+                    .retryOnTransientFirestoreError()
                     .catch { error ->
-                        val fsErr = generateSequence(error) { it.cause }
-                            .filterIsInstance<FirebaseFirestoreException>()
-                            .firstOrNull()
-                        if (fsErr == null && error is CancellationException) throw error
+                        if (error is CancellationException) throw error
                     }
                     .collect { command ->
                         if (command != null) {
@@ -415,11 +490,9 @@ class MultiDeviceSyncCoordinator(
             if (delayedPresetRepository != null) {
                 launch {
                     gateway.observeDelayedPresets(uid)
+                        .retryOnTransientFirestoreError()
                         .catch { error ->
-                            val fsErr = generateSequence(error) { it.cause }
-                                .filterIsInstance<FirebaseFirestoreException>()
-                                .firstOrNull()
-                            if (fsErr == null && error is CancellationException) throw error
+                            if (error is CancellationException) throw error
                         }
                         .collect { remotePresets ->
                             mergeRemotePresets(remotePresets, localDeviceId)
@@ -431,11 +504,9 @@ class MultiDeviceSyncCoordinator(
             if (scheduleRepository != null) {
                 launch {
                     gateway.observeSyncedSchedules(uid)
+                        .retryOnTransientFirestoreError()
                         .catch { error ->
-                            val fsErr = generateSequence(error) { it.cause }
-                                .filterIsInstance<FirebaseFirestoreException>()
-                                .firstOrNull()
-                            if (fsErr == null && error is CancellationException) throw error
+                            if (error is CancellationException) throw error
                         }
                         .collect { remoteSchedules ->
                             mergeRemoteSchedules(remoteSchedules, localDeviceId)
@@ -446,11 +517,9 @@ class MultiDeviceSyncCoordinator(
             // 6. Synced Lock Profile Settings stream (INSTANT / DELAYED / SCHEDULED defaults)
             launch {
                 gateway.observeLockProfiles(uid)
+                    .retryOnTransientFirestoreError()
                     .catch { error ->
-                        val fsErr = generateSequence(error) { it.cause }
-                            .filterIsInstance<FirebaseFirestoreException>()
-                            .firstOrNull()
-                        if (fsErr == null && error is CancellationException) throw error
+                        if (error is CancellationException) throw error
                     }
                     .collect { remoteProfiles ->
                         mergeRemoteLockProfiles(remoteProfiles, localDeviceId)
@@ -460,11 +529,9 @@ class MultiDeviceSyncCoordinator(
             // 7. Synced Flip Clock Settings stream (excludes local lastBrightnessPercent)
             launch {
                 gateway.observeFlipClockSettings(uid)
+                    .retryOnTransientFirestoreError()
                     .catch { error ->
-                        val fsErr = generateSequence(error) { it.cause }
-                            .filterIsInstance<FirebaseFirestoreException>()
-                            .firstOrNull()
-                        if (fsErr == null && error is CancellationException) throw error
+                        if (error is CancellationException) throw error
                     }
                     .collect { remoteSettings ->
                         mergeRemoteFlipClockSettings(remoteSettings, localDeviceId)
@@ -475,11 +542,9 @@ class MultiDeviceSyncCoordinator(
             if (flipTimerPresetRepository != null) {
                 launch {
                     gateway.observeFlipTimerPresets(uid)
+                        .retryOnTransientFirestoreError()
                         .catch { error ->
-                            val fsErr = generateSequence(error) { it.cause }
-                                .filterIsInstance<FirebaseFirestoreException>()
-                                .firstOrNull()
-                            if (fsErr == null && error is CancellationException) throw error
+                            if (error is CancellationException) throw error
                         }
                         .collect { remotePresets ->
                             mergeRemoteFlipTimerPresets(remotePresets, localDeviceId)
@@ -511,22 +576,33 @@ class MultiDeviceSyncCoordinator(
             // Respect device-level opt-out toggle ("alada alada" independent operation)
             if (!preferencesRepository.isSyncLockEnabledSnapshot()) return
 
-            // Use THIS phone's own local profile allowlist & phone-access setting
+            // Align lock system preferences on this device with the incoming command,
+            // while preserving this device's own installed package allowlist
             val targetMode = command.resolveLockMode()
             val localProfile = preferencesRepository.getLockProfileSettingsSnapshot(targetMode)
-            val effectiveAllowed = if (localProfile.allowSelectedApps) {
+            val nowWall = clockProvider.wallClockMs()
+            val syncedProfile = localProfile.copy(
+                strictMode = command.strictMode,
+                allowSelectedApps = command.allowSelectedApps,
+                showFlipClockShortcut = command.showFlipClockShortcut,
+                updatedAtWallMs = maxOf(localProfile.updatedAtWallMs, nowWall)
+            )
+            preferencesRepository.saveLockProfileSettings(syncedProfile)
+            preferencesRepository.setDefaultPhoneAccess(command.phoneAccessEnabled)
+
+            val effectiveAllowed = if (command.allowSelectedApps) {
                 localProfile.allowedPackages.ifEmpty { allowlistRepository.getAllowedPackages() }.distinct()
             } else {
                 emptyList()
             }
-            val localPhoneAccess = preferencesRepository.defaultPhoneAccessFlow.first()
 
             val result = sessionEngine.applyRemoteLockCommand(
                 command = command,
                 allowedPackages = effectiveAllowed,
-                phoneAccessEnabled = localPhoneAccess,
+                phoneAccessEnabled = command.phoneAccessEnabled,
                 isStrictMode = command.strictMode,
-                showFlipClockShortcut = command.showFlipClockShortcut
+                showFlipClockShortcut = command.showFlipClockShortcut,
+                serverClockOffsetMs = gateway.estimatedServerOffsetMs()
             )
             if (result is EngineStartResult.Started) {
                 val fromName = command.originDeviceName.ifBlank { "another device" }
@@ -735,47 +811,86 @@ class MultiDeviceSyncCoordinator(
 
     suspend fun signInWithGoogle(activityContext: Context): Boolean {
         _uiState.update { it.copy(isAuthBusy = true, errorMessage = null) }
-        return when (val outcome = GoogleSignInHelper.signInInteractive(activityContext)) {
-            is GoogleSignInOutcome.Success -> {
-                val firebaseResult = gateway.signInWithGoogleIdToken(outcome.idToken)
-                _uiState.update { it.copy(isAuthBusy = false) }
-                if (firebaseResult.isSuccess) {
-                    lastAuthTokenEpochMs = clockProvider.wallClockMs()
-                    _syncEvents.tryEmit("Google Account connected for multi-device sync.")
-                    true
-                } else {
-                    val msg = firebaseResult.exceptionOrNull()?.localizedMessage
-                        ?: "Could not complete Google authentication."
-                    _uiState.update { it.copy(errorMessage = msg) }
-                    _syncEvents.tryEmit(msg)
+        return try {
+            when (val outcome = GoogleSignInHelper.signInInteractive(activityContext)) {
+                is GoogleSignInOutcome.Success -> {
+                    val firebaseResult = gateway.signInWithGoogleIdToken(outcome.idToken)
+                    _uiState.update { it.copy(isAuthBusy = false) }
+                    if (firebaseResult.isSuccess) {
+                        lastAuthTokenEpochMs = clockProvider.wallClockMs()
+                        gateway.refreshSyncNow()
+                        _syncEvents.tryEmit("Google Account connected for multi-device sync.")
+                        true
+                    } else {
+                        val err = firebaseResult.exceptionOrNull()
+                        val msg = if (err is LinkageError) {
+                            "Google Play Services authentication is unavailable on this device."
+                        } else {
+                            CloudAccountRepository.unwrapFirestoreErrorMessage(
+                                err ?: Exception("Auth failed"),
+                                "Could not complete Google authentication."
+                            )
+                        }
+                        _uiState.update { state ->
+                            state.copy(
+                                errorMessage = msg,
+                                isSyncSupported = if (err is LinkageError) false else state.isSyncSupported,
+                                syncUnsupportedReason = if (err is LinkageError) msg else state.syncUnsupportedReason
+                            )
+                        }
+                        _syncEvents.tryEmit(msg)
+                        false
+                    }
+                }
+                GoogleSignInOutcome.Cancelled -> {
+                    _uiState.update { it.copy(isAuthBusy = false) }
+                    false
+                }
+                is GoogleSignInOutcome.Failed -> {
+                    _uiState.update { it.copy(isAuthBusy = false, errorMessage = outcome.message) }
+                    _syncEvents.tryEmit(outcome.message)
                     false
                 }
             }
-            GoogleSignInOutcome.Cancelled -> {
-                _uiState.update { it.copy(isAuthBusy = false) }
-                false
+        } catch (t: Throwable) {
+            if (t is CancellationException) throw t
+            Log.w("SyncCoord", "Google Sign-In interrupted safely", t)
+            val msg = if (t is LinkageError) {
+                "Google Play Services authentication is unavailable on this device."
+            } else {
+                t.localizedMessage ?: "Google Sign-In is unavailable on this device."
             }
-            is GoogleSignInOutcome.Failed -> {
-                _uiState.update { it.copy(isAuthBusy = false, errorMessage = outcome.message) }
-                _syncEvents.tryEmit(outcome.message)
-                false
+            _uiState.update { state ->
+                state.copy(
+                    isAuthBusy = false,
+                    errorMessage = msg,
+                    isSyncSupported = if (t is LinkageError) false else state.isSyncSupported,
+                    syncUnsupportedReason = if (t is LinkageError) msg else state.syncUnsupportedReason
+                )
             }
+            _syncEvents.tryEmit(msg)
+            false
         }
     }
 
     suspend fun signOutSafely() {
         _uiState.update { it.copy(isAuthBusy = true, errorMessage = null) }
         withContext(NonCancellable) {
-            stopUserListeners()
-            activeUid = null
-            GoogleSignInHelper.clearCredentialState(appContext)
-            gateway.signOut()
-            val localName = preferencesRepository.getLocalProfileNameSnapshot()
-            val localAvatar = preferencesRepository.getLocalAvatarBase64Snapshot()
+            runCatching {
+                stopUserListeners()
+                activeUid = null
+                updateSyncServiceState(signedIn = false, syncEnabled = _uiState.value.syncLockEnabled)
+                GoogleSignInHelper.clearCredentialState(appContext)
+                gateway.signOut()
+            }
+            val localName = runCatching { preferencesRepository.getLocalProfileNameSnapshot() }.getOrDefault("")
+            val localAvatar = runCatching { preferencesRepository.getLocalAvatarBase64Snapshot() }.getOrDefault("")
             _uiState.update {
                 AccountSyncUiState(
                     isSignedIn = false,
                     isAuthBusy = false,
+                    isSyncSupported = it.isSyncSupported,
+                    syncUnsupportedReason = it.syncUnsupportedReason,
                     displayName = localName,
                     avatarBase64 = localAvatar,
                     thisDeviceId = it.thisDeviceId,
@@ -852,11 +967,14 @@ class MultiDeviceSyncCoordinator(
         if (encoded.isFailure) {
             isLocalAvatarWriteInFlight = false
             _uiState.update { it.copy(isAvatarUploading = false) }
-            _syncEvents.tryEmit("Could not read selected image.")
+            val reason = encoded.exceptionOrNull()?.localizedMessage?.takeIf { it.isNotBlank() }
+                ?: "Could not read selected image."
+            _syncEvents.tryEmit(reason)
             return
         }
         val base64 = encoded.getOrThrow()
         preferencesRepository.setLocalAvatarBase64(base64)
+        hasSeenRemoteNonBlankAvatar = false
         _uiState.update { it.copy(avatarBase64 = base64) }
         val uid = activeUid
         if (uid == null) {
@@ -869,6 +987,7 @@ class MultiDeviceSyncCoordinator(
         isLocalAvatarWriteInFlight = false
         _uiState.update { it.copy(isAvatarUploading = false) }
         if (writeResult.isSuccess) {
+            hasSeenRemoteNonBlankAvatar = true
             _syncEvents.tryEmit("Profile photo synced across connected devices.")
         } else {
             val msg = writeResult.exceptionOrNull()?.let {
@@ -880,6 +999,7 @@ class MultiDeviceSyncCoordinator(
 
     suspend fun clearCustomProfilePhoto() {
         pendingRemoteAvatarClear = true
+        hasSeenRemoteNonBlankAvatar = false
         isLocalAvatarWriteInFlight = true
         preferencesRepository.setLocalAvatarBase64("")
         _uiState.update { it.copy(avatarBase64 = "") }
@@ -897,6 +1017,12 @@ class MultiDeviceSyncCoordinator(
         }
     }
 
+    fun refreshSyncNow() {
+        if (!activeUid.isNullOrBlank()) {
+            gateway.refreshSyncNow()
+        }
+    }
+
     suspend fun publishLockTriggerIfEnabled(
         mode: LockMode,
         freeUseMinutes: Long,
@@ -907,13 +1033,19 @@ class MultiDeviceSyncCoordinator(
         scheduleId: String = "",
         occurrenceId: String = "",
         strictMode: Boolean = false,
-        showFlipClockShortcut: Boolean = false
+        showFlipClockShortcut: Boolean = false,
+        allowSelectedApps: Boolean = true,
+        phoneAccessEnabled: Boolean = true
     ) {
         if (!syncAcrossDevices) return
         val uid = activeUid ?: return
         val deviceId = preferencesRepository.getOrCreateDeviceInstallId()
         val deviceName = resolveReadableDeviceName()
         val nowWall = clockProvider.wallClockMs()
+        val serverOffset = gateway.estimatedServerOffsetMs()
+        val serverNowWall = nowWall + serverOffset
+        val serverFreeDeadline = if (freeUseDeadlineWallMs > 0L) freeUseDeadlineWallMs + serverOffset else 0L
+        val serverLockExpire = if (lockExpirationWallMs > 0L) lockExpirationWallMs + serverOffset else 0L
 
         val result = gateway.publishLockCommand(
             userId = uid,
@@ -922,14 +1054,16 @@ class MultiDeviceSyncCoordinator(
             mode = mode,
             freeUseDurationMinutes = freeUseMinutes,
             lockDurationMinutes = lockDurationMinutes,
-            issuedAtWallMs = nowWall,
-            intendedStartWallMs = nowWall,
-            freeUseDeadlineWallMs = freeUseDeadlineWallMs,
-            lockExpirationWallMs = lockExpirationWallMs,
+            issuedAtWallMs = serverNowWall,
+            intendedStartWallMs = serverNowWall,
+            freeUseDeadlineWallMs = serverFreeDeadline,
+            lockExpirationWallMs = serverLockExpire,
             scheduleId = scheduleId,
             occurrenceId = occurrenceId,
             strictMode = strictMode,
-            showFlipClockShortcut = showFlipClockShortcut
+            showFlipClockShortcut = showFlipClockShortcut,
+            allowSelectedApps = allowSelectedApps,
+            phoneAccessEnabled = phoneAccessEnabled
         )
         if (result.isSuccess) {
             val commandId = result.getOrNull().orEmpty()
@@ -1055,6 +1189,14 @@ class MultiDeviceSyncCoordinator(
                 deleted = deleted
             )
         )
+    }
+
+    private fun updateSyncServiceState(signedIn: Boolean, syncEnabled: Boolean) {
+        if (signedIn && syncEnabled) {
+            ResolveSyncService.start(appContext)
+        } else {
+            ResolveSyncService.stop(appContext)
+        }
     }
 
     private fun stopUserListeners() {

@@ -12,6 +12,27 @@ import com.google.firebase.firestore.ServerTimestamp
 
 const val CURRENT_SYNC_SCHEMA_VERSION = 1L
 
+data class CloudAuthSession(
+    val uid: String,
+    val displayName: String? = null,
+    val email: String? = null,
+    val photoUrl: String? = null
+)
+
+class CloudSyncException(
+    val kind: Kind,
+    message: String,
+    cause: Throwable? = null
+) : Exception(message, cause) {
+    enum class Kind {
+        UNAUTHENTICATED,
+        PERMISSION_DENIED,
+        UNAVAILABLE,
+        QUOTA_EXCEEDED,
+        OTHER
+    }
+}
+
 @Keep
 @IgnoreExtraProperties
 data class CloudUserProfile(
@@ -60,6 +81,8 @@ data class CloudLockCommand(
     val occurrenceId: String = "",
     val strictMode: Boolean = false,
     val showFlipClockShortcut: Boolean = false,
+    val allowSelectedApps: Boolean = true,
+    val phoneAccessEnabled: Boolean = true,
     @ServerTimestamp val createdAt: Timestamp? = null,
     @ServerTimestamp val updatedAt: Timestamp? = null
 ) {
@@ -183,6 +206,8 @@ data class AccountSyncUiState(
     val isSignedIn: Boolean = false,
     val isAuthBusy: Boolean = false,
     val isAvatarUploading: Boolean = false,
+    val isSyncSupported: Boolean = true,
+    val syncUnsupportedReason: String? = null,
     val unlinkingDeviceId: String? = null,
     val userId: String? = null,
     val displayName: String = "",

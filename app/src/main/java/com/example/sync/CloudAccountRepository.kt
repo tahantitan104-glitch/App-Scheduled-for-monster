@@ -14,6 +14,7 @@ import com.google.firebase.firestore.FieldValue
 import com.google.firebase.firestore.FirebaseFirestore
 import com.google.firebase.firestore.FirebaseFirestoreException
 import com.google.firebase.firestore.Query
+import com.google.firebase.firestore.Source
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.channels.awaitClose
 import kotlinx.coroutines.flow.Flow
@@ -21,19 +22,41 @@ import kotlinx.coroutines.flow.callbackFlow
 import kotlinx.coroutines.flow.emptyFlow
 import kotlinx.coroutines.tasks.await
 import java.util.UUID
+import java.util.concurrent.atomic.AtomicBoolean
+import java.util.concurrent.atomic.AtomicLong
 
-fun FirebaseAuth.authStateFlow(): Flow<FirebaseUser?> = callbackFlow {
+fun FirebaseAuth.authStateFlow(): Flow<CloudAuthSession?> = callbackFlow {
     val listener = FirebaseAuth.AuthStateListener { firebaseAuth ->
-        trySend(firebaseAuth.currentUser)
+        trySend(runCatching { firebaseAuth.currentUser?.toCloudAuthSession() }.getOrNull())
     }
-    addAuthStateListener(listener)
-    awaitClose { removeAuthStateListener(listener) }
+    var registered = false
+    try {
+        addAuthStateListener(listener)
+        registered = true
+    } catch (t: Throwable) {
+        if (t is CancellationException) throw t
+        close(t)
+    }
+    awaitClose {
+        if (registered) {
+            runCatching { removeAuthStateListener(listener) }
+        }
+    }
 }
 
+private fun FirebaseUser.toCloudAuthSession(): CloudAuthSession = CloudAuthSession(
+    uid = uid,
+    displayName = displayName,
+    email = email,
+    photoUrl = photoUrl?.toString()
+)
+
 interface CloudSyncGateway {
-    val authState: Flow<FirebaseUser?>
+    val authState: Flow<CloudAuthSession?>
     val currentUserId: String?
-    suspend fun signInWithGoogleIdToken(idToken: String): Result<FirebaseUser>
+    fun refreshSyncNow() = Unit
+    fun estimatedServerOffsetMs(): Long = 0L
+    suspend fun signInWithGoogleIdToken(idToken: String): Result<CloudAuthSession>
     suspend fun signOut(): Result<Unit>
     fun observeUserProfile(userId: String): Flow<CloudUserProfile?>
     fun observeDevices(userId: String): Flow<List<CloudDeviceInfo>>
@@ -44,7 +67,7 @@ interface CloudSyncGateway {
     fun observeLockProfiles(userId: String): Flow<List<CloudLockProfileSettings>> = emptyFlow()
     fun observeFlipClockSettings(userId: String): Flow<CloudFlipClockSettings?> = emptyFlow()
     fun observeFlipTimerPresets(userId: String): Flow<List<CloudFlipTimerPreset>> = emptyFlow()
-    suspend fun ensureUserProfile(user: FirebaseUser): Result<Unit>
+    suspend fun ensureUserProfile(user: CloudAuthSession): Result<Unit>
     suspend fun registerOrUpdateDevice(
         userId: String,
         deviceId: String,
@@ -74,7 +97,9 @@ interface CloudSyncGateway {
         scheduleId: String = "",
         occurrenceId: String = "",
         strictMode: Boolean = false,
-        showFlipClockShortcut: Boolean = false
+        showFlipClockShortcut: Boolean = false,
+        allowSelectedApps: Boolean = true,
+        phoneAccessEnabled: Boolean = true
     ): Result<String>
     suspend fun upsertDelayedPreset(userId: String, preset: CloudDelayedPreset): Result<Unit> =
         Result.success(Unit)
@@ -95,41 +120,65 @@ class CloudAccountRepository(
 
     constructor(context: Context) : this(
         dbProvider = {
-            val appContext = context.applicationContext
-            if (FirebaseApp.getApps(appContext).isNotEmpty()) {
-                val databaseId = appContext.getString(R.string.firestore_database_id)
-                FirebaseFirestore.getInstance(databaseId)
-            } else {
+            try {
+                val appContext = context.applicationContext
+                if (FirebaseApp.getApps(appContext).isNotEmpty()) {
+                    val databaseId = appContext.getString(R.string.firestore_database_id)
+                    FirebaseFirestore.getInstance(databaseId)
+                } else {
+                    null
+                }
+            } catch (_: Throwable) {
                 null
             }
         },
         authProvider = {
-            if (FirebaseApp.getApps(context.applicationContext).isNotEmpty()) {
-                FirebaseAuth.getInstance()
-            } else {
+            try {
+                if (FirebaseApp.getApps(context.applicationContext).isNotEmpty()) {
+                    FirebaseAuth.getInstance()
+                } else {
+                    null
+                }
+            } catch (_: Throwable) {
                 null
             }
         }
     )
 
-    override val authState: Flow<FirebaseUser?>
-        get() = authProvider()?.authStateFlow() ?: emptyFlow()
+    private val serverOffsetMs = AtomicLong(0L)
+    private val hasServerClockSample = AtomicBoolean(false)
+
+    override fun estimatedServerOffsetMs(): Long = serverOffsetMs.get()
+
+    private fun recordServerClockSample(serverTimeMs: Long, localEstimateMs: Long) {
+        if (serverTimeMs <= 1_500_000_000_000L) return
+        val offset = serverTimeMs - localEstimateMs
+        if (!hasServerClockSample.getAndSet(true)) {
+            serverOffsetMs.set(offset)
+        } else {
+            val prev = serverOffsetMs.get()
+            serverOffsetMs.set(if (kotlin.math.abs(offset - prev) > 3_000L) offset else (prev + offset) / 2L)
+        }
+    }
+
+    override val authState: Flow<CloudAuthSession?>
+        get() = runCatching { authProvider()?.authStateFlow() }.getOrNull() ?: emptyFlow()
 
     override val currentUserId: String?
-        get() = authProvider()?.currentUser?.uid
+        get() = runCatching { authProvider()?.currentUser?.uid }.getOrNull()
 
-    override suspend fun signInWithGoogleIdToken(idToken: String): Result<FirebaseUser> {
+    override suspend fun signInWithGoogleIdToken(idToken: String): Result<CloudAuthSession> {
         return try {
             val auth = authProvider() ?: error("Firebase Authentication is not initialized.")
             val credential = GoogleAuthProvider.getCredential(idToken, null)
             val result = auth.signInWithCredential(credential).await()
             val user = result.user ?: auth.currentUser
                 ?: error("Signed in, but Firebase user session was empty.")
-            Result.success(user)
+            Result.success(user.toCloudAuthSession())
         } catch (e: CancellationException) {
             throw e
-        } catch (e: Exception) {
-            Result.failure(e)
+        } catch (t: Throwable) {
+            Result.failure(t)
         }
     }
 
@@ -139,8 +188,8 @@ class CloudAccountRepository(
             Result.success(Unit)
         } catch (e: CancellationException) {
             throw e
-        } catch (e: Exception) {
-            Result.failure(e)
+        } catch (t: Throwable) {
+            Result.failure(t)
         }
     }
 
@@ -152,24 +201,31 @@ class CloudAccountRepository(
 
         return callbackFlow {
             val docRef = db.collection("users").document(userId)
-            val registration = docRef.addSnapshotListener { snapshot, error ->
-                if (error != null) {
-                    handleFirestoreError(error, OperationType.GET, docRef.path)
-                    close(error)
-                    return@addSnapshotListener
-                }
-                if (snapshot != null && snapshot.exists()) {
-                    trySend(
-                        snapshot.toObject(
-                            CloudUserProfile::class.java,
-                            DocumentSnapshot.ServerTimestampBehavior.ESTIMATE
+            val registration = runCatching {
+                docRef.addSnapshotListener { snapshot, error ->
+                    if (error != null) {
+                        handleFirestoreError(error, OperationType.GET, docRef.path)
+                        close(error)
+                        return@addSnapshotListener
+                    }
+                    if (snapshot != null && snapshot.exists()) {
+                        trySend(
+                            runCatching {
+                                snapshot.toObject(
+                                    CloudUserProfile::class.java,
+                                    DocumentSnapshot.ServerTimestampBehavior.ESTIMATE
+                                )
+                            }.getOrNull()
                         )
-                    )
-                } else {
-                    trySend(null)
+                    } else {
+                        trySend(null)
+                    }
                 }
-            }
-            awaitClose { registration.remove() }
+            }.onFailure { t ->
+                if (t is CancellationException) throw t
+                close(t)
+            }.getOrNull()
+            awaitClose { runCatching { registration?.remove() } }
         }
     }
 
@@ -181,19 +237,26 @@ class CloudAccountRepository(
 
         return callbackFlow {
             val colRef = db.collection("users").document(userId).collection("devices")
-            val registration = colRef.addSnapshotListener { snapshot, error ->
-                if (error != null) {
-                    handleFirestoreError(error, OperationType.LIST, colRef.path)
-                    close(error)
-                    return@addSnapshotListener
+            val registration = runCatching {
+                colRef.addSnapshotListener { snapshot, error ->
+                    if (error != null) {
+                        handleFirestoreError(error, OperationType.LIST, colRef.path)
+                        close(error)
+                        return@addSnapshotListener
+                    }
+                    val list = runCatching {
+                        snapshot?.toObjects(
+                            CloudDeviceInfo::class.java,
+                            DocumentSnapshot.ServerTimestampBehavior.ESTIMATE
+                        )
+                    }.getOrNull().orEmpty()
+                    trySend(list)
                 }
-                val list = snapshot?.toObjects(
-                    CloudDeviceInfo::class.java,
-                    DocumentSnapshot.ServerTimestampBehavior.ESTIMATE
-                ).orEmpty()
-                trySend(list)
-            }
-            awaitClose { registration.remove() }
+            }.onFailure { t ->
+                if (t is CancellationException) throw t
+                close(t)
+            }.getOrNull()
+            awaitClose { runCatching { registration?.remove() } }
         }
     }
 
@@ -206,24 +269,31 @@ class CloudAccountRepository(
         return callbackFlow {
             val docRef = db.collection("users").document(userId)
                 .collection("sync").document(LOCK_COMMAND_DOC_ID)
-            val registration = docRef.addSnapshotListener { snapshot, error ->
-                if (error != null) {
-                    handleFirestoreError(error, OperationType.GET, docRef.path)
-                    close(error)
-                    return@addSnapshotListener
-                }
-                if (snapshot != null && snapshot.exists()) {
-                    trySend(
-                        snapshot.toObject(
-                            CloudLockCommand::class.java,
-                            DocumentSnapshot.ServerTimestampBehavior.ESTIMATE
+            val registration = runCatching {
+                docRef.addSnapshotListener { snapshot, error ->
+                    if (error != null) {
+                        handleFirestoreError(error, OperationType.GET, docRef.path)
+                        close(error)
+                        return@addSnapshotListener
+                    }
+                    if (snapshot != null && snapshot.exists()) {
+                        trySend(
+                            runCatching {
+                                snapshot.toObject(
+                                    CloudLockCommand::class.java,
+                                    DocumentSnapshot.ServerTimestampBehavior.ESTIMATE
+                                )
+                            }.getOrNull()
                         )
-                    )
-                } else {
-                    trySend(null)
+                    } else {
+                        trySend(null)
+                    }
                 }
-            }
-            awaitClose { registration.remove() }
+            }.onFailure { t ->
+                if (t is CancellationException) throw t
+                close(t)
+            }.getOrNull()
+            awaitClose { runCatching { registration?.remove() } }
         }
     }
 
@@ -238,19 +308,26 @@ class CloudAccountRepository(
                 .collection("lock_commands")
                 .orderBy("issuedAtWallMs", Query.Direction.DESCENDING)
                 .limit(20L)
-            val registration = colRef.addSnapshotListener { snapshot, error ->
-                if (error != null) {
-                    handleFirestoreError(error, OperationType.LIST, "users/$userId/lock_commands")
-                    close(error)
-                    return@addSnapshotListener
+            val registration = runCatching {
+                colRef.addSnapshotListener { snapshot, error ->
+                    if (error != null) {
+                        handleFirestoreError(error, OperationType.LIST, "users/$userId/lock_commands")
+                        close(error)
+                        return@addSnapshotListener
+                    }
+                    val list = runCatching {
+                        snapshot?.toObjects(
+                            CloudLockCommand::class.java,
+                            DocumentSnapshot.ServerTimestampBehavior.ESTIMATE
+                        )
+                    }.getOrNull().orEmpty()
+                    trySend(list)
                 }
-                val list = snapshot?.toObjects(
-                    CloudLockCommand::class.java,
-                    DocumentSnapshot.ServerTimestampBehavior.ESTIMATE
-                ).orEmpty()
-                trySend(list)
-            }
-            awaitClose { registration.remove() }
+            }.onFailure { t ->
+                if (t is CancellationException) throw t
+                close(t)
+            }.getOrNull()
+            awaitClose { runCatching { registration?.remove() } }
         }
     }
 
@@ -262,19 +339,26 @@ class CloudAccountRepository(
 
         return callbackFlow {
             val colRef = db.collection("users").document(userId).collection("presets")
-            val registration = colRef.addSnapshotListener { snapshot, error ->
-                if (error != null) {
-                    handleFirestoreError(error, OperationType.LIST, colRef.path)
-                    close(error)
-                    return@addSnapshotListener
+            val registration = runCatching {
+                colRef.addSnapshotListener { snapshot, error ->
+                    if (error != null) {
+                        handleFirestoreError(error, OperationType.LIST, colRef.path)
+                        close(error)
+                        return@addSnapshotListener
+                    }
+                    val list = runCatching {
+                        snapshot?.toObjects(
+                            CloudDelayedPreset::class.java,
+                            DocumentSnapshot.ServerTimestampBehavior.ESTIMATE
+                        )
+                    }.getOrNull().orEmpty()
+                    trySend(list)
                 }
-                val list = snapshot?.toObjects(
-                    CloudDelayedPreset::class.java,
-                    DocumentSnapshot.ServerTimestampBehavior.ESTIMATE
-                ).orEmpty()
-                trySend(list)
-            }
-            awaitClose { registration.remove() }
+            }.onFailure { t ->
+                if (t is CancellationException) throw t
+                close(t)
+            }.getOrNull()
+            awaitClose { runCatching { registration?.remove() } }
         }
     }
 
@@ -286,19 +370,26 @@ class CloudAccountRepository(
 
         return callbackFlow {
             val colRef = db.collection("users").document(userId).collection("schedules")
-            val registration = colRef.addSnapshotListener { snapshot, error ->
-                if (error != null) {
-                    handleFirestoreError(error, OperationType.LIST, colRef.path)
-                    close(error)
-                    return@addSnapshotListener
+            val registration = runCatching {
+                colRef.addSnapshotListener { snapshot, error ->
+                    if (error != null) {
+                        handleFirestoreError(error, OperationType.LIST, colRef.path)
+                        close(error)
+                        return@addSnapshotListener
+                    }
+                    val list = runCatching {
+                        snapshot?.toObjects(
+                            CloudScheduleRecord::class.java,
+                            DocumentSnapshot.ServerTimestampBehavior.ESTIMATE
+                        )
+                    }.getOrNull().orEmpty()
+                    trySend(list)
                 }
-                val list = snapshot?.toObjects(
-                    CloudScheduleRecord::class.java,
-                    DocumentSnapshot.ServerTimestampBehavior.ESTIMATE
-                ).orEmpty()
-                trySend(list)
-            }
-            awaitClose { registration.remove() }
+            }.onFailure { t ->
+                if (t is CancellationException) throw t
+                close(t)
+            }.getOrNull()
+            awaitClose { runCatching { registration?.remove() } }
         }
     }
 
@@ -310,19 +401,26 @@ class CloudAccountRepository(
 
         return callbackFlow {
             val colRef = db.collection("users").document(userId).collection("lock_profiles")
-            val registration = colRef.addSnapshotListener { snapshot, error ->
-                if (error != null) {
-                    handleFirestoreError(error, OperationType.LIST, colRef.path)
-                    close(error)
-                    return@addSnapshotListener
+            val registration = runCatching {
+                colRef.addSnapshotListener { snapshot, error ->
+                    if (error != null) {
+                        handleFirestoreError(error, OperationType.LIST, colRef.path)
+                        close(error)
+                        return@addSnapshotListener
+                    }
+                    val list = runCatching {
+                        snapshot?.toObjects(
+                            CloudLockProfileSettings::class.java,
+                            DocumentSnapshot.ServerTimestampBehavior.ESTIMATE
+                        )
+                    }.getOrNull().orEmpty()
+                    trySend(list)
                 }
-                val list = snapshot?.toObjects(
-                    CloudLockProfileSettings::class.java,
-                    DocumentSnapshot.ServerTimestampBehavior.ESTIMATE
-                ).orEmpty()
-                trySend(list)
-            }
-            awaitClose { registration.remove() }
+            }.onFailure { t ->
+                if (t is CancellationException) throw t
+                close(t)
+            }.getOrNull()
+            awaitClose { runCatching { registration?.remove() } }
         }
     }
 
@@ -335,24 +433,31 @@ class CloudAccountRepository(
         return callbackFlow {
             val docRef = db.collection("users").document(userId)
                 .collection("sync").document(FLIP_CLOCK_SETTINGS_DOC_ID)
-            val registration = docRef.addSnapshotListener { snapshot, error ->
-                if (error != null) {
-                    handleFirestoreError(error, OperationType.GET, docRef.path)
-                    close(error)
-                    return@addSnapshotListener
-                }
-                if (snapshot != null && snapshot.exists()) {
-                    trySend(
-                        snapshot.toObject(
-                            CloudFlipClockSettings::class.java,
-                            DocumentSnapshot.ServerTimestampBehavior.ESTIMATE
+            val registration = runCatching {
+                docRef.addSnapshotListener { snapshot, error ->
+                    if (error != null) {
+                        handleFirestoreError(error, OperationType.GET, docRef.path)
+                        close(error)
+                        return@addSnapshotListener
+                    }
+                    if (snapshot != null && snapshot.exists()) {
+                        trySend(
+                            runCatching {
+                                snapshot.toObject(
+                                    CloudFlipClockSettings::class.java,
+                                    DocumentSnapshot.ServerTimestampBehavior.ESTIMATE
+                                )
+                            }.getOrNull()
                         )
-                    )
-                } else {
-                    trySend(null)
+                    } else {
+                        trySend(null)
+                    }
                 }
-            }
-            awaitClose { registration.remove() }
+            }.onFailure { t ->
+                if (t is CancellationException) throw t
+                close(t)
+            }.getOrNull()
+            awaitClose { runCatching { registration?.remove() } }
         }
     }
 
@@ -364,23 +469,30 @@ class CloudAccountRepository(
 
         return callbackFlow {
             val colRef = db.collection("users").document(userId).collection("flip_timer_presets")
-            val registration = colRef.addSnapshotListener { snapshot, error ->
-                if (error != null) {
-                    handleFirestoreError(error, OperationType.LIST, colRef.path)
-                    close(error)
-                    return@addSnapshotListener
+            val registration = runCatching {
+                colRef.addSnapshotListener { snapshot, error ->
+                    if (error != null) {
+                        handleFirestoreError(error, OperationType.LIST, colRef.path)
+                        close(error)
+                        return@addSnapshotListener
+                    }
+                    val list = runCatching {
+                        snapshot?.toObjects(
+                            CloudFlipTimerPreset::class.java,
+                            DocumentSnapshot.ServerTimestampBehavior.ESTIMATE
+                        )
+                    }.getOrNull().orEmpty()
+                    trySend(list)
                 }
-                val list = snapshot?.toObjects(
-                    CloudFlipTimerPreset::class.java,
-                    DocumentSnapshot.ServerTimestampBehavior.ESTIMATE
-                ).orEmpty()
-                trySend(list)
-            }
-            awaitClose { registration.remove() }
+            }.onFailure { t ->
+                if (t is CancellationException) throw t
+                close(t)
+            }.getOrNull()
+            awaitClose { runCatching { registration?.remove() } }
         }
     }
 
-    override suspend fun ensureUserProfile(user: FirebaseUser): Result<Unit> {
+    override suspend fun ensureUserProfile(user: CloudAuthSession): Result<Unit> {
         val uid = user.uid
         val path = "users/$uid"
         return try {
@@ -394,7 +506,7 @@ class CloudAccountRepository(
                 .ifBlank { "Resolve Focus User" }
                 .take(80)
             val safeEmail = user.email?.trim()?.take(160)
-            val safePhotoUrl = user.photoUrl?.toString()?.trim()?.take(600)
+            val safePhotoUrl = user.photoUrl?.trim()?.take(600)
 
             val docRef = db.collection("users").document(uid)
             val existing = docRef.get().await()
@@ -423,9 +535,9 @@ class CloudAccountRepository(
             Result.success(Unit)
         } catch (e: CancellationException) {
             throw e
-        } catch (e: Exception) {
-            handleFirestoreError(e, OperationType.WRITE, path)
-            Result.failure(e)
+        } catch (t: Throwable) {
+            handleFirestoreError(t, OperationType.WRITE, path)
+            Result.failure(t)
         }
     }
 
@@ -449,6 +561,7 @@ class CloudAccountRepository(
             val docRef = db.collection("users").document(userId)
                 .collection("devices").document(deviceId)
             val existing = docRef.get().await()
+            val writeStartMs = System.currentTimeMillis()
             if (!existing.exists()) {
                 val createMap = mapOf(
                     "userId" to userId,
@@ -476,12 +589,18 @@ class CloudAccountRepository(
                 )
                 docRef.update(updateMap).await()
             }
+            val writeEndMs = System.currentTimeMillis()
+            val refreshed = runCatching { docRef.get(Source.SERVER).await() }.getOrNull()
+            val serverTs = refreshed?.getTimestamp("updatedAt")?.toDate()?.time
+            if (serverTs != null) {
+                recordServerClockSample(serverTs, (writeStartMs + writeEndMs) / 2L)
+            }
             Result.success(Unit)
         } catch (e: CancellationException) {
             throw e
-        } catch (e: Exception) {
-            handleFirestoreError(e, OperationType.WRITE, path)
-            Result.failure(e)
+        } catch (t: Throwable) {
+            handleFirestoreError(t, OperationType.WRITE, path)
+            Result.failure(t)
         }
     }
 
@@ -507,9 +626,9 @@ class CloudAccountRepository(
             Result.success(Unit)
         } catch (e: CancellationException) {
             throw e
-        } catch (e: Exception) {
-            handleFirestoreError(e, OperationType.DELETE, path)
-            Result.failure(e)
+        } catch (t: Throwable) {
+            handleFirestoreError(t, OperationType.DELETE, path)
+            Result.failure(t)
         }
     }
 
@@ -549,9 +668,9 @@ class CloudAccountRepository(
             Result.success(Unit)
         } catch (e: CancellationException) {
             throw e
-        } catch (e: Exception) {
-            handleFirestoreError(e, OperationType.UPDATE, path)
-            Result.failure(e)
+        } catch (t: Throwable) {
+            handleFirestoreError(t, OperationType.UPDATE, path)
+            Result.failure(t)
         }
     }
 
@@ -588,9 +707,9 @@ class CloudAccountRepository(
             Result.success(Unit)
         } catch (e: CancellationException) {
             throw e
-        } catch (e: Exception) {
-            handleFirestoreError(e, OperationType.UPDATE, path)
-            Result.failure(e)
+        } catch (t: Throwable) {
+            handleFirestoreError(t, OperationType.UPDATE, path)
+            Result.failure(t)
         }
     }
 
@@ -608,7 +727,9 @@ class CloudAccountRepository(
         scheduleId: String,
         occurrenceId: String,
         strictMode: Boolean,
-        showFlipClockShortcut: Boolean
+        showFlipClockShortcut: Boolean,
+        allowSelectedApps: Boolean,
+        phoneAccessEnabled: Boolean
     ): Result<String> {
         val path = "users/$userId/lock_commands"
         return try {
@@ -648,6 +769,8 @@ class CloudAccountRepository(
                 "occurrenceId" to safeOccurrenceId,
                 "strictMode" to strictMode,
                 "showFlipClockShortcut" to showFlipClockShortcut,
+                "allowSelectedApps" to allowSelectedApps,
+                "phoneAccessEnabled" to phoneAccessEnabled,
                 "createdAt" to FieldValue.serverTimestamp(),
                 "updatedAt" to FieldValue.serverTimestamp()
             )
@@ -676,6 +799,8 @@ class CloudAccountRepository(
                     "occurrenceId" to safeOccurrenceId,
                     "strictMode" to strictMode,
                     "showFlipClockShortcut" to showFlipClockShortcut,
+                    "allowSelectedApps" to allowSelectedApps,
+                    "phoneAccessEnabled" to phoneAccessEnabled,
                     "updatedAt" to FieldValue.serverTimestamp()
                 )
                 legacyDocRef.update(updateMap).await()
@@ -683,9 +808,9 @@ class CloudAccountRepository(
             Result.success(commandId)
         } catch (e: CancellationException) {
             throw e
-        } catch (e: Exception) {
-            handleFirestoreError(e, OperationType.WRITE, path)
-            Result.failure(e)
+        } catch (t: Throwable) {
+            handleFirestoreError(t, OperationType.WRITE, path)
+            Result.failure(t)
         }
     }
 
@@ -738,9 +863,9 @@ class CloudAccountRepository(
             Result.success(Unit)
         } catch (e: CancellationException) {
             throw e
-        } catch (e: Exception) {
-            handleFirestoreError(e, OperationType.WRITE, path)
-            Result.failure(e)
+        } catch (t: Throwable) {
+            handleFirestoreError(t, OperationType.WRITE, path)
+            Result.failure(t)
         }
     }
 
@@ -809,9 +934,9 @@ class CloudAccountRepository(
             Result.success(Unit)
         } catch (e: CancellationException) {
             throw e
-        } catch (e: Exception) {
-            handleFirestoreError(e, OperationType.WRITE, path)
-            Result.failure(e)
+        } catch (t: Throwable) {
+            handleFirestoreError(t, OperationType.WRITE, path)
+            Result.failure(t)
         }
     }
 
@@ -865,9 +990,9 @@ class CloudAccountRepository(
             Result.success(Unit)
         } catch (e: CancellationException) {
             throw e
-        } catch (e: Exception) {
-            handleFirestoreError(e, OperationType.WRITE, path)
-            Result.failure(e)
+        } catch (t: Throwable) {
+            handleFirestoreError(t, OperationType.WRITE, path)
+            Result.failure(t)
         }
     }
 
@@ -918,9 +1043,9 @@ class CloudAccountRepository(
             Result.success(Unit)
         } catch (e: CancellationException) {
             throw e
-        } catch (e: Exception) {
-            handleFirestoreError(e, OperationType.WRITE, path)
-            Result.failure(e)
+        } catch (t: Throwable) {
+            handleFirestoreError(t, OperationType.WRITE, path)
+            Result.failure(t)
         }
     }
 
@@ -975,9 +1100,9 @@ class CloudAccountRepository(
             Result.success(Unit)
         } catch (e: CancellationException) {
             throw e
-        } catch (e: Exception) {
-            handleFirestoreError(e, OperationType.WRITE, path)
-            Result.failure(e)
+        } catch (t: Throwable) {
+            handleFirestoreError(t, OperationType.WRITE, path)
+            Result.failure(t)
         }
     }
 
@@ -986,18 +1111,58 @@ class CloudAccountRepository(
         const val FLIP_CLOCK_SETTINGS_DOC_ID = "flip_clock_settings"
 
         fun unwrapFirestoreErrorMessage(error: Throwable, fallback: String): String {
-            val fsError = generateSequence(error) { it.cause }
-                .filterIsInstance<FirebaseFirestoreException>()
+            val syncError = generateSequence(error) { it.cause }
+                .filterIsInstance<CloudSyncException>()
                 .firstOrNull()
-            return when (fsError?.code) {
-                FirebaseFirestoreException.Code.PERMISSION_DENIED ->
-                    "Account permission check failed. Please sign in again."
-                FirebaseFirestoreException.Code.UNAVAILABLE ->
-                    "Network unavailable — sync will resume automatically online."
-                FirebaseFirestoreException.Code.RESOURCE_EXHAUSTED ->
-                    "Daily free cloud sync quota reached. Resets tomorrow."
-                else -> fsError?.localizedMessage ?: error.localizedMessage ?: fallback
+            if (syncError != null) {
+                return when (syncError.kind) {
+                    CloudSyncException.Kind.PERMISSION_DENIED,
+                    CloudSyncException.Kind.UNAUTHENTICATED ->
+                        "Account permission check failed. Please sign in again."
+                    CloudSyncException.Kind.UNAVAILABLE ->
+                        "Network unavailable — sync will resume automatically online."
+                    CloudSyncException.Kind.QUOTA_EXCEEDED ->
+                        "Daily free cloud sync quota reached. Resets tomorrow."
+                    CloudSyncException.Kind.OTHER ->
+                        syncError.localizedMessage ?: fallback
+                }
             }
+            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.M) {
+                val fsError = generateSequence(error) { it.cause }
+                    .filterIsInstance<FirebaseFirestoreException>()
+                    .firstOrNull()
+                if (fsError != null) {
+                    return when (fsError.code) {
+                        FirebaseFirestoreException.Code.PERMISSION_DENIED,
+                        FirebaseFirestoreException.Code.UNAUTHENTICATED ->
+                            "Account permission check failed. Please sign in again."
+                        FirebaseFirestoreException.Code.UNAVAILABLE ->
+                            "Network unavailable — sync will resume automatically online."
+                        FirebaseFirestoreException.Code.RESOURCE_EXHAUSTED ->
+                            "Daily free cloud sync quota reached. Resets tomorrow."
+                        else -> fsError.localizedMessage ?: error.localizedMessage ?: fallback
+                    }
+                }
+            }
+            return error.localizedMessage ?: fallback
+        }
+
+        fun isAuthOrPermissionError(error: Throwable): Boolean {
+            val syncError = generateSequence(error) { it.cause }
+                .filterIsInstance<CloudSyncException>()
+                .firstOrNull()
+            if (syncError != null) {
+                return syncError.kind == CloudSyncException.Kind.PERMISSION_DENIED ||
+                    syncError.kind == CloudSyncException.Kind.UNAUTHENTICATED
+            }
+            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.M) {
+                val fsErr = generateSequence(error) { it.cause }
+                    .filterIsInstance<FirebaseFirestoreException>()
+                    .firstOrNull()
+                return fsErr?.code == FirebaseFirestoreException.Code.PERMISSION_DENIED ||
+                    fsErr?.code == FirebaseFirestoreException.Code.UNAUTHENTICATED
+            }
+            return false
         }
     }
 }

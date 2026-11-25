@@ -27,6 +27,12 @@ class ResolveSystemReceiver : BroadcastReceiver() {
                                 action == Intent.ACTION_LOCKED_BOOT_COMPLETED) -> {
                             engine.onSystemBootOrTimeChange(isBoot = true)
                         }
+                        action == Intent.ACTION_EXTERNAL_APPLICATIONS_AVAILABLE -> {
+                            val changedPackages = intent.getStringArrayExtra(Intent.EXTRA_CHANGED_PACKAGE_LIST)
+                            if (changedPackages == null || changedPackages.contains(context.packageName)) {
+                                engine.onSystemBootOrTimeChange(isBoot = false)
+                            }
+                        }
                         action == Intent.ACTION_TIME_CHANGED ||
                             action == Intent.ACTION_TIMEZONE_CHANGED ||
                             action == Intent.ACTION_MY_PACKAGE_REPLACED ||
@@ -39,6 +45,15 @@ class ResolveSystemReceiver : BroadcastReceiver() {
                     val hasSchedules = app.container.scheduleRepository.getAllSchedules().any { it.isEnabled }
                     if ((current != null && !current.isTerminal) || hasSchedules) {
                         com.example.service.SessionRecoveryJobService.scheduleIfNeeded(context)
+                    }
+                    runCatching {
+                        val syncCoordinator = app.container.multiDeviceSyncCoordinator
+                        syncCoordinator.start()
+                        syncCoordinator.refreshSyncNow()
+                        val syncState = syncCoordinator.uiState.value
+                        if (syncState.isSignedIn && syncState.syncLockEnabled) {
+                            com.example.service.ResolveSyncService.start(context)
+                        }
                     }
                 }
             } finally {

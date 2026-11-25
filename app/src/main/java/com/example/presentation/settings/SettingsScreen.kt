@@ -84,6 +84,7 @@ import com.example.presentation.components.RecoveryCodeSetupDialog
 import com.example.presentation.components.ResolveIcons
 import com.example.presentation.components.ResolveRunnerLogo
 import com.example.presentation.components.SettingsAccountSyncCard
+import com.example.presentation.components.rememberEffectiveReducedMotion
 import com.example.presentation.components.resolveGlassCard
 import com.example.presentation.components.resolveSwitchColors
 import com.example.sync.AccountSyncUiState
@@ -123,6 +124,8 @@ fun SettingsScreen(
     onUpdateProfilePhoto: (Uri) -> Unit = {},
     onClearProfilePhoto: () -> Unit = {},
     onUnlinkDevice: (String) -> Unit = {},
+    onUpdateProfileName: (String) -> Unit = {},
+    onPickAvatarError: (String) -> Unit = {},
     protectionStatus: ProtectionStatus? = null,
     onProtectionAction: (ProtectionRecoveryAction) -> Unit = {},
     notificationControlConfig: NotificationControlConfig = NotificationControlConfig(),
@@ -139,6 +142,7 @@ fun SettingsScreen(
     onBack: (() -> Unit)? = null
 ) {
     val palette = LocalResolveExtendedPalette.current
+    val effectiveReducedMotion = rememberEffectiveReducedMotion(mascotPreferences.reducedMotionEnabled)
     val lifecycleOwner = LocalLifecycleOwner.current
 
     if (onBack != null) {
@@ -203,7 +207,7 @@ fun SettingsScreen(
         LazyColumn(
             state = listState,
             modifier = Modifier
-                .widthIn(max = 680.dp)
+                .widthIn(max = 760.dp)
                 .fillMaxSize()
                 .testTag("settings_list"),
             contentPadding = PaddingValues(horizontal = 20.dp, vertical = 20.dp),
@@ -320,6 +324,15 @@ fun SettingsScreen(
             }
 
             item {
+                val syncReady = capabilities.canEnforceRealLock && hasRecoveryCode
+                val syncReadinessHint = when {
+                    !capabilities.canEnforceRealLock ->
+                        "Action needed: Enable Focus Guard (Accessibility) below so synced locks enforce here."
+                    !hasRecoveryCode ->
+                        "Action needed: Set a Recovery Code below before standard synced locks can trigger here."
+                    else ->
+                        "Ready to enforce synced Instant, Delayed & Scheduled locks."
+                }
                 SettingsAccountSyncCard(
                     state = accountSyncState,
                     onSignInClick = onSignInGoogle,
@@ -327,7 +340,11 @@ fun SettingsScreen(
                     onToggleSyncEnabled = onToggleDeviceSync,
                     onPickAvatarUri = onUpdateProfilePhoto,
                     onClearAvatar = onClearProfilePhoto,
-                    onUnlinkDevice = onUnlinkDevice
+                    onUnlinkDevice = onUnlinkDevice,
+                    onUpdateProfileName = onUpdateProfileName,
+                    onPickAvatarError = onPickAvatarError,
+                    syncReadinessHint = syncReadinessHint,
+                    isSyncReady = syncReady
                 )
             }
 
@@ -555,6 +572,7 @@ fun SettingsScreen(
                     config = notificationControlConfig,
                     protectionState = notificationProtectionState,
                     hasPolicyAccess = capabilities.hasNotificationPolicyAccess,
+                    isPolicySupported = capabilities.isNotificationPolicySupported,
                     onToggleEnabled = onToggleNotificationControlEnabled,
                     onToggleAutoActivate = onToggleNotificationControlAutoActivate,
                     onToggleAllowCalls = onToggleNotificationControlAllowCalls,
@@ -607,7 +625,7 @@ fun SettingsScreen(
             item(key = "about_section_card") {
                 CraftedSignatureCard(
                     versionName = BuildConfig.VERSION_NAME,
-                    reducedMotion = mascotPreferences.reducedMotionEnabled,
+                    reducedMotion = effectiveReducedMotion,
                     isInViewport = isAboutVisible,
                     onOpenAboutResolve = onOpenAboutResolve
                 )
@@ -658,10 +676,13 @@ fun FocusNotificationControlCard(
     onToggleAutoActivate: (Boolean) -> Unit,
     onToggleAllowCalls: (Boolean) -> Unit,
     onToggleAllowAlarms: (Boolean) -> Unit,
-    onGrantPolicyAccess: () -> Unit
+    onGrantPolicyAccess: () -> Unit,
+    isPolicySupported: Boolean = true
 ) {
     val palette = LocalResolveExtendedPalette.current
     val (stateLabel, stateColor, stateBg) = when {
+        !isPolicySupported ->
+            Triple("Not Supported on This Device", palette.warn, palette.warnContainer)
         !hasPolicyAccess ->
             Triple("Access Needed", palette.warn, palette.warnContainer)
         protectionState == NotificationProtectionState.ACTIVE ->
@@ -681,7 +702,11 @@ fun FocusNotificationControlCard(
             .fillMaxWidth()
             .resolveGlassCard(
                 cornerRadius = 18.dp,
-                borderColor = if (config.enabled) palette.accentSecondary.copy(alpha = 0.45f) else palette.cardBorder
+                borderColor = if (isPolicySupported && config.enabled) {
+                    palette.accentSecondary.copy(alpha = 0.45f)
+                } else {
+                    palette.cardBorder
+                }
             )
             .padding(18.dp)
             .testTag("settings_notification_control_card"),
@@ -715,13 +740,18 @@ fun FocusNotificationControlCard(
                 }
                 Spacer(Modifier.height(2.dp))
                 Text(
-                    text = "Silences distracting interruptions via Android Do Not Disturb during focus locks, then restores your previous state.",
+                    text = if (isPolicySupported) {
+                        "Silences distracting interruptions via Android Do Not Disturb during focus locks, then restores your previous state."
+                    } else {
+                        "Not Supported on This Device — requires Android 6.0+ Do Not Disturb Policy Access."
+                    },
                     style = MaterialTheme.typography.bodySmall,
                     color = palette.textSecondary
                 )
             }
             Switch(
-                checked = config.enabled,
+                checked = isPolicySupported && config.enabled,
+                enabled = isPolicySupported,
                 onCheckedChange = onToggleEnabled,
                 colors = resolveSwitchColors(),
                 modifier = Modifier.testTag("notif_control_enabled_switch")
@@ -731,26 +761,29 @@ fun FocusNotificationControlCard(
         SettingSwitchRow(
             label = "Auto-activate during lock sessions",
             subtitle = "Applies Focus Quiet Mode when enforcement starts",
-            checked = config.autoActivateDuringSessions,
+            checked = isPolicySupported && config.autoActivateDuringSessions,
+            enabled = isPolicySupported,
             onCheckedChange = onToggleAutoActivate,
             testTag = "notif_control_auto_switch"
         )
         SettingSwitchRow(
             label = "Allow phone calls",
             subtitle = "Permits incoming phone calls through focus DND",
-            checked = config.allowCalls,
+            checked = isPolicySupported && config.allowCalls,
+            enabled = isPolicySupported,
             onCheckedChange = onToggleAllowCalls,
             testTag = "notif_control_calls_switch"
         )
         SettingSwitchRow(
             label = "Allow alarms",
             subtitle = "Keeps system alarms and reminders audible",
-            checked = config.allowAlarms,
+            checked = isPolicySupported && config.allowAlarms,
+            enabled = isPolicySupported,
             onCheckedChange = onToggleAllowAlarms,
             testTag = "notif_control_alarms_switch"
         )
 
-        if (!hasPolicyAccess) {
+        if (isPolicySupported && !hasPolicyAccess) {
             OutlinedButton(
                 onClick = onGrantPolicyAccess,
                 colors = ButtonDefaults.outlinedButtonColors(contentColor = palette.warn),
@@ -770,7 +803,8 @@ fun SettingSwitchRow(
     subtitle: String,
     checked: Boolean,
     onCheckedChange: (Boolean) -> Unit,
-    testTag: String
+    testTag: String,
+    enabled: Boolean = true
 ) {
     val palette = LocalResolveExtendedPalette.current
     Row(
@@ -787,16 +821,17 @@ fun SettingSwitchRow(
             Text(
                 text = label,
                 style = MaterialTheme.typography.titleSmall,
-                color = palette.textPrimary
+                color = if (enabled) palette.textPrimary else palette.textMuted
             )
             Text(
                 text = subtitle,
                 style = MaterialTheme.typography.bodySmall,
-                color = palette.textSecondary
+                color = if (enabled) palette.textSecondary else palette.textMuted
             )
         }
         Switch(
             checked = checked,
+            enabled = enabled,
             onCheckedChange = onCheckedChange,
             colors = resolveSwitchColors(),
             modifier = Modifier.testTag(testTag)
@@ -1030,10 +1065,11 @@ private fun CraftedSignatureCard(
                             fontStyle = FontStyle.Italic,
                             fontWeight = FontWeight.Medium
                         ),
-                        color = palette.textSecondary,
+                        color = palette.emeraldStrong,
+                        highlightTipColor = palette.navPillContent,
                         startTyping = hasEnteredView,
-                        startDelayMillis = 80,
-                        typingDurationMillis = 820,
+                        startDelayMillis = 100,
+                        typingDurationMillis = 1850,
                         reducedMotion = reducedMotion
                     )
                 }
@@ -1073,7 +1109,7 @@ private fun CraftedSignatureCard(
                 horizontalArrangement = Arrangement.spacedBy(8.dp),
                 modifier = Modifier.weight(1f)
             ) {
-                PulsingStatusDot(color = palette.accent, size = 5.dp)
+                PulsingStatusDot(color = palette.emeraldStrong, size = 5.dp, reducedMotion = reducedMotion)
                 KeyboardTypingText(
                     fullText = "Developed by Tahan Official",
                     style = MaterialTheme.typography.titleSmall.copy(
@@ -1081,9 +1117,10 @@ private fun CraftedSignatureCard(
                         letterSpacing = 0.35.sp
                     ),
                     color = palette.textPrimary,
+                    highlightTipColor = palette.navPillContent,
                     startTyping = hasEnteredView,
-                    startDelayMillis = 920,
-                    typingDurationMillis = 680,
+                    startDelayMillis = 1980,
+                    typingDurationMillis = 1450,
                     reducedMotion = reducedMotion,
                     modifier = Modifier.testTag("settings_developer_credit")
                 )

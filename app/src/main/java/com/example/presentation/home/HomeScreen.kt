@@ -72,6 +72,7 @@ import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.example.designsystem.JetBrainsMonoFamily
+import com.example.designsystem.LocalResolveBottomDockClearance
 import com.example.designsystem.LocalResolveExtendedPalette
 import com.example.domain.model.ActiveSession
 import com.example.domain.model.DailyAppUsageItem
@@ -132,6 +133,7 @@ fun HomeScreen(
     onProtectionAction: (ProtectionRecoveryAction) -> Unit = {}
 ) {
     val palette = LocalResolveExtendedPalette.current
+    val dockClearance = LocalResolveBottomDockClearance.current
 
     Box(
         modifier = modifier
@@ -155,10 +157,15 @@ fun HomeScreen(
     ) {
         LazyColumn(
             modifier = Modifier
-                .widthIn(max = 680.dp)
+                .widthIn(max = 820.dp)
                 .fillMaxSize()
                 .testTag("home_list"),
-            contentPadding = PaddingValues(horizontal = 20.dp, vertical = 18.dp),
+            contentPadding = PaddingValues(
+                start = 20.dp,
+                end = 20.dp,
+                top = 18.dp,
+                bottom = 18.dp + dockClearance
+            ),
             verticalArrangement = Arrangement.spacedBy(14.dp)
         ) {
             item {
@@ -270,6 +277,7 @@ fun HomeScreen(
                             SyncedAvatarBadge(
                                 displayName = accountSyncState.displayName,
                                 avatarBase64 = accountSyncState.avatarBase64,
+                                photoUrl = accountSyncState.photoUrl,
                                 size = 34.dp,
                                 onClick = onOpenAccountSettings,
                                 modifier = Modifier.testTag("home_profile_avatar_pill")
@@ -277,6 +285,7 @@ fun HomeScreen(
                         }
                         EnforcementStatusPill(
                             capabilities = capabilities,
+                            reducedMotion = reducedMotion,
                             onClick = onOpenDeviceOwnerGuide
                         )
                     }
@@ -331,6 +340,8 @@ fun HomeScreen(
                 ) {
                     HomeOptionalSyncBanner(
                         isAuthBusy = accountSyncState.isAuthBusy,
+                        isSyncSupported = accountSyncState.isSyncSupported,
+                        syncUnsupportedReason = accountSyncState.syncUnsupportedReason,
                         onConnectGoogle = onConnectGoogleAccount,
                         onDismiss = onDismissSyncPromo
                     )
@@ -493,7 +504,7 @@ fun HomeScreen(
 
             // Compact Progress Overview derived strictly from real local history
             item {
-                ProgressOverviewCard(records = historyRecords)
+                ProgressOverviewCard(records = historyRecords, reducedMotion = reducedMotion)
             }
 
             // Compact Today's App Usage Dashboard (real UsageStatsManager data or honest permission notice)
@@ -501,7 +512,8 @@ fun HomeScreen(
                 AppUsageDashboardCard(
                     summary = dailyAppUsage,
                     loadAppIcon = loadAppIcon,
-                    onGrantUsageAccess = onGrantUsageAccess
+                    onGrantUsageAccess = onGrantUsageAccess,
+                    reducedMotion = reducedMotion
                 )
             }
 
@@ -606,7 +618,8 @@ private fun ModeFeatureCard(
 
 @Composable
 private fun ProgressOverviewCard(
-    records: List<SessionHistoryRecord>
+    records: List<SessionHistoryRecord>,
+    reducedMotion: Boolean = false
 ) {
     val palette = LocalResolveExtendedPalette.current
     val todayStartMs = remember {
@@ -626,7 +639,7 @@ private fun ProgressOverviewCard(
     }
     val animatedRatio by animateFloatAsState(
         targetValue = completionRatio,
-        animationSpec = tween(420, easing = FastOutSlowInEasing),
+        animationSpec = tween(if (reducedMotion) 0 else 360, easing = FastOutSlowInEasing),
         label = "home_today_completion_ratio"
     )
 
@@ -702,7 +715,8 @@ private fun ProgressOverviewCard(
 private fun AppUsageDashboardCard(
     summary: DailyAppUsageSummary,
     loadAppIcon: suspend (String) -> ImageBitmap?,
-    onGrantUsageAccess: () -> Unit
+    onGrantUsageAccess: () -> Unit,
+    reducedMotion: Boolean = false
 ) {
     val palette = LocalResolveExtendedPalette.current
     Column(
@@ -770,7 +784,8 @@ private fun AppUsageDashboardCard(
                     UsageAppRow(
                         item = item,
                         fraction = (item.foregroundTimeMs.toFloat() / maxMs.toFloat()).coerceIn(0.05f, 1f),
-                        loadAppIcon = loadAppIcon
+                        loadAppIcon = loadAppIcon,
+                        reducedMotion = reducedMotion
                     )
                 }
             }
@@ -782,7 +797,8 @@ private fun AppUsageDashboardCard(
 private fun UsageAppRow(
     item: DailyAppUsageItem,
     fraction: Float,
-    loadAppIcon: suspend (String) -> ImageBitmap?
+    loadAppIcon: suspend (String) -> ImageBitmap?,
+    reducedMotion: Boolean = false
 ) {
     val palette = LocalResolveExtendedPalette.current
     var icon by remember(item.packageName) { mutableStateOf<ImageBitmap?>(null) }
@@ -791,7 +807,7 @@ private fun UsageAppRow(
     }
     val animatedFraction by animateFloatAsState(
         targetValue = fraction,
-        animationSpec = tween(420, easing = FastOutSlowInEasing),
+        animationSpec = tween(if (reducedMotion) 0 else 360, easing = FastOutSlowInEasing),
         label = "usage_bar_${item.packageName}"
     )
 
@@ -879,6 +895,7 @@ private fun formatUsageDuration(durationMs: Long): String {
 @Composable
 private fun EnforcementStatusPill(
     capabilities: SystemCapabilityStatus,
+    reducedMotion: Boolean = false,
     onClick: () -> Unit
 ) {
     val palette = LocalResolveExtendedPalette.current
@@ -902,7 +919,7 @@ private fun EnforcementStatusPill(
         verticalAlignment = Alignment.CenterVertically
     ) {
         if (isReady) {
-            PulsingStatusDot(color = fgColor, size = 7.dp)
+            PulsingStatusDot(color = fgColor, size = 7.dp, reducedMotion = reducedMotion)
         } else {
             Icon(
                 imageVector = Icons.Outlined.Warning,

@@ -7,8 +7,10 @@ import androidx.compose.material3.darkColorScheme
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.runtime.Immutable
+import androidx.compose.runtime.compositionLocalOf
 import androidx.compose.runtime.staticCompositionLocalOf
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 
 @Immutable
@@ -105,6 +107,7 @@ private val DarkExtendedPalette = ResolveExtendedPalette(
 )
 
 val LocalResolveExtendedPalette = staticCompositionLocalOf { DarkExtendedPalette }
+val LocalResolveBottomDockClearance = compositionLocalOf<Dp> { 0.dp }
 
 private val ResolveDarkColorScheme = darkColorScheme(
     primary = ResolveColors.MintAccent,

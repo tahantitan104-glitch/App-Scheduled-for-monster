@@ -62,10 +62,10 @@ import com.example.designsystem.LocalResolveExtendedPalette
 import com.example.designsystem.ResolveColors
 
 object ResolveMotion {
-    const val STANDARD_DURATION_MS = 260
-    const val SUBSCREEN_DURATION_MS = 290
-    const val EXIT_DURATION_MS = 190
-    const val REDUCED_DURATION_MS = 95
+    const val STANDARD_DURATION_MS = 195
+    const val SUBSCREEN_DURATION_MS = 215
+    const val EXIT_DURATION_MS = 155
+    const val REDUCED_DURATION_MS = 75
 
     val StandardEasing = CubicBezierEasing(0.22f, 1.0f, 0.36f, 1.0f)
 
@@ -80,12 +80,17 @@ object ResolveMotion {
     )
 
     fun <T> fastTween(reducedMotion: Boolean): FiniteAnimationSpec<T> = tween(
-        durationMillis = if (reducedMotion) REDUCED_DURATION_MS else 220,
+        durationMillis = if (reducedMotion) REDUCED_DURATION_MS else 170,
         easing = StandardEasing
     )
 
     fun <T> exitTween(reducedMotion: Boolean): FiniteAnimationSpec<T> = tween(
         durationMillis = if (reducedMotion) REDUCED_DURATION_MS else EXIT_DURATION_MS,
+        easing = StandardEasing
+    )
+
+    fun tabSlideTween(reducedMotion: Boolean): FiniteAnimationSpec<IntOffset> = tween(
+        durationMillis = if (reducedMotion) REDUCED_DURATION_MS else STANDARD_DURATION_MS,
         easing = StandardEasing
     )
 
@@ -111,7 +116,12 @@ fun isSystemReducedMotionEnabled(context: android.content.Context): Boolean = ru
         Settings.Global.TRANSITION_ANIMATION_SCALE,
         1f
     )
-    animatorScale <= 0f || transitionScale <= 0f
+    val windowScale = Settings.Global.getFloat(
+        context.contentResolver,
+        Settings.Global.WINDOW_ANIMATION_SCALE,
+        1f
+    )
+    animatorScale <= 0f || transitionScale <= 0f || windowScale <= 0f
 }.getOrDefault(false)
 
 @Composable
@@ -157,43 +167,47 @@ fun Modifier.pressScale(
 fun PulsingStatusDot(
     color: Color,
     size: Dp = 9.dp,
-    modifier: Modifier = Modifier
+    modifier: Modifier = Modifier,
+    reducedMotion: Boolean = false
 ) {
-    val transition = rememberInfiniteTransition(label = "status_dot_pulse")
-    val pulseScale by transition.animateFloat(
-        initialValue = 1f,
-        targetValue = 1.85f,
-        animationSpec = infiniteRepeatable(
-            animation = tween(durationMillis = 1500, easing = EaseInOutSine),
-            repeatMode = RepeatMode.Restart
-        ),
-        label = "pulse_scale"
-    )
-    val pulseAlpha by transition.animateFloat(
-        initialValue = 0.65f,
-        targetValue = 0f,
-        animationSpec = infiniteRepeatable(
-            animation = tween(durationMillis = 1500, easing = EaseInOutSine),
-            repeatMode = RepeatMode.Restart
-        ),
-        label = "pulse_alpha"
-    )
+    val effectiveReducedMotion = rememberEffectiveReducedMotion(reducedMotion)
 
     Box(
         modifier = modifier.size(size * 2),
         contentAlignment = Alignment.Center
     ) {
-        Box(
-            modifier = Modifier
-                .size(size)
-                .graphicsLayer {
-                    scaleX = pulseScale
-                    scaleY = pulseScale
-                    alpha = pulseAlpha
-                }
-                .clip(CircleShape)
-                .background(color)
-        )
+        if (!effectiveReducedMotion) {
+            val transition = rememberInfiniteTransition(label = "status_dot_pulse")
+            val pulseScale by transition.animateFloat(
+                initialValue = 1f,
+                targetValue = 1.85f,
+                animationSpec = infiniteRepeatable(
+                    animation = tween(durationMillis = 1500, easing = EaseInOutSine),
+                    repeatMode = RepeatMode.Restart
+                ),
+                label = "pulse_scale"
+            )
+            val pulseAlpha by transition.animateFloat(
+                initialValue = 0.65f,
+                targetValue = 0f,
+                animationSpec = infiniteRepeatable(
+                    animation = tween(durationMillis = 1500, easing = EaseInOutSine),
+                    repeatMode = RepeatMode.Restart
+                ),
+                label = "pulse_alpha"
+            )
+            Box(
+                modifier = Modifier
+                    .size(size)
+                    .graphicsLayer {
+                        scaleX = pulseScale
+                        scaleY = pulseScale
+                        alpha = pulseAlpha
+                    }
+                    .clip(CircleShape)
+                    .background(color)
+            )
+        }
         Box(
             modifier = Modifier
                 .size(size)

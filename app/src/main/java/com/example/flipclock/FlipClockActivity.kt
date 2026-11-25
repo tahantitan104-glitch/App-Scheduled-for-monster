@@ -40,16 +40,13 @@ class FlipClockActivity : ComponentActivity() {
 
     private var initialPageState by mutableStateOf(FlipClockPage.CLOCK)
     private var restrictedLockState by mutableStateOf(false)
-    private var initialSystemBrightnessInt: Int? = null
-    private var didModifySystemBrightness = false
+    private var hasSessionBrightnessOverride by mutableStateOf(false)
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         enableEdgeToEdge()
         configureFullscreenBars()
-        initialSystemBrightnessInt = runCatching {
-            Settings.System.getInt(contentResolver, Settings.System.SCREEN_BRIGHTNESS)
-        }.getOrNull()
+        clearWindowBrightnessOverride()
 
         val app = application as? ResolveApplication ?: run {
             finish()
@@ -70,7 +67,7 @@ class FlipClockActivity : ComponentActivity() {
         lifecycleScope.launch {
             sessionEngine.lockExitSignals.collect { signal ->
                 if (restrictedLockState && signal == LockExitSignal.ExitLockTaskAndFinish && !isFinishing) {
-                    finishAndRemoveTask()
+                    safeFinishAndRemoveTask()
                 }
             }
         }
@@ -93,26 +90,17 @@ class FlipClockActivity : ComponentActivity() {
                             st == SessionState.ENFORCEMENT_FAILED ||
                             st == SessionState.ENFORCEMENT_UNAVAILABLE
                         ) {
-                            if (!isFinishing) {
-                                finishAndRemoveTask()
-                            }
+                            safeFinishAndRemoveTask()
                         }
                     }
                 }
 
-                // First-entry brightness initialization (clamped 15%..85%) or restore last selected brightness
-                val startingBrightness = remember(settings.lastBrightnessPercent) {
-                    settings.lastBrightnessPercent ?: readClampedSystemBrightnessPercent()
+                // Follow Android's current system brightness by default without clamping or overwriting system settings.
+                val initialRawSystemBrightness = remember {
+                    readRawSystemBrightnessPercent()
                 }
-                var appliedBrightness by remember(startingBrightness) {
-                    mutableFloatStateOf(startingBrightness)
-                }
-
-                LaunchedEffect(Unit) {
-                    applyWindowBrightness(startingBrightness)
-                    if (settings.lastBrightnessPercent == null) {
-                        manager.saveLastBrightnessPercent(startingBrightness)
-                    }
+                var sessionBrightnessPercent by remember(initialRawSystemBrightness) {
+                    mutableFloatStateOf(initialRawSystemBrightness)
                 }
 
                 // Keep Screen Awake toggle via Window FLAG_KEEP_SCREEN_ON
@@ -153,11 +141,12 @@ class FlipClockActivity : ComponentActivity() {
                         manager = manager,
                         initialPage = initialPageState,
                         isRestrictedLock = restrictedLockState,
-                        initialBrightnessPercent = appliedBrightness,
+                        initialBrightnessPercent = sessionBrightnessPercent,
                         controlsVisible = controlsVisible,
                         onControlsVisibleChange = { controlsVisible = it },
                         onBrightnessChanged = { pct ->
-                            appliedBrightness = pct
+                            hasSessionBrightnessOverride = true
+                            sessionBrightnessPercent = pct
                             applyWindowBrightness(pct)
                         },
                         onRequestTimerStartWithNotificationCheck = {
@@ -179,7 +168,7 @@ class FlipClockActivity : ComponentActivity() {
                         },
                         onSleepTimerExpired = {
                             window.clearFlags(WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON)
-                            applyWindowBrightness(FlipClockSettings.MIN_BRIGHTNESS_PERCENT)
+                            clearWindowBrightnessOverride()
                             if (!isFinishing) {
                                 finish()
                             }
@@ -189,6 +178,26 @@ class FlipClockActivity : ComponentActivity() {
                 }
             }
         }
+    }
+
+    override fun onResume() {
+        super.onResume()
+        configureFullscreenBars()
+        if (!hasSessionBrightnessOverride) {
+            clearWindowBrightnessOverride()
+        }
+    }
+
+    override fun onWindowFocusChanged(hasFocus: Boolean) {
+        super.onWindowFocusChanged(hasFocus)
+        if (hasFocus) {
+            configureFullscreenBars()
+        }
+    }
+
+    private fun safeFinishAndRemoveTask() {
+        if (isFinishing) return
+        runCatching { finishAndRemoveTask() }.onFailure { runCatching { finish() } }
     }
 
     override fun onNewIntent(intent: Intent) {
@@ -214,11 +223,11 @@ class FlipClockActivity : ComponentActivity() {
         }
     }
 
-    private fun readClampedSystemBrightnessPercent(): Float {
+    private fun readRawSystemBrightnessPercent(): Float {
         val sysInt = runCatching {
             Settings.System.getInt(contentResolver, Settings.System.SCREEN_BRIGHTNESS, 128)
         }.getOrDefault(128)
-        val rawPercent = (sysInt.coerceIn(0, 255) / 255f) * 100f
+        val rawPercent = (sysInt.coerceIn(1, 255) / 255f) * 100f
         return rawPercent.coerceIn(
             FlipClockSettings.MIN_BRIGHTNESS_PERCENT,
             FlipClockSettings.MAX_BRIGHTNESS_PERCENT
@@ -232,37 +241,21 @@ class FlipClockActivity : ComponentActivity() {
         )
         runCatching {
             val lp = window.attributes
-            lp.screenBrightness = clamped / 100f
+            lp.screenBrightness = (clamped / 100f).coerceIn(0.01f, 1.0f)
             window.attributes = lp
-            // Keep selected brightness on device Settings if WRITE_SETTINGS was granted by user
-            if (Build.VERSION.SDK_INT < Build.VERSION_CODES.M || Settings.System.canWrite(this)) {
-                val sysVal = ((clamped / 100f) * 255f).toInt().coerceIn(1, 255)
-                Settings.System.putInt(contentResolver, Settings.System.SCREEN_BRIGHTNESS, sysVal)
-                didModifySystemBrightness = true
-            }
         }
     }
 
     override fun onDestroy() {
-        restoreInitialBrightness()
+        clearWindowBrightnessOverride()
         super.onDestroy()
     }
 
-    private fun restoreInitialBrightness() {
+    private fun clearWindowBrightnessOverride() {
         runCatching {
             val lp = window.attributes
             lp.screenBrightness = WindowManager.LayoutParams.BRIGHTNESS_OVERRIDE_NONE
             window.attributes = lp
-            val savedSys = initialSystemBrightnessInt
-            if (didModifySystemBrightness && savedSys != null &&
-                (Build.VERSION.SDK_INT < Build.VERSION_CODES.M || Settings.System.canWrite(this))
-            ) {
-                Settings.System.putInt(
-                    contentResolver,
-                    Settings.System.SCREEN_BRIGHTNESS,
-                    savedSys.coerceIn(1, 255)
-                )
-            }
         }
     }
 

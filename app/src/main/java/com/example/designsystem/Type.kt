@@ -28,7 +28,23 @@ val ManropeDisplayFamily = FontFamily(
     Font(R.font.manrope, FontWeight.Normal)
 )
 
-val FlipClockDisplayFamily = ManropeDisplayFamily
+val FjallaOneDisplayFamily = FontFamily(
+    Font(R.font.fjalla_one, FontWeight.Normal),
+    Font(R.font.fjalla_one, FontWeight.Medium),
+    Font(R.font.fjalla_one, FontWeight.SemiBold),
+    Font(R.font.fjalla_one, FontWeight.Bold),
+    Font(R.font.fjalla_one, FontWeight.ExtraBold)
+)
+
+val RobotoCondensedFamily = FontFamily(
+    Font(R.font.roboto_condensed, FontWeight.Normal),
+    Font(R.font.roboto_condensed, FontWeight.Medium),
+    Font(R.font.roboto_condensed, FontWeight.SemiBold),
+    Font(R.font.roboto_condensed, FontWeight.Bold)
+)
+
+val FlipClockDisplayFamily = FjallaOneDisplayFamily
+val FlipClockLabelFamily = RobotoCondensedFamily
 
 val JetBrainsMonoFamily = FontFamily(
     Font(R.font.jetbrains_mono, FontWeight.Normal),

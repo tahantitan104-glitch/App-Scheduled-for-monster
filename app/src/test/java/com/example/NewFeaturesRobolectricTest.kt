@@ -48,6 +48,7 @@ import com.example.security.RecoveryCodeManager
 import com.example.session.EngineStartResult
 import com.example.session.LockSessionEngine
 import com.example.session.SessionPlatformBridge
+import com.example.sync.CloudAuthSession
 import com.example.sync.CloudDeviceInfo
 import com.example.sync.CloudFlipClockSettings
 import com.example.sync.CloudFlipTimerPreset
@@ -56,7 +57,6 @@ import com.example.sync.CloudLockProfileSettings
 import com.example.sync.CloudSyncGateway
 import com.example.sync.CloudUserProfile
 import com.example.sync.MultiDeviceSyncCoordinator
-import com.google.firebase.auth.FirebaseUser
 import java.time.ZoneId
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.MutableStateFlow
@@ -638,19 +638,19 @@ class NewFeaturesRobolectricTest {
     }
 
     private class RecordingFakeCloudGateway : CloudSyncGateway {
-        val authFlow = MutableStateFlow<FirebaseUser?>(null)
+        val authFlow = MutableStateFlow<CloudAuthSession?>(null)
         val uploadedFlipSettings = mutableListOf<CloudFlipClockSettings>()
         val uploadedPresets = mutableListOf<CloudFlipTimerPreset>()
 
-        override val authState: Flow<FirebaseUser?> = authFlow
+        override val authState: Flow<CloudAuthSession?> = authFlow
         override val currentUserId: String? = null
-        override suspend fun signInWithGoogleIdToken(idToken: String): Result<FirebaseUser> =
+        override suspend fun signInWithGoogleIdToken(idToken: String): Result<CloudAuthSession> =
             Result.failure(UnsupportedOperationException())
         override suspend fun signOut(): Result<Unit> = Result.success(Unit)
         override fun observeUserProfile(userId: String): Flow<CloudUserProfile?> = emptyFlow()
         override fun observeDevices(userId: String): Flow<List<CloudDeviceInfo>> = emptyFlow()
         override fun observeLatestLockCommand(userId: String): Flow<CloudLockCommand?> = emptyFlow()
-        override suspend fun ensureUserProfile(user: FirebaseUser): Result<Unit> = Result.success(Unit)
+        override suspend fun ensureUserProfile(user: CloudAuthSession): Result<Unit> = Result.success(Unit)
         override suspend fun registerOrUpdateDevice(
             userId: String,
             deviceId: String,
@@ -679,7 +679,9 @@ class NewFeaturesRobolectricTest {
             scheduleId: String,
             occurrenceId: String,
             strictMode: Boolean,
-            showFlipClockShortcut: Boolean
+            showFlipClockShortcut: Boolean,
+            allowSelectedApps: Boolean,
+            phoneAccessEnabled: Boolean
         ): Result<String> = Result.success("cmd_1")
 
         override suspend fun upsertFlipClockSettings(

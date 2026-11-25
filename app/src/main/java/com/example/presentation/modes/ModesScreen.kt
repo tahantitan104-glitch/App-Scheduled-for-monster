@@ -1,5 +1,6 @@
 package com.example.presentation.modes
 
+import android.os.Build
 import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
@@ -52,6 +53,7 @@ import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
+import com.example.designsystem.LocalResolveBottomDockClearance
 import com.example.designsystem.LocalResolveExtendedPalette
 import com.example.domain.model.InstalledAppInfo
 import com.example.platform.DisplayModeAvailability
@@ -78,6 +80,7 @@ fun ModesScreen(
     modifier: Modifier = Modifier
 ) {
     val palette = LocalResolveExtendedPalette.current
+    val dockClearance = LocalResolveBottomDockClearance.current
     val context = LocalContext.current
     val ownPackageName = context.packageName
     var showDarkAppsSheet by remember { mutableStateOf(false) }
@@ -91,10 +94,15 @@ fun ModesScreen(
     ) {
         LazyColumn(
             modifier = Modifier
-                .widthIn(max = 680.dp)
+                .widthIn(max = 820.dp)
                 .fillMaxSize()
                 .testTag("modes_list"),
-            contentPadding = PaddingValues(horizontal = 20.dp, vertical = 20.dp),
+            contentPadding = PaddingValues(
+                start = 20.dp,
+                end = 20.dp,
+                top = 20.dp,
+                bottom = 20.dp + dockClearance
+            ),
             verticalArrangement = Arrangement.spacedBy(16.dp)
         ) {
             item {
@@ -187,6 +195,7 @@ fun ModesScreen(
 
             // Native Dark Mode Card (RESOLVE always stays in Dark Mode)
             item {
+                val systemDarkSupported = report.androidSdkInt >= Build.VERSION_CODES.Q
                 val darkStatus = if (report.isSystemNightModeActive) {
                     DisplayModeAvailability.DARK_MODE_AVAILABLE
                 } else {
@@ -211,13 +220,17 @@ fun ModesScreen(
                             color = palette.textPrimary
                         )
                         ModeStatusBadge(
-                            label = darkStatus.badgeLabel,
-                            isPositive = darkStatus == DisplayModeAvailability.DARK_MODE_AVAILABLE
+                            label = if (systemDarkSupported) {
+                                darkStatus.badgeLabel
+                            } else {
+                                "Native Dark Mode Active"
+                            },
+                            isPositive = !systemDarkSupported || darkStatus == DisplayModeAvailability.DARK_MODE_AVAILABLE
                         )
                     }
 
                     Text(
-                        text = "RESOLVE always stays in its native Dark Mode interface across every phone.",
+                        text = "RESOLVE always stays in its native Dark Mode interface across every phone and tablet.",
                         style = MaterialTheme.typography.bodySmall,
                         color = palette.textSecondary
                     )
@@ -228,15 +241,43 @@ fun ModesScreen(
                         color = palette.textSecondary
                     )
 
-                    Text(
-                        text = if (report.isSystemNightModeActive) {
-                            "Android System Dark Mode: ON"
-                        } else {
-                            "Android System Dark Mode: OFF"
-                        },
-                        style = MaterialTheme.typography.labelMedium,
-                        color = if (report.isSystemNightModeActive) palette.slateTealStrong else palette.warn
-                    )
+                    if (systemDarkSupported) {
+                        Text(
+                            text = if (report.isSystemNightModeActive) {
+                                "Android System Dark Mode: ON"
+                            } else {
+                                "Android System Dark Mode: OFF"
+                            },
+                            style = MaterialTheme.typography.labelMedium,
+                            color = if (report.isSystemNightModeActive) palette.slateTealStrong else palette.warn
+                        )
+                    } else {
+                        Row(
+                            verticalAlignment = Alignment.CenterVertically,
+                            horizontalArrangement = Arrangement.spacedBy(8.dp)
+                        ) {
+                            Text(
+                                text = "System Dark Mode",
+                                style = MaterialTheme.typography.labelMedium,
+                                color = palette.textSecondary
+                            )
+                            Text(
+                                text = "Not Supported on This Device",
+                                style = MaterialTheme.typography.labelSmall.copy(fontWeight = FontWeight.SemiBold),
+                                color = palette.warn,
+                                modifier = Modifier
+                                    .clip(CircleShape)
+                                    .background(palette.warnContainer)
+                                    .padding(horizontal = 8.dp, vertical = 3.dp)
+                                    .testTag("modes_system_dark_unsupported_badge")
+                            )
+                        }
+                        Text(
+                            text = "System-wide Dark Mode requires Android 10 (API 29) or higher.",
+                            style = MaterialTheme.typography.bodySmall,
+                            color = palette.textSecondary
+                        )
+                    }
 
                     FlowRow(
                         horizontalArrangement = Arrangement.spacedBy(8.dp),
@@ -256,15 +297,35 @@ fun ModesScreen(
                         }
                         OutlinedButton(
                             onClick = onOpenDisplaySettings,
+                            enabled = systemDarkSupported,
                             shape = RoundedCornerShape(12.dp),
-                            border = BorderStroke(1.dp, palette.slateTeal.copy(alpha = 0.42f)),
+                            border = BorderStroke(
+                                1.dp,
+                                if (systemDarkSupported) {
+                                    palette.slateTeal.copy(alpha = 0.42f)
+                                } else {
+                                    palette.cardBorder
+                                }
+                            ),
                             colors = ButtonDefaults.outlinedButtonColors(
-                                containerColor = palette.slateTealContainer.copy(alpha = 0.72f),
-                                contentColor = palette.slateTealStrong
+                                containerColor = if (systemDarkSupported) {
+                                    palette.slateTealContainer.copy(alpha = 0.72f)
+                                } else {
+                                    palette.controlSurface
+                                },
+                                contentColor = palette.slateTealStrong,
+                                disabledContainerColor = palette.controlSurface,
+                                disabledContentColor = palette.textMuted
                             ),
                             modifier = Modifier.testTag("modes_open_display_settings_btn")
                         ) {
-                            Text("Open System Dark Mode")
+                            Text(
+                                if (systemDarkSupported) {
+                                    "Open System Dark Mode"
+                                } else {
+                                    "System Dark Mode Unavailable"
+                                }
+                            )
                         }
                     }
                 }

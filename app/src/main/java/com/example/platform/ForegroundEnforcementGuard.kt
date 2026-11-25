@@ -102,7 +102,7 @@ class ForegroundEnforcementGuard(
         runCatching {
             val wm = context.getSystemService(Context.WINDOW_SERVICE) as? WindowManager ?: return
             val view = FrameLayout(context).apply {
-                setBackgroundColor(Color.parseColor("#FF040B08"))
+                setBackgroundColor(Color.parseColor("#FF0A1713"))
                 isClickable = true
                 isFocusable = true
             }

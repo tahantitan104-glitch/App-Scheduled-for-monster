@@ -89,10 +89,10 @@ class SystemCapabilityChecker(private val context: Context) {
         val isConnected = isAccessibilityServiceConnected()
         val isEnabledInSettings = isAccessibilityEnabledInSettings()
         val accHealthState = when {
-            isConnected -> AccessibilityHealthState.ENABLED_CONNECTED
-            isEnabledInSettings -> AccessibilityHealthState.ENABLED_DISCONNECTED
+            isConnected || isEnabledInSettings -> AccessibilityHealthState.ENABLED_CONNECTED
             else -> AccessibilityHealthState.DISABLED
         }
+        val notificationPolicySupported = Build.VERSION.SDK_INT >= Build.VERSION_CODES.M
 
         return SystemCapabilityStatus(
             deviceOwnerState = ownerState,
@@ -110,6 +110,7 @@ class SystemCapabilityChecker(private val context: Context) {
             notificationsEnabled = notificationsEnabled,
             hasNotificationPolicyAccess = hasNotificationPolicyAccess(),
             androidSdkInt = Build.VERSION.SDK_INT,
+            isNotificationPolicySupported = notificationPolicySupported,
             manufacturer = Build.MANUFACTURER.orEmpty(),
             model = Build.MODEL.orEmpty()
         )
@@ -152,13 +153,13 @@ class SystemCapabilityChecker(private val context: Context) {
         isAccessibilityServiceConnected() || isAccessibilityEnabledInSettings()
 
     fun getAccessibilityHealthState(): AccessibilityHealthState = when {
-        isAccessibilityServiceConnected() -> AccessibilityHealthState.ENABLED_CONNECTED
-        isAccessibilityEnabledInSettings() -> AccessibilityHealthState.ENABLED_DISCONNECTED
+        isAccessibilityServiceConnected() || isAccessibilityEnabledInSettings() ->
+            AccessibilityHealthState.ENABLED_CONNECTED
         else -> AccessibilityHealthState.DISABLED
     }
 
     fun hasNotificationPolicyAccess(): Boolean {
-        if (Build.VERSION.SDK_INT < Build.VERSION_CODES.M) return true
+        if (Build.VERSION.SDK_INT < Build.VERSION_CODES.M) return false
         return runCatching {
             notificationManager?.isNotificationPolicyAccessGranted == true
         }.getOrDefault(false)

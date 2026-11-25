@@ -58,7 +58,8 @@ enum class MascotAnimationState {
     PEEK_ENTRANCE,
     GENTLE_FLOAT,
     CURIOUS_SWAY,
-    HAPPY_BOUNCE
+    HAPPY_BOUNCE,
+    GENTLE_DRIZZLE
 }
 
 enum class MascotMicroAnimation {

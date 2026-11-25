@@ -50,6 +50,7 @@ class MainActivity : ComponentActivity() {
     override fun onResume() {
         super.onResume()
         viewModel.refreshCapabilities()
+        viewModel.refreshSyncNow()
         if (viewModel.startupStage.value != StartupStage.RESTORE_LOCK) {
             viewModel.refreshInstalledApps()
         }

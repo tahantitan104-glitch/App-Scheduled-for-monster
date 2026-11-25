@@ -207,12 +207,13 @@ class ResolveViewModel(
     private val _phoneAccessEnabled = MutableStateFlow(savedStateHandle[KEY_PHONE_ACCESS] ?: true)
     val phoneAccessEnabled: StateFlow<Boolean> = _phoneAccessEnabled.asStateFlow()
 
-    // Safe initial default for per-lock scope: "This Phone Only" (false)
-    private val _syncInstantLockToDevices = MutableStateFlow(false)
-    val syncInstantLockToDevices: StateFlow<Boolean> = _syncInstantLockToDevices.asStateFlow()
+    val syncInstantLockToDevices: StateFlow<Boolean> =
+        container.preferencesRepository.syncInstantLockToDevicesFlow
+            .stateIn(viewModelScope, SharingStarted.Eagerly, true)
 
-    private val _syncDelayedLockToDevices = MutableStateFlow(false)
-    val syncDelayedLockToDevices: StateFlow<Boolean> = _syncDelayedLockToDevices.asStateFlow()
+    val syncDelayedLockToDevices: StateFlow<Boolean> =
+        container.preferencesRepository.syncDelayedLockToDevicesFlow
+            .stateIn(viewModelScope, SharingStarted.Eagerly, true)
 
     private val _events = MutableSharedFlow<UiEvent>(extraBufferCapacity = 8)
     val events: SharedFlow<UiEvent> = _events.asSharedFlow()
@@ -222,6 +223,12 @@ class ResolveViewModel(
             runCatching { container.delayedPresetRepository.ensureBuiltInPresets() }
             runCatching { seedLegacyAllowlistIntoProfilesIfNeeded() }
             runCatching { container.multiDeviceSyncCoordinator.start() }
+        }
+        viewModelScope.launch {
+            container.preferencesRepository.defaultPhoneAccessFlow.collect { enabled ->
+                _phoneAccessEnabled.value = enabled
+                savedStateHandle[KEY_PHONE_ACCESS] = enabled
+            }
         }
         viewModelScope.launch {
             container.multiDeviceSyncCoordinator.syncEvents.collect { msg ->
@@ -265,6 +272,10 @@ class ResolveViewModel(
         if (_deviceAnalysisReport.value.analyzedAtWallMs > 0L) {
             runDeviceAnalysis()
         }
+    }
+
+    fun refreshSyncNow() {
+        container.multiDeviceSyncCoordinator.refreshSyncNow()
     }
 
     fun refreshAppUsage() {
@@ -392,56 +403,77 @@ class ResolveViewModel(
     }
 
     fun setSyncInstantLockToDevices(sync: Boolean) {
-        _syncInstantLockToDevices.value = sync
+        viewModelScope.launch {
+            container.preferencesRepository.setSyncInstantLockToDevices(sync)
+        }
     }
 
     fun setSyncDelayedLockToDevices(sync: Boolean) {
-        _syncDelayedLockToDevices.value = sync
+        viewModelScope.launch {
+            container.preferencesRepository.setSyncDelayedLockToDevices(sync)
+        }
+    }
+
+    private val syncExceptionHandler = kotlinx.coroutines.CoroutineExceptionHandler { _, throwable ->
+        viewModelScope.launch {
+            _events.emit(
+                UiEvent.ShowMessage(
+                    throwable.localizedMessage ?: "Account action unavailable on this device."
+                )
+            )
+        }
     }
 
     fun signInWithGoogle(activityContext: Context) {
-        viewModelScope.launch {
-            container.multiDeviceSyncCoordinator.signInWithGoogle(activityContext)
-        }
-    }
-
-    fun signOutGoogleAccount() {
-        viewModelScope.launch {
-            container.multiDeviceSyncCoordinator.signOutSafely()
-        }
-    }
-
-    fun setDeviceSyncEnabled(enabled: Boolean) {
-        viewModelScope.launch {
-            container.multiDeviceSyncCoordinator.setDeviceSyncEnabled(enabled)
-            if (!enabled) {
-                _syncInstantLockToDevices.value = false
-                _syncDelayedLockToDevices.value = false
+        viewModelScope.launch(syncExceptionHandler) {
+            runCatching {
+                container.multiDeviceSyncCoordinator.signInWithGoogle(activityContext)
+            }.onFailure { err ->
+                _events.emit(UiEvent.ShowMessage(err.localizedMessage ?: "Google Sign-In unavailable on this device."))
             }
         }
     }
 
+    fun signOutGoogleAccount() {
+        viewModelScope.launch(syncExceptionHandler) {
+            runCatching { container.multiDeviceSyncCoordinator.signOutSafely() }
+        }
+    }
+
+    fun setDeviceSyncEnabled(enabled: Boolean) {
+        viewModelScope.launch(syncExceptionHandler) {
+            runCatching { container.multiDeviceSyncCoordinator.setDeviceSyncEnabled(enabled) }
+        }
+    }
+
     fun unlinkDevice(deviceId: String) {
-        viewModelScope.launch {
-            container.multiDeviceSyncCoordinator.unlinkDevice(deviceId)
+        viewModelScope.launch(syncExceptionHandler) {
+            runCatching { container.multiDeviceSyncCoordinator.unlinkDevice(deviceId) }
         }
     }
 
     fun updateProfileName(name: String) {
-        viewModelScope.launch {
-            container.multiDeviceSyncCoordinator.updateProfileName(name)
+        viewModelScope.launch(syncExceptionHandler) {
+            runCatching { container.multiDeviceSyncCoordinator.updateProfileName(name) }
         }
     }
 
     fun updateProfilePhoto(uri: Uri) {
-        viewModelScope.launch {
-            container.multiDeviceSyncCoordinator.updateProfilePhoto(uri)
+        viewModelScope.launch(syncExceptionHandler) {
+            runCatching { container.multiDeviceSyncCoordinator.updateProfilePhoto(uri) }
         }
     }
 
     fun clearProfilePhoto() {
+        viewModelScope.launch(syncExceptionHandler) {
+            runCatching { container.multiDeviceSyncCoordinator.clearCustomProfilePhoto() }
+        }
+    }
+
+    fun reportSyncMessage(message: String) {
+        if (message.isBlank()) return
         viewModelScope.launch {
-            container.multiDeviceSyncCoordinator.clearCustomProfilePhoto()
+            _events.emit(UiEvent.ShowMessage(message))
         }
     }
 
@@ -732,12 +764,14 @@ class ResolveViewModel(
     fun startInstantLock() {
         viewModelScope.launch {
             val lockMins = _instantDuration.value.totalMinutes
-            val shouldSync = _syncInstantLockToDevices.value && accountSyncState.value.isSignedIn
+            val syncState = accountSyncState.value
+            val shouldSync = syncInstantLockToDevices.value && syncState.isSignedIn && syncState.syncLockEnabled
             val profile = container.preferencesRepository.getLockProfileSettingsSnapshot(LockMode.INSTANT)
+            val phoneAccess = _phoneAccessEnabled.value
             val result = engine.startInstantLock(
                 lockDurationMinutes = lockMins,
                 allowedPackages = profile.effectiveAllowedPackages,
-                phoneAccessEnabled = _phoneAccessEnabled.value,
+                phoneAccessEnabled = phoneAccess,
                 isStrictMode = profile.strictMode,
                 showFlipClockShortcut = profile.showFlipClockShortcut
             )
@@ -745,6 +779,7 @@ class ResolveViewModel(
                 EngineStartResult.Started -> {
                     if (shouldSync) {
                         val nowWall = container.clockProvider.wallClockMs()
+                        container.multiDeviceSyncCoordinator.syncLockProfileToCloud(profile)
                         container.multiDeviceSyncCoordinator.publishLockTriggerIfEnabled(
                             mode = LockMode.INSTANT,
                             freeUseMinutes = 0L,
@@ -753,7 +788,9 @@ class ResolveViewModel(
                             lockExpirationWallMs = nowWall + lockMins * 60_000L,
                             syncAcrossDevices = true,
                             strictMode = profile.strictMode,
-                            showFlipClockShortcut = profile.showFlipClockShortcut
+                            showFlipClockShortcut = profile.showFlipClockShortcut,
+                            allowSelectedApps = profile.allowSelectedApps,
+                            phoneAccessEnabled = phoneAccess
                         )
                     }
                 }
@@ -766,13 +803,15 @@ class ResolveViewModel(
         viewModelScope.launch {
             val freeMins = _delayedFreeUseDuration.value.totalMinutes
             val lockMins = _delayedLockDuration.value.totalMinutes
-            val shouldSync = _syncDelayedLockToDevices.value && accountSyncState.value.isSignedIn
+            val syncState = accountSyncState.value
+            val shouldSync = syncDelayedLockToDevices.value && syncState.isSignedIn && syncState.syncLockEnabled
             val profile = container.preferencesRepository.getLockProfileSettingsSnapshot(LockMode.DELAYED)
+            val phoneAccess = _phoneAccessEnabled.value
             val result = engine.startDelayedLock(
                 freeUseMinutes = freeMins,
                 lockDurationMinutes = lockMins,
                 allowedPackages = profile.effectiveAllowedPackages,
-                phoneAccessEnabled = _phoneAccessEnabled.value,
+                phoneAccessEnabled = phoneAccess,
                 isStrictMode = profile.strictMode,
                 showFlipClockShortcut = profile.showFlipClockShortcut
             )
@@ -782,6 +821,7 @@ class ResolveViewModel(
                         val nowWall = container.clockProvider.wallClockMs()
                         val freeDeadline = nowWall + freeMins * 60_000L
                         val lockExpire = freeDeadline + lockMins * 60_000L
+                        container.multiDeviceSyncCoordinator.syncLockProfileToCloud(profile)
                         container.multiDeviceSyncCoordinator.publishLockTriggerIfEnabled(
                             mode = LockMode.DELAYED,
                             freeUseMinutes = freeMins,
@@ -790,7 +830,9 @@ class ResolveViewModel(
                             lockExpirationWallMs = lockExpire,
                             syncAcrossDevices = true,
                             strictMode = profile.strictMode,
-                            showFlipClockShortcut = profile.showFlipClockShortcut
+                            showFlipClockShortcut = profile.showFlipClockShortcut,
+                            allowSelectedApps = profile.allowSelectedApps,
+                            phoneAccessEnabled = phoneAccess
                         )
                     }
                     _events.emit(

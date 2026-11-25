@@ -169,26 +169,28 @@ class DeviceAnalysisEngine(
             actionType = if (status.hasUsageStatsAccess) ProtectionRecoveryAction.NONE else ProtectionRecoveryAction.OPEN_USAGE_ACCESS
         )
 
-        val batteryItem = CompatibilityCheckItem(
-            id = "battery",
-            name = "Battery Optimization",
-            status = if (status.isIgnoringBatteryOptimizations) {
-                CompatibilityItemStatus.ACTIVE
-            } else {
-                CompatibilityItemStatus.ACTION_REQUIRED
-            },
-            detail = if (status.isIgnoringBatteryOptimizations) {
-                "Unrestricted background execution permitted."
-            } else {
-                "Battery optimization active. OS may kill session timers or Accessibility Guard after screen off."
-            },
-            actionLabel = if (status.isIgnoringBatteryOptimizations) null else "Fix Now",
-            actionType = if (status.isIgnoringBatteryOptimizations) {
-                ProtectionRecoveryAction.NONE
-            } else {
-                ProtectionRecoveryAction.OPEN_BATTERY_OPTIMIZATION
-            }
-        )
+        val batteryItem = when {
+            status.androidSdkInt < Build.VERSION_CODES.M -> CompatibilityCheckItem(
+                id = "battery",
+                name = "Battery Optimization",
+                status = CompatibilityItemStatus.NOT_REQUIRED,
+                detail = "Not applicable on Android ${Build.VERSION.RELEASE} (Doze introduced in Android 6.0)."
+            )
+            status.isIgnoringBatteryOptimizations -> CompatibilityCheckItem(
+                id = "battery",
+                name = "Battery Optimization",
+                status = CompatibilityItemStatus.ACTIVE,
+                detail = "Unrestricted background execution permitted."
+            )
+            else -> CompatibilityCheckItem(
+                id = "battery",
+                name = "Battery Optimization",
+                status = CompatibilityItemStatus.ACTION_REQUIRED,
+                detail = "Battery optimization active. OS may kill session timers or Accessibility Guard after screen off.",
+                actionLabel = "Fix Now",
+                actionType = ProtectionRecoveryAction.OPEN_BATTERY_OPTIMIZATION
+            )
+        }
 
         val alarmItem = when {
             !status.exactAlarmRequiredByOs -> CompatibilityCheckItem(
@@ -234,26 +236,28 @@ class DeviceAnalysisEngine(
             }
         )
 
-        val notifPolicyItem = CompatibilityCheckItem(
-            id = "notification_policy",
-            name = "Notification Policy Access (DND)",
-            status = if (status.hasNotificationPolicyAccess) {
-                CompatibilityItemStatus.ACTIVE
-            } else {
-                CompatibilityItemStatus.ACTION_REQUIRED
-            },
-            detail = if (status.hasNotificationPolicyAccess) {
-                "Granted for Focus Session Do Not Disturb control."
-            } else {
-                "Optional unless using Focus Session Notification Control."
-            },
-            actionLabel = if (status.hasNotificationPolicyAccess) null else "Fix Now",
-            actionType = if (status.hasNotificationPolicyAccess) {
-                ProtectionRecoveryAction.NONE
-            } else {
-                ProtectionRecoveryAction.OPEN_NOTIFICATION_POLICY
-            }
-        )
+        val notifPolicyItem = when {
+            !status.isNotificationPolicySupported -> CompatibilityCheckItem(
+                id = "notification_policy",
+                name = "Notification Policy Access (DND)",
+                status = CompatibilityItemStatus.UNAVAILABLE,
+                detail = "Not Supported on This Device — Do Not Disturb Policy Access requires Android 6.0+."
+            )
+            status.hasNotificationPolicyAccess -> CompatibilityCheckItem(
+                id = "notification_policy",
+                name = "Notification Policy Access (DND)",
+                status = CompatibilityItemStatus.ACTIVE,
+                detail = "Granted for Focus Session Do Not Disturb control."
+            )
+            else -> CompatibilityCheckItem(
+                id = "notification_policy",
+                name = "Notification Policy Access (DND)",
+                status = CompatibilityItemStatus.ACTION_REQUIRED,
+                detail = "Optional unless using Focus Session Notification Control.",
+                actionLabel = "Fix Now",
+                actionType = ProtectionRecoveryAction.OPEN_NOTIFICATION_POLICY
+            )
+        }
 
         return listOf(
             accItem,

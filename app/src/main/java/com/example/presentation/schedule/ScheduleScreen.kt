@@ -39,6 +39,7 @@ import androidx.compose.ui.draw.clip
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.unit.dp
 import com.example.designsystem.JetBrainsMonoFamily
+import com.example.designsystem.LocalResolveBottomDockClearance
 import com.example.designsystem.LocalResolveExtendedPalette
 import com.example.domain.model.DurationSelection
 import com.example.domain.model.LockSchedule
@@ -63,6 +64,7 @@ fun ScheduleScreen(
     modifier: Modifier = Modifier
 ) {
     val palette = LocalResolveExtendedPalette.current
+    val dockClearance = LocalResolveBottomDockClearance.current
 
     Box(
         modifier = modifier
@@ -73,9 +75,14 @@ fun ScheduleScreen(
     ) {
         LazyColumn(
             modifier = Modifier
-                .widthIn(max = 620.dp)
+                .widthIn(max = 820.dp)
                 .fillMaxSize(),
-            contentPadding = PaddingValues(start = 20.dp, end = 20.dp, top = 12.dp, bottom = 92.dp),
+            contentPadding = PaddingValues(
+                start = 20.dp,
+                end = 20.dp,
+                top = 12.dp,
+                bottom = 92.dp + dockClearance
+            ),
             verticalArrangement = Arrangement.spacedBy(12.dp)
         ) {
             item {
@@ -152,7 +159,7 @@ fun ScheduleScreen(
             shape = CircleShape,
             modifier = Modifier
                 .align(Alignment.BottomEnd)
-                .padding(20.dp)
+                .padding(start = 20.dp, top = 20.dp, end = 20.dp, bottom = 20.dp + dockClearance)
                 .border(1.dp, palette.accentSecondary.copy(alpha = 0.42f), CircleShape)
                 .testTag("schedule_add_fab")
         ) {

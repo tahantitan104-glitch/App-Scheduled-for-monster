@@ -8,7 +8,9 @@ import androidx.compose.foundation.border
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.ui.graphics.Color
 import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.BoxWithConstraints
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.IntrinsicSize
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
@@ -46,6 +48,7 @@ import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.example.designsystem.JetBrainsMonoFamily
+import com.example.designsystem.LocalResolveBottomDockClearance
 import com.example.designsystem.LocalResolveExtendedPalette
 import com.example.domain.model.DailyAppUsageSummary
 import com.example.domain.model.DurationSelection
@@ -102,20 +105,27 @@ fun HistoryScreen(
     val scheduleCount = remember(records) { records.count { it.mode == LockMode.SCHEDULED } }
 
     val palette = LocalResolveExtendedPalette.current
+    val dockClearance = LocalResolveBottomDockClearance.current
 
-    Box(
+    BoxWithConstraints(
         modifier = modifier
             .fillMaxSize()
             .background(palette.background)
             .testTag("insights_screen"),
         contentAlignment = Alignment.TopCenter
     ) {
+        val useTwoColumnAnalytics = maxWidth >= 640.dp
         LazyColumn(
             modifier = Modifier
-                .widthIn(max = 680.dp)
+                .widthIn(max = 820.dp)
                 .fillMaxSize()
                 .testTag("insights_list"),
-            contentPadding = PaddingValues(horizontal = 20.dp, vertical = 12.dp),
+            contentPadding = PaddingValues(
+                start = 20.dp,
+                end = 20.dp,
+                top = 12.dp,
+                bottom = 16.dp + dockClearance
+            ),
             verticalArrangement = Arrangement.spacedBy(12.dp)
         ) {
             item {
@@ -162,20 +172,47 @@ fun HistoryScreen(
                 }
             }
 
-            // 7-Day Focus Trend Bar Chart
-            item {
-                WeeklyFocusChartCard(weeklyStats = weeklyStats)
-            }
-
-            // Focus Mode Mix Distribution
-            if (records.isNotEmpty()) {
+            if (useTwoColumnAnalytics && records.isNotEmpty()) {
                 item {
-                    ModeSplitInsightsCard(
-                        total = records.size,
-                        instantCount = instantCount,
-                        delayedCount = delayedCount,
-                        scheduleCount = scheduleCount
-                    )
+                    Row(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .height(IntrinsicSize.Max),
+                        horizontalArrangement = Arrangement.spacedBy(12.dp)
+                    ) {
+                        WeeklyFocusChartCard(
+                            weeklyStats = weeklyStats,
+                            modifier = Modifier
+                                .weight(1f)
+                                .fillMaxHeight()
+                        )
+                        ModeSplitInsightsCard(
+                            total = records.size,
+                            instantCount = instantCount,
+                            delayedCount = delayedCount,
+                            scheduleCount = scheduleCount,
+                            modifier = Modifier
+                                .weight(1f)
+                                .fillMaxHeight()
+                        )
+                    }
+                }
+            } else {
+                // 7-Day Focus Trend Bar Chart
+                item {
+                    WeeklyFocusChartCard(weeklyStats = weeklyStats)
+                }
+
+                // Focus Mode Mix Distribution
+                if (records.isNotEmpty()) {
+                    item {
+                        ModeSplitInsightsCard(
+                            total = records.size,
+                            instantCount = instantCount,
+                            delayedCount = delayedCount,
+                            scheduleCount = scheduleCount
+                        )
+                    }
                 }
             }
 
@@ -242,7 +279,10 @@ fun HistoryScreen(
 }
 
 @Composable
-private fun WeeklyFocusChartCard(weeklyStats: List<DayFocusStat>) {
+private fun WeeklyFocusChartCard(
+    weeklyStats: List<DayFocusStat>,
+    modifier: Modifier = Modifier
+) {
     val palette = LocalResolveExtendedPalette.current
     var revealed by remember { mutableStateOf(false) }
     LaunchedEffect(weeklyStats) {
@@ -258,7 +298,7 @@ private fun WeeklyFocusChartCard(weeklyStats: List<DayFocusStat>) {
     }
 
     Column(
-        modifier = Modifier
+        modifier = modifier
             .fillMaxWidth()
             .resolveGlassCard(
                 cornerRadius = 16.dp,
@@ -365,11 +405,12 @@ private fun ModeSplitInsightsCard(
     total: Int,
     instantCount: Int,
     delayedCount: Int,
-    scheduleCount: Int
+    scheduleCount: Int,
+    modifier: Modifier = Modifier
 ) {
     val palette = LocalResolveExtendedPalette.current
     Column(
-        modifier = Modifier
+        modifier = modifier
             .fillMaxWidth()
             .resolveGlassCard(cornerRadius = 16.dp)
             .padding(16.dp)

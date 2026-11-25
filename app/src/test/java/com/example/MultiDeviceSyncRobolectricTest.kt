@@ -47,7 +47,6 @@ import com.example.sync.CloudLockCommand
 import com.example.sync.CloudSyncGateway
 import com.example.sync.CloudUserProfile
 import com.example.sync.MultiDeviceSyncCoordinator
-import com.google.firebase.auth.FirebaseUser
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.emptyFlow

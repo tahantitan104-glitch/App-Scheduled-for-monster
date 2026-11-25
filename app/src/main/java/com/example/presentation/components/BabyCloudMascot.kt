@@ -97,7 +97,7 @@ fun BabyCloudMascot(
     val floatOffsetY = when {
         !animateMotion -> 0f
         animationState == MascotAnimationState.CELEBRATING -> -7f - abs(activeWave) * 7f
-        animationState == MascotAnimationState.HAPPY_BOUNCE -> -abs(activeWave) * 15f
+        animationState == MascotAnimationState.GENTLE_DRIZZLE -> rawFloatOffsetY * 0.45f
         animationState == MascotAnimationState.GENTLE_FLOAT -> -9f + sin(rawCelebrationWave * 0.5f) * 5.5f
         animationState == MascotAnimationState.HAPPY_DANCE -> rawFloatOffsetY * 1.25f - 4f
         animationState == MascotAnimationState.POINTING -> -4.5f + rawFloatOffsetY * 0.4f
@@ -144,7 +144,11 @@ fun BabyCloudMascot(
         ),
         label = "cloud_attention_tilt"
     )
-    val gentleTilt = (if (animateMotion) rawGentleTilt else 0f) + attentionTilt
+    val gentleTilt = when {
+        !animateMotion -> 0f
+        animationState == MascotAnimationState.GENTLE_DRIZZLE -> rawGentleTilt * 0.4f
+        else -> rawGentleTilt + attentionTilt
+    }
 
     val rawBreatheScale by transition.animateFloat(
         initialValue = 0.985f,
@@ -167,14 +171,24 @@ fun BabyCloudMascot(
     )
     val breatheScale = (if (animateMotion) rawBreatheScale else 1f) * celebrateScale
 
-    // Squash-and-stretch deformation exclusively for HAPPY_BOUNCE
-    val bounceStretchY = if (animateMotion && animationState == MascotAnimationState.HAPPY_BOUNCE) {
-        val jumpFactor = abs(activeWave) // 0 at ground impact, 1 at peak
-        0.90f + jumpFactor * 0.22f
-    } else 1f
-    val bounceSquashX = if (animateMotion && animationState == MascotAnimationState.HAPPY_BOUNCE) {
-        1f / bounceStretchY
-    } else 1f
+    // Keep cloud body calm and grounded during Gentle Cloud Drizzle (no bounce/squash)
+    val bounceStretchY = 1f
+    val bounceSquashX = 1f
+
+    val rawDrizzleCycle by transition.animateFloat(
+        initialValue = 0f,
+        targetValue = 1f,
+        animationSpec = infiniteRepeatable(
+            animation = tween(durationMillis = 2200, easing = LinearEasing),
+            repeatMode = RepeatMode.Restart
+        ),
+        label = "cloud_drizzle_cycle"
+    )
+    val drizzleAlpha by animateFloatAsState(
+        targetValue = if (animateMotion && animationState == MascotAnimationState.GENTLE_DRIZZLE) 1f else 0f,
+        animationSpec = tween(durationMillis = if (reducedMotion) 0 else 280),
+        label = "cloud_drizzle_alpha"
+    )
 
     val tuftLift by animateFloatAsState(
         targetValue = when {
@@ -182,7 +196,7 @@ fun BabyCloudMascot(
             !animateMotion -> 0f
             animationState == MascotAnimationState.POINTING -> 0.92f
             animationState == MascotAnimationState.CELEBRATING -> 0.85f + 0.15f * activeWave
-            animationState == MascotAnimationState.HAPPY_BOUNCE -> 0.45f + 0.40f * abs(activeWave)
+            animationState == MascotAnimationState.GENTLE_DRIZZLE -> 0.14f
             animationState == MascotAnimationState.CURIOUS_SWAY -> 0.35f + 0.25f * activeWave
             animationState == MascotAnimationState.GENTLE_FLOAT -> 0.30f
             animationState == MascotAnimationState.HAPPY_DANCE -> 0.65f + 0.25f * activeWave
@@ -398,6 +412,41 @@ fun BabyCloudMascot(
                     )
                     paths.bodyPath.close()
 
+                    // Gentle translucent raindrops emerging calmly below the cloud underside
+                    if (drizzleAlpha > 0.01f) {
+                        val dropSpecs = listOf(
+                            0.31f to 0.00f,
+                            0.41f to 0.38f,
+                            0.50f to 0.16f,
+                            0.59f to 0.64f,
+                            0.69f to 0.82f
+                        )
+                        val dropStrokeW = (w * 0.020f).coerceAtLeast(1.8f)
+                        val dropLength = h * 0.044f
+                        dropSpecs.forEach { (xFrac, phaseOffset) ->
+                            val t = (rawDrizzleCycle + phaseOffset) % 1f
+                            val dropAlpha = (sin(t * PI.toFloat()).coerceIn(0f, 1f)) * 0.74f * drizzleAlpha
+                            if (dropAlpha > 0.02f) {
+                                val startY = h * 0.650f + t * (h * 0.155f)
+                                val dropX = w * xFrac
+                                drawLine(
+                                    brush = Brush.verticalGradient(
+                                        colors = listOf(
+                                            Color(0xFF9EDCE6).copy(alpha = dropAlpha * 0.45f),
+                                            Color(0xFF8BE8C3).copy(alpha = dropAlpha)
+                                        ),
+                                        startY = startY,
+                                        endY = startY + dropLength
+                                    ),
+                                    start = Offset(dropX, startY),
+                                    end = Offset(dropX, startY + dropLength),
+                                    strokeWidth = dropStrokeW,
+                                    cap = StrokeCap.Round
+                                )
+                            }
+                        }
+                    }
+
                     // Soft mint underglow below cloud
                     drawOval(
                         color = ResolveColors.MintAccent.copy(alpha = 0.14f),
@@ -463,8 +512,7 @@ fun BabyCloudMascot(
                     val rightEyeX = w * 0.585f
                     val browLift = if (animationState == MascotAnimationState.CELEBRATING ||
                         animationState == MascotAnimationState.CURIOUS ||
-                        animationState == MascotAnimationState.CURIOUS_SWAY ||
-                        animationState == MascotAnimationState.HAPPY_BOUNCE
+                        animationState == MascotAnimationState.CURIOUS_SWAY
                     ) -h * 0.010f else 0f
 
                     drawCloudBrow(paths.browPath, Offset(leftEyeX, eyeY - h * 0.048f + browLift), w * 0.042f)

@@ -71,6 +71,7 @@ import androidx.lifecycle.LifecycleEventObserver
 import androidx.lifecycle.compose.LocalLifecycleOwner
 import com.example.BuildConfig
 import com.example.designsystem.JetBrainsMonoFamily
+import com.example.designsystem.LocalResolveBottomDockClearance
 import com.example.designsystem.LocalResolveExtendedPalette
 import com.example.domain.model.AccessibilityHealthState
 import com.example.domain.model.DeviceAnalysisReport
@@ -90,6 +91,7 @@ import com.example.presentation.components.RecoveryCodeSetupDialog
 import com.example.presentation.components.ResolveIcons
 import com.example.presentation.components.ResolveRunnerLogo
 import com.example.presentation.components.SettingsAccountSyncCard
+import com.example.presentation.components.rememberEffectiveReducedMotion
 import com.example.presentation.components.resolveGlassCard
 import com.example.presentation.components.resolveSwitchColors
 import com.example.presentation.settings.FocusMessagesManagerSheet
@@ -147,9 +149,12 @@ fun MoreScreen(
     onUpdateProfilePhoto: (Uri) -> Unit,
     onClearProfilePhoto: () -> Unit,
     onUnlinkDevice: (String) -> Unit,
-    modifier: Modifier = Modifier
+    modifier: Modifier = Modifier,
+    onPickAvatarError: (String) -> Unit = {}
 ) {
     val palette = LocalResolveExtendedPalette.current
+    val dockClearance = LocalResolveBottomDockClearance.current
+    val effectiveReducedMotion = rememberEffectiveReducedMotion(mascotPreferences.reducedMotionEnabled)
     val lifecycleOwner = LocalLifecycleOwner.current
 
     DisposableEffect(lifecycleOwner) {
@@ -215,7 +220,7 @@ fun MoreScreen(
     // Auto-scroll smoothly down when About RESOLVE expands so the expanded card & sentences fit the viewport
     LaunchedEffect(aboutExpanded) {
         if (aboutExpanded) {
-            expandedTypingStep = if (mascotPreferences.reducedMotionEnabled) 6 else 0
+            expandedTypingStep = if (effectiveReducedMotion) 6 else 0
             delay(140L)
             val aboutIndex = listState.layoutInfo.visibleItemsInfo
                 .firstOrNull { it.key == "more_about_card" }
@@ -258,10 +263,15 @@ fun MoreScreen(
         LazyColumn(
             state = listState,
             modifier = Modifier
-                .widthIn(max = 680.dp)
+                .widthIn(max = 820.dp)
                 .fillMaxSize()
                 .testTag("more_list"),
-            contentPadding = PaddingValues(horizontal = 20.dp, vertical = 20.dp),
+            contentPadding = PaddingValues(
+                start = 20.dp,
+                end = 20.dp,
+                top = 20.dp,
+                bottom = 20.dp + dockClearance
+            ),
             verticalArrangement = Arrangement.spacedBy(14.dp)
         ) {
             item(key = "more_title") {
@@ -281,6 +291,15 @@ fun MoreScreen(
             }
 
             item(key = "more_profile_card") {
+                val syncReady = capabilities.canEnforceRealLock && hasRecoveryCode
+                val syncReadinessHint = when {
+                    !capabilities.canEnforceRealLock ->
+                        "Action needed: Enable Focus Guard (Accessibility) below so synced locks enforce here."
+                    !hasRecoveryCode ->
+                        "Action needed: Set a Recovery Code below before standard synced locks can trigger here."
+                    else ->
+                        "Ready to enforce synced Instant, Delayed & Scheduled locks."
+                }
                 SettingsAccountSyncCard(
                     state = accountSyncState,
                     onSignInClick = onSignInGoogle,
@@ -289,7 +308,10 @@ fun MoreScreen(
                     onPickAvatarUri = onUpdateProfilePhoto,
                     onClearAvatar = onClearProfilePhoto,
                     onUnlinkDevice = onUnlinkDevice,
-                    onUpdateProfileName = onUpdateProfileName
+                    onUpdateProfileName = onUpdateProfileName,
+                    onPickAvatarError = onPickAvatarError,
+                    syncReadinessHint = syncReadinessHint,
+                    isSyncReady = syncReady
                 )
             }
 
@@ -625,7 +647,7 @@ fun MoreScreen(
                             SystemHealthRow(
                                 icon = Icons.Outlined.Settings,
                                 title = "System Repair",
-                                description = "Fix disconnected services or missing OS permissions",
+                                description = "Review active guards and grant any missing OS permissions",
                                 onClick = { onOpenDeviceAnalysis("repair") },
                                 testTag = "more_health_repair"
                             )
@@ -784,6 +806,7 @@ fun MoreScreen(
                     config = notificationConfig,
                     protectionState = notificationProtectionState,
                     hasPolicyAccess = capabilities.hasNotificationPolicyAccess,
+                    isPolicySupported = capabilities.isNotificationPolicySupported,
                     onToggleEnabled = onToggleNotificationControlEnabled,
                     onToggleAutoActivate = onToggleNotificationControlAutoActivate,
                     onToggleAllowCalls = onToggleNotificationControlAllowCalls,
@@ -830,7 +853,7 @@ fun MoreScreen(
                         "Developer Information" to listOf(
                             "Developed by Tahan Official",
                             "Package: ${BuildConfig.APPLICATION_ID}",
-                            "Version: v${BuildConfig.VERSION_NAME} (${BuildConfig.VERSION_CODE})"
+                            "Version: v${BuildConfig.VERSION_NAME}"
                         )
                     )
                 }
@@ -862,7 +885,7 @@ fun MoreScreen(
                             ResolveRunnerLogo(
                                 size = 52.dp,
                                 animateRunner = isAboutVisible || aboutExpanded,
-                                reducedMotion = mascotPreferences.reducedMotionEnabled,
+                                reducedMotion = effectiveReducedMotion,
                                 testTagName = "more_runner_logo"
                             )
                             Column(verticalArrangement = Arrangement.spacedBy(2.dp)) {
@@ -897,11 +920,12 @@ fun MoreScreen(
                                         fontStyle = FontStyle.Italic,
                                         fontWeight = FontWeight.Medium
                                     ),
-                                    color = palette.textSecondary,
+                                    color = palette.emeraldStrong,
+                                    highlightTipColor = palette.navPillContent,
                                     startTyping = isAboutVisible || aboutExpanded,
-                                    startDelayMillis = 120,
-                                    typingDurationMillis = 2200,
-                                    reducedMotion = mascotPreferences.reducedMotionEnabled,
+                                    startDelayMillis = 100,
+                                    typingDurationMillis = 1950,
+                                    reducedMotion = effectiveReducedMotion,
                                     alreadyCompleted = headerTypingDone,
                                     onTypingCompleted = { headerTypingDone = true }
                                 )
@@ -921,7 +945,7 @@ fun MoreScreen(
                         verticalAlignment = Alignment.CenterVertically,
                         horizontalArrangement = Arrangement.spacedBy(8.dp)
                     ) {
-                        PulsingStatusDot(color = palette.accent, size = 5.dp)
+                        PulsingStatusDot(color = palette.emeraldStrong, size = 5.dp, reducedMotion = effectiveReducedMotion)
                         KeyboardTypingText(
                             fullText = "Developed by Tahan Official",
                             style = MaterialTheme.typography.titleSmall.copy(
@@ -929,10 +953,11 @@ fun MoreScreen(
                                 letterSpacing = 0.35.sp
                             ),
                             color = palette.textPrimary,
+                            highlightTipColor = palette.navPillContent,
                             startTyping = isAboutVisible || aboutExpanded,
-                            startDelayMillis = 2400,
-                            typingDurationMillis = 1900,
-                            reducedMotion = mascotPreferences.reducedMotionEnabled,
+                            startDelayMillis = 2080,
+                            typingDurationMillis = 1550,
+                            reducedMotion = effectiveReducedMotion,
                             alreadyCompleted = devTypingDone,
                             onTypingCompleted = { devTypingDone = true },
                             modifier = Modifier.testTag("more_developer_credit")
@@ -958,7 +983,7 @@ fun MoreScreen(
                             )
 
                             aboutSections.forEachIndexed { idx, (sectionTitle, sectionSentences) ->
-                                val showSection = mascotPreferences.reducedMotionEnabled || expandedTypingStep >= idx
+                                val showSection = effectiveReducedMotion || expandedTypingStep >= idx
                                 AnimatedVisibility(
                                     visible = showSection,
                                     enter = expandVertically() + fadeIn(),
@@ -968,7 +993,7 @@ fun MoreScreen(
                                         title = sectionTitle,
                                         sentences = sectionSentences,
                                         startTyping = aboutExpanded && expandedTypingStep >= idx,
-                                        reducedMotion = mascotPreferences.reducedMotionEnabled,
+                                        reducedMotion = effectiveReducedMotion,
                                         onSectionCompleted = {
                                             if (expandedTypingStep == idx) {
                                                 expandedTypingStep = idx + 1
@@ -1110,13 +1135,14 @@ private fun InlineAboutSection(
         )
         sentences.forEachIndexed { idx, sentence ->
             val sentenceStarted = startTyping && (reducedMotion || activeSentenceIdx >= idx)
-            val sentenceDurationMs = (sentence.length * 64).coerceIn(1800, 12500)
+            val sentenceDurationMs = (sentence.length * 58).coerceIn(1650, 8200)
             KeyboardTypingText(
                 fullText = sentence,
                 style = MaterialTheme.typography.bodySmall.copy(lineHeight = 19.sp),
-                color = palette.textSecondary,
+                color = palette.emeraldStrong,
+                highlightTipColor = palette.navPillContent,
                 startTyping = sentenceStarted,
-                startDelayMillis = if (idx == 0) 220 else 280,
+                startDelayMillis = if (idx == 0) 180 else 210,
                 typingDurationMillis = sentenceDurationMs,
                 reducedMotion = reducedMotion,
                 alreadyCompleted = reducedMotion || activeSentenceIdx > idx,

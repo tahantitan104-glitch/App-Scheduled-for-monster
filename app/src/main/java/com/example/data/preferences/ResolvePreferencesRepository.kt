@@ -51,6 +51,23 @@ data class RecoveryThrottleState(
     val lockoutUntilWallMs: Long
 )
 
+data class StoredRestAuthSession(
+    val uid: String,
+    val idToken: String,
+    val refreshToken: String,
+    val expiresAtWallMs: Long,
+    val email: String = "",
+    val displayName: String = "",
+    val photoUrl: String = ""
+) {
+    fun toCloudAuthSession(): com.example.sync.CloudAuthSession = com.example.sync.CloudAuthSession(
+        uid = uid,
+        displayName = displayName.takeIf { it.isNotBlank() },
+        email = email.takeIf { it.isNotBlank() },
+        photoUrl = photoUrl.takeIf { it.isNotBlank() }
+    )
+}
+
 class ResolvePreferencesRepository(private val context: Context) {
 
     private object Keys {
@@ -67,6 +84,8 @@ class ResolvePreferencesRepository(private val context: Context) {
         val ONBOARDING_COMPLETED = booleanPreferencesKey("onboarding_completed")
         val DEVICE_INSTALL_ID = stringPreferencesKey("device_install_id")
         val SYNC_LOCK_ENABLED = booleanPreferencesKey("sync_lock_enabled")
+        val SYNC_INSTANT_LOCK_DEVICES = booleanPreferencesKey("sync_instant_lock_devices")
+        val SYNC_DELAYED_LOCK_DEVICES = booleanPreferencesKey("sync_delayed_lock_devices")
         val SYNC_PROMO_DISMISSED = booleanPreferencesKey("sync_promo_dismissed")
         val LAST_PROCESSED_SYNC_COMMAND_ID = stringPreferencesKey("last_processed_sync_command_id")
         val PROCESSED_SYNC_COMMAND_IDS = stringPreferencesKey("processed_sync_command_ids")
@@ -156,6 +175,15 @@ class ResolvePreferencesRepository(private val context: Context) {
         fun profileFlipShortcutKey(mode: LockMode) = booleanPreferencesKey("lock_profile_${mode.name.lowercase()}_flip_shortcut")
         fun profileAllowedPackagesKey(mode: LockMode) = stringPreferencesKey("lock_profile_${mode.name.lowercase()}_allowed_pkgs")
         fun profileUpdatedWallKey(mode: LockMode) = longPreferencesKey("lock_profile_${mode.name.lowercase()}_updated_wall_ms")
+
+        // REST Auth Session for Android 5.1.1 (API 22) Google Sign-In + Firestore REST Sync
+        val REST_AUTH_UID = stringPreferencesKey("rest_auth_uid")
+        val REST_AUTH_ID_TOKEN = stringPreferencesKey("rest_auth_id_token")
+        val REST_AUTH_REFRESH_TOKEN = stringPreferencesKey("rest_auth_refresh_token")
+        val REST_AUTH_EXPIRES_AT_WALL_MS = longPreferencesKey("rest_auth_expires_at_wall_ms")
+        val REST_AUTH_EMAIL = stringPreferencesKey("rest_auth_email")
+        val REST_AUTH_DISPLAY_NAME = stringPreferencesKey("rest_auth_display_name")
+        val REST_AUTH_PHOTO_URL = stringPreferencesKey("rest_auth_photo_url")
     }
 
     val hasRecoveryCodeFlow: Flow<Boolean> = context.resolveDataStore.data.map { prefs ->
@@ -179,6 +207,14 @@ class ResolvePreferencesRepository(private val context: Context) {
 
     val syncLockEnabledFlow: Flow<Boolean> = context.resolveDataStore.data.map { prefs ->
         prefs[Keys.SYNC_LOCK_ENABLED] ?: true
+    }
+
+    val syncInstantLockToDevicesFlow: Flow<Boolean> = context.resolveDataStore.data.map { prefs ->
+        prefs[Keys.SYNC_INSTANT_LOCK_DEVICES] ?: true
+    }
+
+    val syncDelayedLockToDevicesFlow: Flow<Boolean> = context.resolveDataStore.data.map { prefs ->
+        prefs[Keys.SYNC_DELAYED_LOCK_DEVICES] ?: true
     }
 
     val syncPromoDismissedFlow: Flow<Boolean> = context.resolveDataStore.data.map { prefs ->
@@ -277,6 +313,18 @@ class ResolvePreferencesRepository(private val context: Context) {
     suspend fun setSyncLockEnabled(enabled: Boolean) {
         context.resolveDataStore.edit { prefs ->
             prefs[Keys.SYNC_LOCK_ENABLED] = enabled
+        }
+    }
+
+    suspend fun setSyncInstantLockToDevices(enabled: Boolean) {
+        context.resolveDataStore.edit { prefs ->
+            prefs[Keys.SYNC_INSTANT_LOCK_DEVICES] = enabled
+        }
+    }
+
+    suspend fun setSyncDelayedLockToDevices(enabled: Boolean) {
+        context.resolveDataStore.edit { prefs ->
+            prefs[Keys.SYNC_DELAYED_LOCK_DEVICES] = enabled
         }
     }
 
@@ -698,6 +746,52 @@ class ResolvePreferencesRepository(private val context: Context) {
                 prefs[Keys.LOCAL_AVATAR_BASE64] = base64
             }
         }
+    }
+
+    val restAuthSessionFlow: Flow<StoredRestAuthSession?> = context.resolveDataStore.data.map { prefs ->
+        mapStoredRestAuthSession(prefs)
+    }
+
+    suspend fun getRestAuthSessionSnapshot(): StoredRestAuthSession? =
+        mapStoredRestAuthSession(context.resolveDataStore.data.first())
+
+    suspend fun saveRestAuthSession(session: StoredRestAuthSession) {
+        context.resolveDataStore.edit { prefs ->
+            prefs[Keys.REST_AUTH_UID] = session.uid
+            prefs[Keys.REST_AUTH_ID_TOKEN] = session.idToken
+            prefs[Keys.REST_AUTH_REFRESH_TOKEN] = session.refreshToken
+            prefs[Keys.REST_AUTH_EXPIRES_AT_WALL_MS] = session.expiresAtWallMs
+            prefs[Keys.REST_AUTH_EMAIL] = session.email
+            prefs[Keys.REST_AUTH_DISPLAY_NAME] = session.displayName
+            prefs[Keys.REST_AUTH_PHOTO_URL] = session.photoUrl
+        }
+    }
+
+    suspend fun clearRestAuthSession() {
+        context.resolveDataStore.edit { prefs ->
+            prefs.remove(Keys.REST_AUTH_UID)
+            prefs.remove(Keys.REST_AUTH_ID_TOKEN)
+            prefs.remove(Keys.REST_AUTH_REFRESH_TOKEN)
+            prefs.remove(Keys.REST_AUTH_EXPIRES_AT_WALL_MS)
+            prefs.remove(Keys.REST_AUTH_EMAIL)
+            prefs.remove(Keys.REST_AUTH_DISPLAY_NAME)
+            prefs.remove(Keys.REST_AUTH_PHOTO_URL)
+        }
+    }
+
+    private fun mapStoredRestAuthSession(prefs: Preferences): StoredRestAuthSession? {
+        val uid = prefs[Keys.REST_AUTH_UID]?.trim().orEmpty()
+        val refreshToken = prefs[Keys.REST_AUTH_REFRESH_TOKEN]?.trim().orEmpty()
+        if (uid.isEmpty() || refreshToken.isEmpty()) return null
+        return StoredRestAuthSession(
+            uid = uid,
+            idToken = prefs[Keys.REST_AUTH_ID_TOKEN].orEmpty(),
+            refreshToken = refreshToken,
+            expiresAtWallMs = prefs[Keys.REST_AUTH_EXPIRES_AT_WALL_MS] ?: 0L,
+            email = prefs[Keys.REST_AUTH_EMAIL].orEmpty(),
+            displayName = prefs[Keys.REST_AUTH_DISPLAY_NAME].orEmpty(),
+            photoUrl = prefs[Keys.REST_AUTH_PHOTO_URL].orEmpty()
+        )
     }
 
     suspend fun resetAllModeAppPreferences() {

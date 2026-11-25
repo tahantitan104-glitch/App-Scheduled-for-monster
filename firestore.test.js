@@ -343,7 +343,7 @@ test("Lock profiles, Flip Clock settings & Flip Timer presets: owner CRUD succee
   const created = new Date(Date.now() - 5000);
   const nowMs = Date.now();
 
-  // Lock command with strictMode & showFlipClockShortcut succeeds
+  // Lock command with strictMode, showFlipClockShortcut, allowSelectedApps & phoneAccessEnabled succeeds
   await assertSucceeds(
     aliceDb.collection("users").doc(ALICE_UID).collection("lock_commands").doc("cmd_strict_1").set({
       userId: ALICE_UID,
@@ -362,6 +362,30 @@ test("Lock profiles, Flip Clock settings & Flip Timer presets: owner CRUD succee
       occurrenceId: "",
       strictMode: true,
       showFlipClockShortcut: true,
+      allowSelectedApps: false,
+      phoneAccessEnabled: false,
+      createdAt: created,
+      updatedAt: created,
+    })
+  );
+  await assertFails(
+    aliceDb.collection("users").doc(ALICE_UID).collection("lock_commands").doc("cmd_bad_type").set({
+      userId: ALICE_UID,
+      schemaVersion: 1,
+      commandId: "cmd_bad_type",
+      originDeviceId: DEVICE_A,
+      originDeviceName: "Pixel 8",
+      mode: "INSTANT",
+      freeUseDurationMinutes: 0,
+      lockDurationMinutes: 30,
+      issuedAtWallMs: nowMs,
+      intendedStartWallMs: nowMs,
+      freeUseDeadlineWallMs: 0,
+      lockExpirationWallMs: nowMs + 30 * 60000,
+      scheduleId: "",
+      occurrenceId: "",
+      strictMode: true,
+      allowSelectedApps: "invalid_string",
       createdAt: created,
       updatedAt: created,
     })
