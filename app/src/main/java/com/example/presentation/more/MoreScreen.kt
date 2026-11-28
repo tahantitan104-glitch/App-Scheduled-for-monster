@@ -74,16 +74,24 @@ import com.example.designsystem.JetBrainsMonoFamily
 import com.example.designsystem.LocalResolveBottomDockClearance
 import com.example.designsystem.LocalResolveExtendedPalette
 import com.example.domain.model.AccessibilityHealthState
+import com.example.domain.model.AccountabilityPartnerConfig
+import com.example.domain.model.AppUsageQuotaRule
+import com.example.domain.model.ContentBlockerConfig
 import com.example.domain.model.DeviceAnalysisReport
 import com.example.domain.model.FocusMessageFrequency
+import com.example.domain.model.FocusProfile
+import com.example.domain.model.InstalledAppInfo
 import com.example.domain.model.LockReminderStyle
 import com.example.domain.model.MascotPreferences
 import com.example.domain.model.MascotType
+import com.example.domain.model.MindfulPauseConfig
 import com.example.domain.model.NotificationControlConfig
 import com.example.domain.model.NotificationProtectionState
 import com.example.domain.model.OverallCompatibilityResult
 import com.example.domain.model.ProtectionRecoveryAction
 import com.example.domain.model.ProtectionStatus
+import com.example.domain.model.RecoveryVerificationResult
+import com.example.domain.model.ResolveThemeId
 import com.example.domain.model.SystemCapabilityStatus
 import com.example.presentation.components.PulsingStatusDot
 import com.example.presentation.components.KeyboardTypingText
@@ -150,7 +158,41 @@ fun MoreScreen(
     onClearProfilePhoto: () -> Unit,
     onUnlinkDevice: (String) -> Unit,
     modifier: Modifier = Modifier,
-    onPickAvatarError: (String) -> Unit = {}
+    onPickAvatarError: (String) -> Unit = {},
+    appThemeId: ResolveThemeId = ResolveThemeId.DEEP_FOREST_GREEN,
+    dailyFocusGoalMinutes: Int = 120,
+    showSetupTips: Boolean = false,
+    excludedScreenTimePackages: Set<String> = emptySet(),
+    installedApps: List<InstalledAppInfo> = emptyList(),
+    focusProfiles: List<FocusProfile> = FocusProfile.BUILT_IN_PRESETS,
+    antiBypassStrictGuard: Boolean = true,
+    emergencyCooldownSeconds: Int = 15,
+    mindfulPauseConfig: MindfulPauseConfig = MindfulPauseConfig(),
+    dailyQuotaRules: List<AppUsageQuotaRule> = emptyList(),
+    contentBlockerConfig: ContentBlockerConfig = ContentBlockerConfig(),
+    accountabilityPartnerConfig: AccountabilityPartnerConfig = AccountabilityPartnerConfig(),
+    onSelectAppTheme: (ResolveThemeId) -> Unit = {},
+    onSelectDailyGoalMinutes: (Int) -> Unit = {},
+    onToggleShowSetupTips: (Boolean) -> Unit = {},
+    onToggleExcludedScreenTimePackage: (String) -> Unit = {},
+    onSaveCustomFocusProfile: (String, Long, Boolean, Boolean, Boolean, List<String>) -> Unit = { _, _, _, _, _, _ -> },
+    onDeleteCustomFocusProfile: (String) -> Unit = {},
+    onToggleAntiBypassStrictGuard: (Boolean) -> Unit = {},
+    onSelectEmergencyCooldownSeconds: (Int) -> Unit = {},
+    onSaveMindfulPauseConfig: (MindfulPauseConfig) -> Unit = {},
+    onSaveDailyQuotaRule: (AppUsageQuotaRule) -> Unit = {},
+    onDeleteDailyQuotaRule: (String) -> Unit = {},
+    onSaveContentBlockerConfig: (ContentBlockerConfig) -> Unit = {},
+    onSaveAccountabilityPartner: (Boolean, String, String?, Boolean, Boolean) -> Unit = { _, _, _, _, _ -> },
+    onClearAccountabilityPartnerPin: () -> Unit = {},
+    onRefreshSync: () -> Unit = {},
+    onSendRemoteExtend: (String, Long) -> Unit = { _, _ -> },
+    onVerifyRecoveryForRemoteStop: suspend (String, String) -> RecoveryVerificationResult = { _, _ ->
+        RecoveryVerificationResult.NotConfigured
+    },
+    dnsBlockedCount: Int = 0,
+    isFocusLockActive: Boolean = false,
+    onResetDnsBlockedCount: () -> Unit = {}
 ) {
     val palette = LocalResolveExtendedPalette.current
     val dockClearance = LocalResolveBottomDockClearance.current
@@ -311,7 +353,10 @@ fun MoreScreen(
                     onUpdateProfileName = onUpdateProfileName,
                     onPickAvatarError = onPickAvatarError,
                     syncReadinessHint = syncReadinessHint,
-                    isSyncReady = syncReady
+                    isSyncReady = syncReady,
+                    onRefreshSync = onRefreshSync,
+                    onSendRemoteExtend = onSendRemoteExtend,
+                    onVerifyRecoveryForRemoteStop = onVerifyRecoveryForRemoteStop
                 )
             }
 
@@ -815,7 +860,76 @@ fun MoreScreen(
                 )
             }
 
-            // 7. ABOUT RESOLVE (Inline Expandable/Collapsible Card at absolute bottom)
+            // 7. APPEARANCE & DAILY FOCUS GOAL
+            item(key = "more_section_appearance_header") {
+                SettingsSectionHeader(
+                    title = "APPEARANCE & GOALS",
+                    icon = ResolveIcons.Tune
+                )
+            }
+
+            item(key = "more_appearance_goal_card") {
+                AppThemeAndGoalCard(
+                    appThemeId = appThemeId,
+                    dailyFocusGoalMinutes = dailyFocusGoalMinutes,
+                    showSetupTips = showSetupTips,
+                    onSelectAppTheme = onSelectAppTheme,
+                    onSelectDailyGoalMinutes = onSelectDailyGoalMinutes,
+                    onToggleShowSetupTips = onToggleShowSetupTips
+                )
+            }
+
+            // 8. FOCUS PROFILES & STRICT GUARD
+            item(key = "more_section_profiles_guard_header") {
+                SettingsSectionHeader(
+                    title = "FOCUS GUARD & PROFILES",
+                    icon = ResolveIcons.Shield
+                )
+            }
+
+            item(key = "more_profiles_guard_card") {
+                FocusProfilesAndGuardCard(
+                    focusProfiles = focusProfiles,
+                    antiBypassStrictGuard = antiBypassStrictGuard,
+                    emergencyCooldownSeconds = emergencyCooldownSeconds,
+                    installedApps = installedApps,
+                    onSaveCustomProfile = onSaveCustomFocusProfile,
+                    onDeleteCustomProfile = onDeleteCustomFocusProfile,
+                    onToggleAntiBypassStrictGuard = onToggleAntiBypassStrictGuard,
+                    onSelectEmergencyCooldownSeconds = onSelectEmergencyCooldownSeconds
+                )
+            }
+
+            // 9. DIGITAL WELLBEING & CONTROLS
+            item(key = "more_section_wellbeing_header") {
+                SettingsSectionHeader(
+                    title = "DIGITAL WELLBEING & CONTROLS",
+                    icon = Icons.Outlined.Settings
+                )
+            }
+
+            item(key = "more_wellbeing_controls_card") {
+                AppUsageControlsAndWellbeingCard(
+                    excludedPackages = excludedScreenTimePackages,
+                    installedApps = installedApps,
+                    dailyQuotaRules = dailyQuotaRules,
+                    mindfulPauseConfig = mindfulPauseConfig,
+                    contentBlockerConfig = contentBlockerConfig,
+                    accountabilityPartnerConfig = accountabilityPartnerConfig,
+                    onToggleExcludedPackage = onToggleExcludedScreenTimePackage,
+                    onSaveDailyQuotaRule = onSaveDailyQuotaRule,
+                    onDeleteDailyQuotaRule = onDeleteDailyQuotaRule,
+                    onSaveMindfulPauseConfig = onSaveMindfulPauseConfig,
+                    onSaveContentBlockerConfig = onSaveContentBlockerConfig,
+                    onSaveAccountabilityPartner = onSaveAccountabilityPartner,
+                    onClearAccountabilityPartnerPin = onClearAccountabilityPartnerPin,
+                    dnsBlockedCount = dnsBlockedCount,
+                    isFocusLockActive = isFocusLockActive,
+                    onResetDnsBlockedCount = onResetDnsBlockedCount
+                )
+            }
+
+            // 10. ABOUT RESOLVE (Inline Expandable/Collapsible Card at absolute bottom)
             item(key = "more_section_about_header") {
                 SettingsSectionHeader(
                     title = "ABOUT RESOLVE",

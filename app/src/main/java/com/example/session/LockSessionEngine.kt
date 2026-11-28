@@ -9,6 +9,7 @@ import com.example.data.repository.SessionRepository
 import com.example.devicepolicy.DevicePolicyController
 import com.example.domain.model.AccessibilityHealthState
 import com.example.domain.model.ActiveSession
+import com.example.domain.model.AppLockVerificationResult
 import com.example.domain.model.DeviceOwnerState
 import com.example.domain.model.EnforcementMode
 import com.example.domain.model.EnforcementPreparationResult
@@ -28,6 +29,7 @@ import com.example.domain.time.ClockProvider
 import com.example.platform.NotificationControlManager
 import com.example.platform.SystemCapabilityChecker
 import com.example.scheduling.LockAlarmScheduler
+import com.example.security.AccountabilityPartnerManager
 import com.example.security.RecoveryCodeManager
 import com.example.sync.CloudLockCommand
 import kotlinx.coroutines.CoroutineScope
@@ -82,7 +84,8 @@ class LockSessionEngine(
     private val capabilityChecker: SystemCapabilityChecker,
     private val clockProvider: ClockProvider,
     private val platformBridge: SessionPlatformBridge,
-    private val notificationControlManager: NotificationControlManager? = null
+    private val notificationControlManager: NotificationControlManager? = null,
+    private val accountabilityPartnerManager: AccountabilityPartnerManager? = null
 ) {
     private val scope = CoroutineScope(SupervisorJob() + Dispatchers.Default)
     private val mutex = Mutex()
@@ -464,15 +467,86 @@ class LockSessionEngine(
         phoneAccessEnabled: Boolean,
         isStrictMode: Boolean = false,
         showFlipClockShortcut: Boolean = false,
-        serverClockOffsetMs: Long = 0L
+        serverClockOffsetMs: Long = 0L,
+        localDeviceId: String = ""
     ): EngineStartResult {
         var delayedShouldStartTicker = false
         var immediateShouldLaunchLock = false
+        var shouldEmitLockExit = false
 
         val result = mutex.withLock {
+            if (localDeviceId.isNotBlank() &&
+                command.targetDeviceId.isNotBlank() &&
+                command.targetDeviceId != localDeviceId
+            ) {
+                return@withLock EngineStartResult.Blocked("")
+            }
+
             val nowWall = clockProvider.wallClockMs()
             val nowElapsed = clockProvider.elapsedRealtimeMs()
             val serverNowWall = nowWall + serverClockOffsetMs
+            val action = command.commandAction.uppercase().ifBlank { "START" }
+
+            if (action == "STOP") {
+                val current = _activeSession.value ?: return@withLock EngineStartResult.Blocked("")
+                if (current.isTerminal) return@withLock EngineStartResult.Blocked("")
+                if (command.issuedAtWallMs > 0L && (serverNowWall - command.issuedAtWallMs) > 24L * 60L * 60L * 1000L) {
+                    return@withLock EngineStartResult.Blocked("")
+                }
+                if (current.state == SessionState.DELAYED_FREE_USE_ACTIVE ||
+                    current.enforcementMode != EnforcementMode.DEVICE_OWNER_LOCK_TASK
+                ) {
+                    val recovered = current.copy(state = SessionState.RECOVERED)
+                    _activeSession.value = recovered
+                    _remainingMillis.value = 0L
+                    sessionRepository.saveActiveSession(recovered)
+                    alarmScheduler.cancelAllSessionAlarms()
+                    recordHistoryInternal(recovered, SessionOutcome.RECOVERED, nowWall)
+                    notificationControlManager?.onSessionEnded(recovered.sessionId)
+                    platformBridge.stopMonitorService()
+                    syncRecoveryJobInternal()
+                    updateProtectionStatusInternal()
+                    platformBridge.notifyLockStateChanged()
+                    shouldEmitLockExit = true
+                } else {
+                    val recovering = current.copy(state = SessionState.RECOVERY_IN_PROGRESS)
+                    _activeSession.value = recovering
+                    sessionRepository.saveActiveSession(recovering)
+                    shouldEmitLockExit = true
+                }
+                return@withLock EngineStartResult.Started
+            }
+
+            if (action == "EXTEND") {
+                val current = _activeSession.value ?: return@withLock EngineStartResult.Blocked("No active lock session to extend.")
+                if (current.isTerminal) return@withLock EngineStartResult.Blocked("No active lock session to extend.")
+                if (command.issuedAtWallMs > 0L && (serverNowWall - command.issuedAtWallMs) > 24L * 60L * 60L * 1000L) {
+                    return@withLock EngineStartResult.Blocked("")
+                }
+                val addMinutes = command.extendMinutes.takeIf { it > 0L }
+                    ?: command.lockDurationMinutes.coerceIn(1L, 720L)
+                val addMs = addMinutes * 60_000L
+                val baseWall = current.lockExpirationWallMs?.takeIf { it > nowWall }
+                    ?: (nowWall + current.lockDurationMinutes.coerceAtLeast(1L) * 60_000L)
+                val baseElapsed = current.lockExpirationElapsedMs?.takeIf { it > nowElapsed }
+                    ?: (nowElapsed + current.lockDurationMinutes.coerceAtLeast(1L) * 60_000L)
+                val newExpireWall = baseWall + addMs
+                val newExpireElapsed = baseElapsed + addMs
+                val updated = current.copy(
+                    lockDurationMinutes = (current.lockDurationMinutes + addMinutes).coerceAtMost(1440L),
+                    lockExpirationWallMs = newExpireWall,
+                    lockExpirationElapsedMs = newExpireElapsed
+                )
+                _activeSession.value = updated
+                if (updated.isEnforcementPhase) {
+                    _remainingMillis.value = (newExpireElapsed - nowElapsed).coerceAtLeast(0L)
+                    alarmScheduler.scheduleLockExpiration(updated.sessionId, newExpireWall)
+                }
+                sessionRepository.saveActiveSession(updated)
+                platformBridge.notifyLockStateChanged()
+                return@withLock EngineStartResult.Started
+            }
+
             val mode = command.resolveLockMode()
 
             // Reject stale/expired commands relative to server-calibrated clock
@@ -639,6 +713,9 @@ class LockSessionEngine(
             }
         }
 
+        if (shouldEmitLockExit) {
+            _lockExitSignals.tryEmit(LockExitSignal.ExitLockTaskAndFinish)
+        }
         if (delayedShouldStartTicker) {
             startTickerIfNeeded()
         }
@@ -860,6 +937,7 @@ class LockSessionEngine(
             syncRecoveryJobInternal()
             notificationControlManager?.onSessionEnforcementStarted(active.sessionId)
             updateProtectionStatusInternal()
+            platformBridge.notifyLockStateChanged()
             true
         }
         if (confirmed) {
@@ -885,6 +963,7 @@ class LockSessionEngine(
             platformBridge.stopMonitorService()
             syncRecoveryJobInternal()
             updateProtectionStatusInternal()
+            platformBridge.notifyLockStateChanged()
             true
         }
         if (shouldSignalExit) {
@@ -921,6 +1000,31 @@ class LockSessionEngine(
         return result
     }
 
+    suspend fun submitPartnerStrictUnlock(pin: String): AppLockVerificationResult {
+        val manager = accountabilityPartnerManager ?: return AppLockVerificationResult.NotConfigured
+        val cfg = manager.configFlow.first()
+        if (!cfg.enabled || !cfg.hasPartnerPin || !cfg.requireForStrictUnlock) {
+            return AppLockVerificationResult.NotConfigured
+        }
+        val res = manager.verifyPartnerPin(pin)
+        if (res is AppLockVerificationResult.Verified) {
+            val shouldSignal = mutex.withLock {
+                val current = _activeSession.value ?: return@withLock false
+                if (!current.isEnforcementPhase && current.state != SessionState.LOCK_TRANSITION_PENDING) {
+                    return@withLock false
+                }
+                val recovering = current.copy(state = SessionState.RECOVERY_IN_PROGRESS)
+                _activeSession.value = recovering
+                sessionRepository.saveActiveSession(recovering)
+                true
+            }
+            if (shouldSignal) {
+                _lockExitSignals.tryEmit(LockExitSignal.ExitLockTaskAndFinish)
+            }
+        }
+        return res
+    }
+
     suspend fun finalizeLockExit(activity: Activity) {
         val currentBefore = _activeSession.value
         val exited = when (currentBefore?.enforcementMode) {
@@ -940,10 +1044,12 @@ class LockSessionEngine(
                 notificationControlManager?.onSessionEnded(recovered.sessionId)
                 platformBridge.stopMonitorService()
                 syncRecoveryJobInternal()
+                platformBridge.notifyLockStateChanged()
             } else if (current.state == SessionState.COMPLETED && exited) {
                 notificationControlManager?.onSessionEnded(current.sessionId)
                 platformBridge.stopMonitorService()
                 syncRecoveryJobInternal()
+                platformBridge.notifyLockStateChanged()
             }
             refreshCapabilitiesInternal()
         }

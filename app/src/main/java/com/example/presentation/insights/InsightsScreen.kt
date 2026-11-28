@@ -36,6 +36,7 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import com.example.designsystem.LocalResolveExtendedPalette
 import com.example.domain.model.DailyAppUsageSummary
+import com.example.domain.model.InterceptedAppStat
 import com.example.domain.model.LockSchedule
 import com.example.domain.model.SessionHistoryRecord
 import com.example.presentation.components.ResolveMotion
@@ -60,7 +61,10 @@ fun InsightsScreen(
     onDeleteSchedule: (Long) -> Unit,
     modifier: Modifier = Modifier,
     initialSection: InsightsSection = InsightsSection.HISTORY,
-    reducedMotion: Boolean = false
+    reducedMotion: Boolean = false,
+    dailyFocusGoalMinutes: Int = 120,
+    interceptedAppStats: List<InterceptedAppStat> = emptyList(),
+    onResetInterceptedStats: () -> Unit = {}
 ) {
     val palette = LocalResolveExtendedPalette.current
     val effectiveReducedMotion = rememberEffectiveReducedMotion(reducedMotion)
@@ -73,13 +77,28 @@ fun InsightsScreen(
             .testTag("insights_hub_screen"),
         horizontalAlignment = Alignment.CenterHorizontally
     ) {
-        // Segmented toggle organizing History & Schedule cleanly under Insights
-        Box(
+        Column(
             modifier = Modifier
                 .widthIn(max = 820.dp)
                 .fillMaxWidth()
-                .padding(horizontal = 20.dp, vertical = 12.dp)
+                .padding(start = 20.dp, end = 20.dp, top = 18.dp, bottom = 8.dp),
+            verticalArrangement = Arrangement.spacedBy(10.dp)
         ) {
+            Column(verticalArrangement = Arrangement.spacedBy(2.dp)) {
+                Text(
+                    text = "Insights",
+                    style = MaterialTheme.typography.headlineLarge,
+                    color = palette.textPrimary,
+                    modifier = Modifier.testTag("insights_title")
+                )
+                Text(
+                    text = "Focus history, usage analytics & automated schedules.",
+                    style = MaterialTheme.typography.bodyMedium,
+                    color = palette.textSecondary
+                )
+            }
+
+            // Segmented toggle organizing History & Schedule cleanly under Insights
             Row(
                 modifier = Modifier
                     .fillMaxWidth()
@@ -124,7 +143,10 @@ fun InsightsScreen(
                     HistoryScreen(
                         records = records,
                         dailyAppUsage = dailyAppUsage,
-                        onGrantUsageAccess = onGrantUsageAccess
+                        onGrantUsageAccess = onGrantUsageAccess,
+                        dailyFocusGoalMinutes = dailyFocusGoalMinutes,
+                        interceptedAppStats = interceptedAppStats,
+                        onResetInterceptedStats = onResetInterceptedStats
                     )
                 }
                 InsightsSection.SCHEDULE -> {

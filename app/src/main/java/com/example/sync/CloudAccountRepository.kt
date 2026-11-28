@@ -80,6 +80,14 @@ interface CloudSyncGateway {
         deviceName: String,
         syncEnabled: Boolean
     ): Result<Unit>
+    suspend fun updateDeviceLockStatus(
+        userId: String,
+        deviceId: String,
+        activeLockMode: String,
+        activeLockExpiresWallMs: Long,
+        activeLockFreeUseWallMs: Long,
+        activeLockUpdatedWallMs: Long
+    ): Result<Unit> = Result.success(Unit)
     suspend fun unlinkDevice(userId: String, deviceId: String): Result<Unit> = Result.success(Unit)
     suspend fun updateAvatarBase64(userId: String, avatarBase64: String): Result<Unit>
     suspend fun updateDisplayName(userId: String, displayName: String): Result<Unit> = Result.success(Unit)
@@ -99,7 +107,10 @@ interface CloudSyncGateway {
         strictMode: Boolean = false,
         showFlipClockShortcut: Boolean = false,
         allowSelectedApps: Boolean = true,
-        phoneAccessEnabled: Boolean = true
+        phoneAccessEnabled: Boolean = true,
+        commandAction: String = "START",
+        targetDeviceId: String = "",
+        extendMinutes: Long = 0L
     ): Result<String>
     suspend fun upsertDelayedPreset(userId: String, preset: CloudDelayedPreset): Result<Unit> =
         Result.success(Unit)
@@ -244,12 +255,40 @@ class CloudAccountRepository(
                         close(error)
                         return@addSnapshotListener
                     }
-                    val list = runCatching {
-                        snapshot?.toObjects(
-                            CloudDeviceInfo::class.java,
-                            DocumentSnapshot.ServerTimestampBehavior.ESTIMATE
-                        )
-                    }.getOrNull().orEmpty()
+                    val list = snapshot?.documents?.mapNotNull { doc ->
+                        val parsed = runCatching {
+                            doc.toObject(
+                                CloudDeviceInfo::class.java,
+                                DocumentSnapshot.ServerTimestampBehavior.ESTIMATE
+                            )
+                        }.getOrNull()
+                        if (parsed != null) {
+                            val resolvedId = parsed.deviceId.ifBlank { doc.id }
+                            val resolvedName = parsed.deviceName.trim()
+                                .takeUnless { it.equals("unknown", ignoreCase = true) }
+                                .orEmpty()
+                                .ifBlank { doc.getString("model")?.trim().orEmpty() }
+                                .ifBlank { "Android Device" }
+                            parsed.copy(deviceId = resolvedId, deviceName = resolvedName)
+                        } else {
+                            val rawName = (doc.getString("deviceName")?.trim().orEmpty())
+                                .ifBlank { doc.getString("model")?.trim().orEmpty() }
+                                .ifBlank { "Android Device" }
+                            CloudDeviceInfo(
+                                deviceId = doc.id,
+                                userId = doc.getString("userId") ?: userId,
+                                deviceName = rawName,
+                                platform = doc.getString("platform") ?: "android",
+                                androidVersion = doc.getLong("androidVersion") ?: 22L,
+                                appVersion = doc.getString("appVersion").orEmpty(),
+                                syncEnabled = doc.getBoolean("syncEnabled") ?: true,
+                                activeLockMode = doc.getString("activeLockMode").orEmpty(),
+                                activeLockExpiresWallMs = doc.getLong("activeLockExpiresWallMs") ?: 0L,
+                                activeLockFreeUseWallMs = doc.getLong("activeLockFreeUseWallMs") ?: 0L,
+                                activeLockUpdatedWallMs = doc.getLong("activeLockUpdatedWallMs") ?: 0L
+                            )
+                        }
+                    }.orEmpty()
                     trySend(list)
                 }
             }.onFailure { t ->
@@ -555,7 +594,11 @@ class CloudAccountRepository(
             check(activeUid == userId) { "Signed-in user mismatch." }
             require(deviceId.isNotBlank()) { "Device ID must not be blank." }
 
-            val safeDeviceName = deviceName.trim().ifBlank { "Android Phone" }.take(80)
+            val safeDeviceName = deviceName.trim()
+                .takeUnless { it.equals("unknown", ignoreCase = true) }
+                .orEmpty()
+                .ifBlank { resolveReadableDeviceName() }
+                .take(80)
             val safeAppVersion = BuildConfig.VERSION_NAME.take(40)
             val sdkVersion = Build.VERSION.SDK_INT.toLong()
             val docRef = db.collection("users").document(userId)
@@ -610,6 +653,48 @@ class CloudAccountRepository(
         deviceName: String,
         syncEnabled: Boolean
     ): Result<Unit> = registerOrUpdateDevice(userId, deviceId, deviceName, syncEnabled)
+
+    override suspend fun updateDeviceLockStatus(
+        userId: String,
+        deviceId: String,
+        activeLockMode: String,
+        activeLockExpiresWallMs: Long,
+        activeLockFreeUseWallMs: Long,
+        activeLockUpdatedWallMs: Long
+    ): Result<Unit> {
+        val path = "users/$userId/devices/$deviceId"
+        return try {
+            val db = dbProvider() ?: error("Cloud sync is unavailable.")
+            val activeUid = authProvider()?.currentUser?.uid
+                ?: error("User must be signed in before writing.")
+            check(activeUid == userId) { "Signed-in user mismatch." }
+            require(deviceId.isNotBlank()) { "Device ID must not be blank." }
+
+            val docRef = db.collection("users").document(userId)
+                .collection("devices").document(deviceId)
+            val existing = docRef.get().await()
+            if (!existing.exists()) {
+                return Result.success(Unit)
+            }
+            docRef.update(
+                mapOf(
+                    "schemaVersion" to CURRENT_SYNC_SCHEMA_VERSION,
+                    "activeLockMode" to activeLockMode.trim().take(32),
+                    "activeLockExpiresWallMs" to activeLockExpiresWallMs.coerceAtLeast(0L),
+                    "activeLockFreeUseWallMs" to activeLockFreeUseWallMs.coerceAtLeast(0L),
+                    "activeLockUpdatedWallMs" to activeLockUpdatedWallMs.coerceAtLeast(0L),
+                    "lastSeenAt" to FieldValue.serverTimestamp(),
+                    "updatedAt" to FieldValue.serverTimestamp()
+                )
+            ).await()
+            Result.success(Unit)
+        } catch (e: CancellationException) {
+            throw e
+        } catch (t: Throwable) {
+            handleFirestoreError(t, OperationType.UPDATE, path)
+            Result.failure(t)
+        }
+    }
 
     override suspend fun unlinkDevice(userId: String, deviceId: String): Result<Unit> {
         val path = "users/$userId/devices/$deviceId"
@@ -729,7 +814,10 @@ class CloudAccountRepository(
         strictMode: Boolean,
         showFlipClockShortcut: Boolean,
         allowSelectedApps: Boolean,
-        phoneAccessEnabled: Boolean
+        phoneAccessEnabled: Boolean,
+        commandAction: String,
+        targetDeviceId: String,
+        extendMinutes: Long
     ): Result<String> {
         val path = "users/$userId/lock_commands"
         return try {
@@ -748,6 +836,9 @@ class CloudAccountRepository(
             val safeLockExpire = lockExpirationWallMs.coerceAtLeast(0L)
             val safeScheduleId = scheduleId.trim().take(128)
             val safeOccurrenceId = occurrenceId.trim().take(128)
+            val safeAction = commandAction.trim().uppercase().takeIf { it in setOf("START", "EXTEND", "STOP") } ?: "START"
+            val safeTargetDevice = targetDeviceId.trim().take(128)
+            val safeExtendMinutes = extendMinutes.coerceIn(0L, 720L)
 
             // 1. Append to versioned lock_commands/{commandId} collection
             val cmdDocRef = db.collection("users").document(userId)
@@ -758,6 +849,9 @@ class CloudAccountRepository(
                 "commandId" to commandId,
                 "originDeviceId" to originDeviceId,
                 "originDeviceName" to safeOriginName,
+                "commandAction" to safeAction,
+                "targetDeviceId" to safeTargetDevice,
+                "extendMinutes" to safeExtendMinutes,
                 "mode" to mode.name,
                 "freeUseDurationMinutes" to safeFreeMins,
                 "lockDurationMinutes" to safeLockMins,
@@ -788,6 +882,9 @@ class CloudAccountRepository(
                     "commandId" to commandId,
                     "originDeviceId" to originDeviceId,
                     "originDeviceName" to safeOriginName,
+                    "commandAction" to safeAction,
+                    "targetDeviceId" to safeTargetDevice,
+                    "extendMinutes" to safeExtendMinutes,
                     "mode" to mode.name,
                     "freeUseDurationMinutes" to safeFreeMins,
                     "lockDurationMinutes" to safeLockMins,
@@ -1015,10 +1112,33 @@ class CloudAccountRepository(
                         "schemaVersion" to CURRENT_SYNC_SCHEMA_VERSION,
                         "docId" to FLIP_CLOCK_SETTINGS_DOC_ID,
                         "use24HourFormat" to settings.use24HourFormat,
+                        "useSystemTimeFormat" to settings.useSystemTimeFormat,
+                        "hourLeadingZero" to settings.hourLeadingZero,
+                        "dateFormatPattern" to settings.dateFormatPattern,
                         "keepScreenAwake" to settings.keepScreenAwake,
                         "showDate" to settings.showDate,
+                        "showWeekday" to settings.showWeekday,
+                        "showSeconds" to settings.showSeconds,
+                        "showFlipAxis" to settings.showFlipAxis,
+                        "showUpcomingAlarm" to settings.showUpcomingAlarm,
+                        "showBattery" to settings.showBattery,
+                        "showWeather" to settings.showWeather,
+                        "weatherLocationQuery" to settings.weatherLocationQuery,
+                        "weatherUseFahrenheit" to settings.weatherUseFahrenheit,
+                        "weatherAutoDetect" to settings.weatherAutoDetect,
+                        "clockTickerSoundEnabled" to settings.clockTickerSoundEnabled,
+                        "customTag" to settings.customTag,
                         "autoRepeat" to settings.autoRepeat,
                         "zoomFraction" to safeZoom,
+                        "pomodoroEnabled" to settings.pomodoroEnabled,
+                        "pomodoroFocusMinutes" to settings.pomodoroFocusMinutes.coerceIn(5, 90),
+                        "pomodoroBreakMinutes" to settings.pomodoroBreakMinutes.coerceIn(1, 30),
+                        "ambientSoundType" to settings.ambientSoundType.take(32),
+                        "ambientVolume" to settings.ambientVolume.coerceIn(0.05, 1.0),
+                        "oledBurnInProtection" to settings.oledBurnInProtection,
+                        "syncFlipTimerWithFocusLock" to settings.syncFlipTimerWithFocusLock,
+                        "playAmbientSoundDuringFocusLock" to settings.playAmbientSoundDuringFocusLock,
+                        "ambientPlayInBackground" to settings.ambientPlayInBackground,
                         "originDeviceId" to settings.originDeviceId,
                         "updatedAtWallMs" to settings.updatedAtWallMs.coerceAtLeast(0L),
                         "createdAt" to FieldValue.serverTimestamp(),
@@ -1030,10 +1150,33 @@ class CloudAccountRepository(
                     mapOf(
                         "schemaVersion" to CURRENT_SYNC_SCHEMA_VERSION,
                         "use24HourFormat" to settings.use24HourFormat,
+                        "useSystemTimeFormat" to settings.useSystemTimeFormat,
+                        "hourLeadingZero" to settings.hourLeadingZero,
+                        "dateFormatPattern" to settings.dateFormatPattern,
                         "keepScreenAwake" to settings.keepScreenAwake,
                         "showDate" to settings.showDate,
+                        "showWeekday" to settings.showWeekday,
+                        "showSeconds" to settings.showSeconds,
+                        "showFlipAxis" to settings.showFlipAxis,
+                        "showUpcomingAlarm" to settings.showUpcomingAlarm,
+                        "showBattery" to settings.showBattery,
+                        "showWeather" to settings.showWeather,
+                        "weatherLocationQuery" to settings.weatherLocationQuery,
+                        "weatherUseFahrenheit" to settings.weatherUseFahrenheit,
+                        "weatherAutoDetect" to settings.weatherAutoDetect,
+                        "clockTickerSoundEnabled" to settings.clockTickerSoundEnabled,
+                        "customTag" to settings.customTag,
                         "autoRepeat" to settings.autoRepeat,
                         "zoomFraction" to safeZoom,
+                        "pomodoroEnabled" to settings.pomodoroEnabled,
+                        "pomodoroFocusMinutes" to settings.pomodoroFocusMinutes.coerceIn(5, 90),
+                        "pomodoroBreakMinutes" to settings.pomodoroBreakMinutes.coerceIn(1, 30),
+                        "ambientSoundType" to settings.ambientSoundType.take(32),
+                        "ambientVolume" to settings.ambientVolume.coerceIn(0.05, 1.0),
+                        "oledBurnInProtection" to settings.oledBurnInProtection,
+                        "syncFlipTimerWithFocusLock" to settings.syncFlipTimerWithFocusLock,
+                        "playAmbientSoundDuringFocusLock" to settings.playAmbientSoundDuringFocusLock,
+                        "ambientPlayInBackground" to settings.ambientPlayInBackground,
                         "originDeviceId" to settings.originDeviceId,
                         "updatedAtWallMs" to settings.updatedAtWallMs.coerceAtLeast(0L),
                         "updatedAt" to FieldValue.serverTimestamp()

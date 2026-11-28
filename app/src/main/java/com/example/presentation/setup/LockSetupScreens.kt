@@ -22,6 +22,8 @@ import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.layout.widthIn
 import androidx.compose.foundation.lazy.LazyColumn
+import androidx.compose.foundation.lazy.LazyRow
+import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
@@ -75,6 +77,7 @@ import com.example.designsystem.JetBrainsMonoFamily
 import com.example.designsystem.LocalResolveExtendedPalette
 import com.example.domain.model.DelayedLockPreset
 import com.example.domain.model.DurationSelection
+import com.example.domain.model.FocusProfile
 import com.example.domain.model.InstalledAppInfo
 import com.example.domain.model.LockSchedule
 import com.example.domain.model.ScheduleType
@@ -121,7 +124,9 @@ fun InstantLockSetupScreen(
     showFlipClockShortcut: Boolean = false,
     onStrictModeChanged: (Boolean) -> Unit = {},
     onAllowSelectedAppsChanged: (Boolean) -> Unit = {},
-    onShowFlipClockShortcutChanged: (Boolean) -> Unit = {}
+    onShowFlipClockShortcutChanged: (Boolean) -> Unit = {},
+    focusProfiles: List<FocusProfile> = FocusProfile.BUILT_IN_PRESETS,
+    onApplyFocusProfile: (FocusProfile) -> Unit = {}
 ) {
     BackHandler(onBack = onBack)
     val palette = LocalResolveExtendedPalette.current
@@ -152,6 +157,16 @@ fun InstantLockSetupScreen(
                 contentPadding = PaddingValues(horizontal = 20.dp, vertical = 16.dp),
                 verticalArrangement = Arrangement.spacedBy(14.dp)
             ) {
+                if (focusProfiles.isNotEmpty()) {
+                    item {
+                        FocusProfilesQuickRow(
+                            profiles = focusProfiles,
+                            onSelectProfile = onApplyFocusProfile,
+                            testTagPrefix = "instant_profile"
+                        )
+                    }
+                }
+
                 item {
                     DurationSelector(
                         label = "Lock Duration",
@@ -301,7 +316,9 @@ fun InstantLockSetupScreen(
             onSaveSelection = {
                 onSaveAllowedPackages(it)
                 showAppsSheet = false
-            }
+            },
+            focusProfiles = focusProfiles,
+            onApplyFocusProfile = onApplyFocusProfile
         )
     }
 
@@ -351,7 +368,9 @@ fun DelayedLockSetupScreen(
     showFlipClockShortcut: Boolean = false,
     onStrictModeChanged: (Boolean) -> Unit = {},
     onAllowSelectedAppsChanged: (Boolean) -> Unit = {},
-    onShowFlipClockShortcutChanged: (Boolean) -> Unit = {}
+    onShowFlipClockShortcutChanged: (Boolean) -> Unit = {},
+    focusProfiles: List<FocusProfile> = FocusProfile.BUILT_IN_PRESETS,
+    onApplyFocusProfile: (FocusProfile) -> Unit = {}
 ) {
     BackHandler(onBack = onBack)
     val palette = LocalResolveExtendedPalette.current
@@ -559,7 +578,9 @@ fun DelayedLockSetupScreen(
             onSaveSelection = {
                 onSaveAllowedPackages(it)
                 showAppsSheet = false
-            }
+            },
+            focusProfiles = focusProfiles,
+            onApplyFocusProfile = onApplyFocusProfile
         )
     }
 
@@ -819,6 +840,51 @@ private fun DelayedPresetEditorDialog(
 }
 
 @Composable
+private fun FocusProfilesQuickRow(
+    profiles: List<FocusProfile>,
+    onSelectProfile: (FocusProfile) -> Unit,
+    testTagPrefix: String
+) {
+    val palette = LocalResolveExtendedPalette.current
+    Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
+        Text(
+            text = "FOCUS PROFILES",
+            style = MaterialTheme.typography.labelSmall.copy(letterSpacing = 1.sp),
+            color = palette.textSecondary
+        )
+        LazyRow(
+            horizontalArrangement = Arrangement.spacedBy(8.dp),
+            modifier = Modifier.fillMaxWidth()
+        ) {
+            items(profiles, key = { it.profileId }) { profile ->
+                Column(
+                    modifier = Modifier
+                        .clip(RoundedCornerShape(14.dp))
+                        .background(palette.surfaceSecondary)
+                        .border(1.dp, palette.cardBorder, RoundedCornerShape(14.dp))
+                        .clickable(role = Role.Button) { onSelectProfile(profile) }
+                        .padding(horizontal = 12.dp, vertical = 8.dp)
+                        .testTag("${testTagPrefix}_${profile.profileId}"),
+                    verticalArrangement = Arrangement.spacedBy(2.dp)
+                ) {
+                    Text(
+                        text = profile.name,
+                        style = MaterialTheme.typography.labelLarge.copy(fontWeight = FontWeight.SemiBold),
+                        color = palette.accentStrong
+                    )
+                    Text(
+                        text = profile.subtitle.ifBlank { "${profile.defaultDurationMinutes}m" },
+                        style = MaterialTheme.typography.labelSmall,
+                        color = palette.textSecondary,
+                        maxLines = 1
+                    )
+                }
+            }
+        }
+    }
+}
+
+@Composable
 private fun SyncTargetScopeCard(
     syncAcrossDevices: Boolean,
     onSyncAcrossDevicesChanged: (Boolean) -> Unit,
@@ -826,97 +892,50 @@ private fun SyncTargetScopeCard(
     scopePrefix: String
 ) {
     val palette = LocalResolveExtendedPalette.current
-    Column(
+    Row(
         modifier = Modifier
             .fillMaxWidth()
-            .resolveGlassCard(cornerRadius = 16.dp)
-            .padding(16.dp),
-        verticalArrangement = Arrangement.spacedBy(10.dp)
+            .resolveGlassCard(
+                cornerRadius = 16.dp,
+                borderColor = if (syncAcrossDevices) palette.accentSecondary.copy(alpha = 0.45f) else palette.cardBorder
+            )
+            .clickable { onSyncAcrossDevicesChanged(!syncAcrossDevices) }
+            .padding(horizontal = 16.dp, vertical = 12.dp)
+            .testTag("${scopePrefix}_sync_compact_card"),
+        verticalAlignment = Alignment.CenterVertically
     ) {
-        Row(
-            modifier = Modifier.fillMaxWidth(),
-            verticalAlignment = Alignment.CenterVertically
+        Box(
+            modifier = Modifier
+                .size(36.dp)
+                .clip(RoundedCornerShape(10.dp))
+                .background(if (syncAcrossDevices) palette.accent else palette.surfaceElevated),
+            contentAlignment = Alignment.Center
         ) {
-            Box(
-                modifier = Modifier
-                    .size(38.dp)
-                    .clip(RoundedCornerShape(11.dp))
-                    .background(if (syncAcrossDevices) palette.accent else palette.surfaceElevated),
-                contentAlignment = Alignment.Center
-            ) {
-                Icon(
-                    imageVector = ResolveIcons.Sync,
-                    contentDescription = null,
-                    tint = if (syncAcrossDevices) palette.onAccent else palette.textSecondary,
-                    modifier = Modifier.size(20.dp)
-                )
-            }
-            Spacer(Modifier.width(12.dp))
-            Column(modifier = Modifier.weight(1f)) {
-                Text(
-                    text = "Device Sync Target",
-                    style = MaterialTheme.typography.titleMedium,
-                    color = palette.textPrimary
-                )
-                Text(
-                    text = if (syncAcrossDevices) "Selected: All Linked Devices" else "Selected: This Phone Only",
-                    style = MaterialTheme.typography.bodySmall,
-                    color = if (syncAcrossDevices) palette.textPrimary else palette.textSecondary
-                )
-            }
-            Switch(
-                checked = syncAcrossDevices,
-                onCheckedChange = onSyncAcrossDevicesChanged,
-                colors = resolveSwitchColors(),
-                modifier = Modifier.testTag(switchTestTag)
+            Icon(
+                imageVector = ResolveIcons.Sync,
+                contentDescription = "Sync across linked devices",
+                tint = if (syncAcrossDevices) palette.onAccent else palette.textSecondary,
+                modifier = Modifier.size(19.dp)
             )
         }
-
-        Row(
-            modifier = Modifier.fillMaxWidth(),
-            horizontalArrangement = Arrangement.spacedBy(8.dp)
-        ) {
-            FilterChip(
-                selected = !syncAcrossDevices,
-                onClick = { onSyncAcrossDevicesChanged(false) },
-                label = { Text("This Phone Only") },
-                colors = FilterChipDefaults.filterChipColors(
-                    selectedContainerColor = palette.accent,
-                    selectedLabelColor = palette.onAccent,
-                    containerColor = palette.surfaceSecondary,
-                    labelColor = palette.textSecondary
-                ),
-                border = FilterChipDefaults.filterChipBorder(
-                    enabled = true,
-                    selected = !syncAcrossDevices,
-                    borderColor = palette.cardBorder,
-                    selectedBorderColor = palette.accent
-                ),
-                modifier = Modifier.testTag("${scopePrefix}_scope_local_chip")
+        Spacer(Modifier.width(12.dp))
+        Column(modifier = Modifier.weight(1f)) {
+            Text(
+                text = "Sync to Linked Devices",
+                style = MaterialTheme.typography.titleSmall.copy(fontWeight = FontWeight.SemiBold),
+                color = palette.textPrimary
             )
-            FilterChip(
-                selected = syncAcrossDevices,
-                onClick = { onSyncAcrossDevicesChanged(true) },
-                label = { Text("All Linked Devices") },
-                colors = FilterChipDefaults.filterChipColors(
-                    selectedContainerColor = palette.accent,
-                    selectedLabelColor = palette.onAccent,
-                    containerColor = palette.surfaceSecondary,
-                    labelColor = palette.textSecondary
-                ),
-                border = FilterChipDefaults.filterChipBorder(
-                    enabled = true,
-                    selected = syncAcrossDevices,
-                    borderColor = palette.cardBorder,
-                    selectedBorderColor = palette.accent
-                ),
-                modifier = Modifier.testTag("${scopePrefix}_scope_all_chip")
+            Text(
+                text = if (syncAcrossDevices) "All linked devices" else "This device only",
+                style = MaterialTheme.typography.bodySmall,
+                color = palette.textSecondary
             )
         }
-
-        FeatureTipNote(
-            text = "Tip: Allowed apps, phone settings & mascots remain independent on every phone.",
-            icon = Icons.Outlined.Info
+        Switch(
+            checked = syncAcrossDevices,
+            onCheckedChange = onSyncAcrossDevicesChanged,
+            colors = resolveSwitchColors(),
+            modifier = Modifier.testTag(switchTestTag)
         )
     }
 }
@@ -954,7 +973,9 @@ fun ScheduleLockSetupScreen(
     isAccountSignedIn: Boolean = false,
     defaultStrictMode: Boolean = false,
     defaultAllowSelectedApps: Boolean = true,
-    defaultShowFlipClockShortcut: Boolean = false
+    defaultShowFlipClockShortcut: Boolean = false,
+    focusProfiles: List<FocusProfile> = FocusProfile.BUILT_IN_PRESETS,
+    onApplyFocusProfile: (FocusProfile) -> Unit = {}
 ) {
     BackHandler(onBack = onBack)
     val context = LocalContext.current

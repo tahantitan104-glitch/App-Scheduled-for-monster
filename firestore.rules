@@ -52,6 +52,10 @@ service cloud.firestore {
              (!('androidVersion' in data) || (data.androidVersion is int && data.androidVersion >= 21 && data.androidVersion <= 100)) &&
              (!('appVersion' in data) || (data.appVersion is string && data.appVersion.size() <= 40)) &&
              data.syncEnabled is bool &&
+             (!('activeLockMode' in data) || (data.activeLockMode is string && data.activeLockMode.size() <= 32)) &&
+             (!('activeLockExpiresWallMs' in data) || (data.activeLockExpiresWallMs is int && data.activeLockExpiresWallMs >= 0)) &&
+             (!('activeLockFreeUseWallMs' in data) || (data.activeLockFreeUseWallMs is int && data.activeLockFreeUseWallMs >= 0)) &&
+             (!('activeLockUpdatedWallMs' in data) || (data.activeLockUpdatedWallMs is int && data.activeLockUpdatedWallMs >= 0)) &&
              data.lastSeenAt is timestamp &&
              data.lastSeenAt <= request.time;
     }
@@ -65,6 +69,9 @@ service cloud.firestore {
              data.originDeviceName is string &&
              data.originDeviceName.size() >= 1 &&
              data.originDeviceName.size() <= 80 &&
+             (!('commandAction' in data) || (data.commandAction is string && data.commandAction in ['START', 'EXTEND', 'STOP'])) &&
+             (!('targetDeviceId' in data) || (data.targetDeviceId is string && data.targetDeviceId.size() <= 128)) &&
+             (!('extendMinutes' in data) || (data.extendMinutes is int && data.extendMinutes >= 0 && data.extendMinutes <= 720)) &&
              data.mode is string &&
              data.mode in ['INSTANT', 'DELAYED', 'SCHEDULED'] &&
              data.freeUseDurationMinutes is int &&
@@ -173,6 +180,12 @@ service cloud.firestore {
              data.zoomFraction is number &&
              data.zoomFraction >= 0.5 &&
              data.zoomFraction <= 1.4 &&
+             (!('pomodoroEnabled' in data) || data.pomodoroEnabled is bool) &&
+             (!('pomodoroFocusMinutes' in data) || (data.pomodoroFocusMinutes is int && data.pomodoroFocusMinutes >= 5 && data.pomodoroFocusMinutes <= 90)) &&
+             (!('pomodoroBreakMinutes' in data) || (data.pomodoroBreakMinutes is int && data.pomodoroBreakMinutes >= 1 && data.pomodoroBreakMinutes <= 30)) &&
+             (!('ambientSoundType' in data) || (data.ambientSoundType is string && data.ambientSoundType.size() <= 32)) &&
+             (!('ambientVolume' in data) || (data.ambientVolume is number && data.ambientVolume >= 0.05 && data.ambientVolume <= 1.0)) &&
+             (!('oledBurnInProtection' in data) || data.oledBurnInProtection is bool) &&
              isValidId(data.originDeviceId) &&
              data.updatedAtWallMs is int &&
              data.updatedAtWallMs >= 0;
@@ -236,7 +249,22 @@ service cloud.firestore {
                          isValidId(deviceId) &&
                          request.auth.uid == userId &&
                          incoming().keys().hasAll(['userId', 'deviceName', 'platform', 'syncEnabled', 'lastSeenAt', 'createdAt', 'updatedAt']) &&
-                         incoming().keys().hasOnly(['userId', 'schemaVersion', 'deviceName', 'platform', 'androidVersion', 'appVersion', 'syncEnabled', 'lastSeenAt', 'createdAt', 'updatedAt']) &&
+                         incoming().keys().hasOnly([
+                           'userId',
+                           'schemaVersion',
+                           'deviceName',
+                           'platform',
+                           'androidVersion',
+                           'appVersion',
+                           'syncEnabled',
+                           'activeLockMode',
+                           'activeLockExpiresWallMs',
+                           'activeLockFreeUseWallMs',
+                           'activeLockUpdatedWallMs',
+                           'lastSeenAt',
+                           'createdAt',
+                           'updatedAt'
+                         ]) &&
                          incoming().createdAt is timestamp &&
                          incoming().createdAt <= request.time &&
                          incoming().updatedAt is timestamp &&
@@ -251,7 +279,20 @@ service cloud.firestore {
                          incoming().createdAt == existing().createdAt &&
                          incoming().updatedAt is timestamp &&
                          incoming().updatedAt <= request.time &&
-                         incoming().diff(existing()).affectedKeys().hasOnly(['schemaVersion', 'deviceName', 'platform', 'androidVersion', 'appVersion', 'syncEnabled', 'lastSeenAt', 'updatedAt']);
+                         incoming().diff(existing()).affectedKeys().hasOnly([
+                           'schemaVersion',
+                           'deviceName',
+                           'platform',
+                           'androidVersion',
+                           'appVersion',
+                           'syncEnabled',
+                           'activeLockMode',
+                           'activeLockExpiresWallMs',
+                           'activeLockFreeUseWallMs',
+                           'activeLockUpdatedWallMs',
+                           'lastSeenAt',
+                           'updatedAt'
+                         ]);
 
         allow delete: if isSignedIn() && isValidId(deviceId) && request.auth.uid == userId;
       }
@@ -290,6 +331,9 @@ service cloud.firestore {
                               'commandId',
                               'originDeviceId',
                               'originDeviceName',
+                              'commandAction',
+                              'targetDeviceId',
+                              'extendMinutes',
                               'mode',
                               'freeUseDurationMinutes',
                               'lockDurationMinutes',
@@ -330,6 +374,12 @@ service cloud.firestore {
                               'showDate',
                               'autoRepeat',
                               'zoomFraction',
+                              'pomodoroEnabled',
+                              'pomodoroFocusMinutes',
+                              'pomodoroBreakMinutes',
+                              'ambientSoundType',
+                              'ambientVolume',
+                              'oledBurnInProtection',
                               'originDeviceId',
                               'updatedAtWallMs',
                               'createdAt',
@@ -353,6 +403,9 @@ service cloud.firestore {
                               'commandId',
                               'originDeviceId',
                               'originDeviceName',
+                              'commandAction',
+                              'targetDeviceId',
+                              'extendMinutes',
                               'mode',
                               'freeUseDurationMinutes',
                               'lockDurationMinutes',
@@ -378,6 +431,12 @@ service cloud.firestore {
                               'showDate',
                               'autoRepeat',
                               'zoomFraction',
+                              'pomodoroEnabled',
+                              'pomodoroFocusMinutes',
+                              'pomodoroBreakMinutes',
+                              'ambientSoundType',
+                              'ambientVolume',
+                              'oledBurnInProtection',
                               'originDeviceId',
                               'updatedAtWallMs',
                               'updatedAt'
@@ -416,6 +475,9 @@ service cloud.firestore {
                            'commandId',
                            'originDeviceId',
                            'originDeviceName',
+                           'commandAction',
+                           'targetDeviceId',
+                           'extendMinutes',
                            'mode',
                            'freeUseDurationMinutes',
                            'lockDurationMinutes',

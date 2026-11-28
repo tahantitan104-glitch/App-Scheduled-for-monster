@@ -335,7 +335,11 @@ class RestCloudAccountRepository(
             requireActiveSessionMatches(userId)
             require(deviceId.isNotBlank()) { "Device ID must not be blank." }
 
-            val safeDeviceName = deviceName.trim().ifBlank { "Android Tablet" }.take(80)
+            val safeDeviceName = deviceName.trim()
+                .takeUnless { it.equals("unknown", ignoreCase = true) }
+                .orEmpty()
+                .ifBlank { resolveReadableDeviceName() }
+                .take(80)
             val safeAppVersion = BuildConfig.VERSION_NAME.take(40)
             val sdkVersion = Build.VERSION.SDK_INT.toLong()
             val docPath = "users/${Uri.encode(userId)}/devices/${Uri.encode(deviceId)}"
@@ -373,6 +377,19 @@ class RestCloudAccountRepository(
                     updateTransforms = listOf("lastSeenAt", "updatedAt")
                 )
             }
+            val currentPair = _devicesState.value
+            val currentList = if (currentPair.first == userId) currentPair.second else emptyList()
+            val existingDev = currentList.firstOrNull { it.deviceId == deviceId }
+            val updatedDev = (existingDev ?: CloudDeviceInfo(deviceId = deviceId, userId = userId)).copy(
+                deviceId = deviceId,
+                userId = userId,
+                deviceName = safeDeviceName,
+                platform = "android",
+                androidVersion = sdkVersion,
+                appVersion = safeAppVersion,
+                syncEnabled = syncEnabled
+            )
+            _devicesState.value = userId to (currentList.filterNot { it.deviceId == deviceId } + updatedDev)
             refreshSignal.tryEmit(Unit)
             Result.success(Unit)
         } catch (e: CancellationException) {
@@ -389,6 +406,41 @@ class RestCloudAccountRepository(
         deviceName: String,
         syncEnabled: Boolean
     ): Result<Unit> = registerOrUpdateDevice(userId, deviceId, deviceName, syncEnabled)
+
+    override suspend fun updateDeviceLockStatus(
+        userId: String,
+        deviceId: String,
+        activeLockMode: String,
+        activeLockExpiresWallMs: Long,
+        activeLockFreeUseWallMs: Long,
+        activeLockUpdatedWallMs: Long
+    ): Result<Unit> = withContext(Dispatchers.IO) {
+        try {
+            requireActiveSessionMatches(userId)
+            require(deviceId.isNotBlank()) { "Device ID must not be blank." }
+            val docPath = "users/${Uri.encode(userId)}/devices/${Uri.encode(deviceId)}"
+            val existing = getDocument(docPath) ?: return@withContext Result.success(Unit)
+            val updateFields = linkedMapOf(
+                "schemaVersion" to intField(CURRENT_SYNC_SCHEMA_VERSION),
+                "activeLockMode" to strField(activeLockMode.trim().take(32)),
+                "activeLockExpiresWallMs" to intField(activeLockExpiresWallMs.coerceAtLeast(0L)),
+                "activeLockFreeUseWallMs" to intField(activeLockFreeUseWallMs.coerceAtLeast(0L)),
+                "activeLockUpdatedWallMs" to intField(activeLockUpdatedWallMs.coerceAtLeast(0L))
+            )
+            commitDocument(
+                relativeDocPath = docPath,
+                fields = updateFields,
+                isCreate = false,
+                updateTransforms = listOf("lastSeenAt", "updatedAt")
+            )
+            refreshSignal.tryEmit(Unit)
+            Result.success(Unit)
+        } catch (e: CancellationException) {
+            throw e
+        } catch (t: Throwable) {
+            Result.failure(t)
+        }
+    }
 
     override suspend fun unlinkDevice(userId: String, deviceId: String): Result<Unit> = withContext(Dispatchers.IO) {
         try {
@@ -503,7 +555,10 @@ class RestCloudAccountRepository(
         strictMode: Boolean,
         showFlipClockShortcut: Boolean,
         allowSelectedApps: Boolean,
-        phoneAccessEnabled: Boolean
+        phoneAccessEnabled: Boolean,
+        commandAction: String,
+        targetDeviceId: String,
+        extendMinutes: Long
     ): Result<String> = withContext(Dispatchers.IO) {
         try {
             requireActiveSessionMatches(userId)
@@ -517,6 +572,9 @@ class RestCloudAccountRepository(
             val safeLockExpire = lockExpirationWallMs.coerceAtLeast(0L)
             val safeScheduleId = scheduleId.trim().take(128)
             val safeOccurrenceId = occurrenceId.trim().take(128)
+            val safeAction = commandAction.trim().uppercase().takeIf { it in setOf("START", "EXTEND", "STOP") } ?: "START"
+            val safeTargetDevice = targetDeviceId.trim().take(128)
+            val safeExtendMinutes = extendMinutes.coerceIn(0L, 720L)
 
             val createFields = linkedMapOf(
                 "userId" to strField(userId),
@@ -524,6 +582,9 @@ class RestCloudAccountRepository(
                 "commandId" to strField(commandId),
                 "originDeviceId" to strField(originDeviceId),
                 "originDeviceName" to strField(safeOriginName),
+                "commandAction" to strField(safeAction),
+                "targetDeviceId" to strField(safeTargetDevice),
+                "extendMinutes" to intField(safeExtendMinutes),
                 "mode" to strField(mode.name),
                 "freeUseDurationMinutes" to intField(safeFreeMins),
                 "lockDurationMinutes" to intField(safeLockMins),
@@ -707,10 +768,33 @@ class RestCloudAccountRepository(
             val mutableFields = linkedMapOf(
                 "schemaVersion" to intField(CURRENT_SYNC_SCHEMA_VERSION),
                 "use24HourFormat" to boolField(settings.use24HourFormat),
+                "useSystemTimeFormat" to boolField(settings.useSystemTimeFormat),
+                "hourLeadingZero" to boolField(settings.hourLeadingZero),
+                "dateFormatPattern" to strField(settings.dateFormatPattern.take(24)),
                 "keepScreenAwake" to boolField(settings.keepScreenAwake),
                 "showDate" to boolField(settings.showDate),
+                "showWeekday" to boolField(settings.showWeekday),
+                "showSeconds" to boolField(settings.showSeconds),
+                "showFlipAxis" to boolField(settings.showFlipAxis),
+                "showUpcomingAlarm" to boolField(settings.showUpcomingAlarm),
+                "showBattery" to boolField(settings.showBattery),
+                "showWeather" to boolField(settings.showWeather),
+                "weatherLocationQuery" to strField(settings.weatherLocationQuery.take(48)),
+                "weatherUseFahrenheit" to boolField(settings.weatherUseFahrenheit),
+                "weatherAutoDetect" to boolField(settings.weatherAutoDetect),
+                "clockTickerSoundEnabled" to boolField(settings.clockTickerSoundEnabled),
+                "customTag" to strField(settings.customTag.take(28)),
                 "autoRepeat" to boolField(settings.autoRepeat),
                 "zoomFraction" to doubleField(safeZoom),
+                "pomodoroEnabled" to boolField(settings.pomodoroEnabled),
+                "pomodoroFocusMinutes" to intField(settings.pomodoroFocusMinutes.coerceIn(5, 90).toLong()),
+                "pomodoroBreakMinutes" to intField(settings.pomodoroBreakMinutes.coerceIn(1, 30).toLong()),
+                "ambientSoundType" to strField(settings.ambientSoundType.take(32)),
+                "ambientVolume" to doubleField(settings.ambientVolume.coerceIn(0.05, 1.0)),
+                "oledBurnInProtection" to boolField(settings.oledBurnInProtection),
+                "syncFlipTimerWithFocusLock" to boolField(settings.syncFlipTimerWithFocusLock),
+                "playAmbientSoundDuringFocusLock" to boolField(settings.playAmbientSoundDuringFocusLock),
+                "ambientPlayInBackground" to boolField(settings.ambientPlayInBackground),
                 "originDeviceId" to strField(settings.originDeviceId),
                 "updatedAtWallMs" to intField(settings.updatedAtWallMs.coerceAtLeast(0L))
             )
@@ -893,7 +977,9 @@ class RestCloudAccountRepository(
 
         pollStep {
             val deviceDocs = listCollectionDocuments("users/$encodedUid/devices", pageSize = 50)
-            _devicesState.value = uid to deviceDocs.map { it.toCloudDeviceInfo(uid) }
+            _devicesState.value = uid to deviceDocs.mapNotNull { doc ->
+                runCatching { doc.toCloudDeviceInfo(uid) }.getOrNull()
+            }
             true
         }?.let { anySucceeded = true }
 
@@ -1392,15 +1478,24 @@ class RestCloudAccountRepository(
 
     private fun JSONObject.toCloudDeviceInfo(uid: String): CloudDeviceInfo {
         val f = fieldsObj()
+        val parsedName = f.firestoreString("deviceName").trim()
+            .takeUnless { it.equals("unknown", ignoreCase = true) }
+            .orEmpty()
+            .ifBlank { f.firestoreString("model").trim() }
+            .ifBlank { "Android Device" }
         return CloudDeviceInfo(
             deviceId = firestoreDocId(),
-            userId = f.firestoreString("userId", uid),
+            userId = f.firestoreString("userId", uid).ifBlank { uid },
             schemaVersion = f.firestoreLong("schemaVersion", CURRENT_SYNC_SCHEMA_VERSION),
-            deviceName = f.firestoreString("deviceName", "Android Device"),
-            platform = f.firestoreString("platform", "android"),
+            deviceName = parsedName,
+            platform = f.firestoreString("platform", "android").ifBlank { "android" },
             androidVersion = f.firestoreLong("androidVersion", 22L),
             appVersion = f.firestoreString("appVersion"),
-            syncEnabled = f.firestoreBoolean("syncEnabled", true)
+            syncEnabled = f.firestoreBoolean("syncEnabled", true),
+            activeLockMode = f.firestoreString("activeLockMode"),
+            activeLockExpiresWallMs = f.firestoreLong("activeLockExpiresWallMs", 0L),
+            activeLockFreeUseWallMs = f.firestoreLong("activeLockFreeUseWallMs", 0L),
+            activeLockUpdatedWallMs = f.firestoreLong("activeLockUpdatedWallMs", 0L)
         )
     }
 
@@ -1412,6 +1507,9 @@ class RestCloudAccountRepository(
             commandId = f.firestoreString("commandId", firestoreDocId()),
             originDeviceId = f.firestoreString("originDeviceId"),
             originDeviceName = f.firestoreString("originDeviceName"),
+            commandAction = f.firestoreString("commandAction", "START"),
+            targetDeviceId = f.firestoreString("targetDeviceId"),
+            extendMinutes = f.firestoreLong("extendMinutes", 0L),
             mode = f.firestoreString("mode", LockMode.INSTANT.name),
             freeUseDurationMinutes = f.firestoreLong("freeUseDurationMinutes", 0L),
             lockDurationMinutes = f.firestoreLong("lockDurationMinutes", 0L),
@@ -1489,10 +1587,33 @@ class RestCloudAccountRepository(
             schemaVersion = f.firestoreLong("schemaVersion", CURRENT_SYNC_SCHEMA_VERSION),
             docId = f.firestoreString("docId", CloudAccountRepository.FLIP_CLOCK_SETTINGS_DOC_ID),
             use24HourFormat = f.firestoreBoolean("use24HourFormat", false),
+            useSystemTimeFormat = f.firestoreBoolean("useSystemTimeFormat", false),
+            hourLeadingZero = f.firestoreBoolean("hourLeadingZero", false),
+            dateFormatPattern = f.firestoreString("dateFormatPattern", "dd/MM/yy"),
             keepScreenAwake = f.firestoreBoolean("keepScreenAwake", false),
             showDate = f.firestoreBoolean("showDate", false),
+            showWeekday = f.firestoreBoolean("showWeekday", true),
+            showSeconds = f.firestoreBoolean("showSeconds", true),
+            showFlipAxis = f.firestoreBoolean("showFlipAxis", true),
+            showUpcomingAlarm = f.firestoreBoolean("showUpcomingAlarm", false),
+            showBattery = f.firestoreBoolean("showBattery", false),
+            showWeather = f.firestoreBoolean("showWeather", false),
+            weatherLocationQuery = f.firestoreString("weatherLocationQuery", ""),
+            weatherUseFahrenheit = f.firestoreBoolean("weatherUseFahrenheit", false),
+            weatherAutoDetect = f.firestoreBoolean("weatherAutoDetect", false),
+            clockTickerSoundEnabled = f.firestoreBoolean("clockTickerSoundEnabled", false),
+            customTag = f.firestoreString("customTag", ""),
             autoRepeat = f.firestoreBoolean("autoRepeat", false),
             zoomFraction = f.firestoreDouble("zoomFraction", 1.0),
+            pomodoroEnabled = f.firestoreBoolean("pomodoroEnabled", false),
+            pomodoroFocusMinutes = f.firestoreInt("pomodoroFocusMinutes", 25),
+            pomodoroBreakMinutes = f.firestoreInt("pomodoroBreakMinutes", 5),
+            ambientSoundType = f.firestoreString("ambientSoundType", "off"),
+            ambientVolume = f.firestoreDouble("ambientVolume", 0.55),
+            oledBurnInProtection = f.firestoreBoolean("oledBurnInProtection", false),
+            syncFlipTimerWithFocusLock = f.firestoreBoolean("syncFlipTimerWithFocusLock", false),
+            playAmbientSoundDuringFocusLock = f.firestoreBoolean("playAmbientSoundDuringFocusLock", false),
+            ambientPlayInBackground = f.firestoreBoolean("ambientPlayInBackground", false),
             originDeviceId = f.firestoreString("originDeviceId"),
             updatedAtWallMs = f.firestoreLong("updatedAtWallMs", 0L)
         )
@@ -1516,7 +1637,7 @@ class RestCloudAccountRepository(
 
     companion object {
         private const val TAG = "RestCloudSync"
-        private const val FAST_LOCK_POLL_INTERVAL_MS = 2_000L
+        private const val FAST_LOCK_POLL_INTERVAL_MS = 1_200L
         private const val METADATA_POLL_INTERVAL_MS = 10_000L
         private const val TOKEN_REFRESH_LEAD_MS = 120_000L
     }

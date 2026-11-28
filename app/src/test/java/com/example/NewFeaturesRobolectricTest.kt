@@ -11,10 +11,13 @@ import androidx.compose.ui.test.getBoundsInRoot
 import androidx.compose.ui.test.hasTestTag
 import androidx.compose.ui.test.junit4.createComposeRule
 import androidx.compose.ui.test.onAllNodesWithTag
+import androidx.compose.ui.test.onAllNodesWithText
 import androidx.compose.ui.test.onNodeWithTag
 import androidx.compose.ui.test.onNodeWithText
 import androidx.compose.ui.test.performClick
+import androidx.compose.ui.test.performScrollTo
 import androidx.compose.ui.test.performScrollToNode
+import androidx.compose.ui.unit.dp
 import androidx.room.Room
 import androidx.test.core.app.ApplicationProvider
 import com.example.data.local.ResolveDatabase
@@ -600,6 +603,283 @@ class NewFeaturesRobolectricTest {
         assertTrue(resetClicked)
     }
 
+    @Test
+    fun `flip clock custom layout DataStore round trip persists and reset preserves custom presets`() = runTest {
+        flipPresetRepo.ensureDefaultPresetsSeeded()
+        val customPresetRes = flipPresetRepo.savePreset(
+            presetId = "custom_focus_55",
+            name = "Deep Focus 55",
+            durationSeconds = 55L * 60L,
+            nowWallMs = 10_000L
+        )
+        assertTrue(customPresetRes is FlipPresetMutationResult.Saved)
+
+        val customLayout = com.example.domain.model.FlipClockCustomLayout(
+            portrait = com.example.domain.model.FlipClockOrientationLayout.defaultPortrait().copy(
+                enabled = true,
+                hourScale = 1.2f,
+                minuteScale = 0.85f,
+                amPmAlign = com.example.domain.model.FlipClockElementAlign.RIGHT,
+                weekdayStyle = com.example.domain.model.FlipWeekdayStyle.SHORT
+            ),
+            landscape = com.example.domain.model.FlipClockOrientationLayout.defaultLandscape().copy(
+                enabled = true,
+                hourScale = 1.15f,
+                minuteScale = 1.1f,
+                batteryStyle = com.example.domain.model.FlipBatteryStyle.PERCENT_ONLY,
+                weatherStyle = com.example.domain.model.FlipWeatherStyle.DETAILED
+            )
+        )
+        prefs.saveFlipClockSettings(
+            FlipClockSettings(
+                use24HourFormat = true,
+                showSeconds = true,
+                customLayout = customLayout,
+                updatedAtWallMs = 12_000L
+            )
+        )
+
+        val reloaded = prefs.getFlipClockSettingsSnapshot()
+        assertTrue(reloaded.customLayout.portrait.enabled)
+        assertEquals(1.2f, reloaded.customLayout.portrait.hourScale, 0.001f)
+        assertEquals(0.85f, reloaded.customLayout.portrait.minuteScale, 0.001f)
+        assertEquals(com.example.domain.model.FlipClockElementAlign.RIGHT, reloaded.customLayout.portrait.amPmAlign)
+        assertEquals(com.example.domain.model.FlipWeekdayStyle.SHORT, reloaded.customLayout.portrait.weekdayStyle)
+        assertEquals(com.example.domain.model.FlipBatteryStyle.PERCENT_ONLY, reloaded.customLayout.landscape.batteryStyle)
+        assertEquals(com.example.domain.model.FlipWeatherStyle.DETAILED, reloaded.customLayout.landscape.weatherStyle)
+
+        val manager = FlipClockManager(prefs, flipPresetRepo, FlipTimerNotificationHelper(context), engine, clock)
+        manager.initialize()
+        manager.resetSettingsToDefaultPreservingCustomPresets()
+        val afterReset = prefs.getFlipClockSettingsSnapshot()
+        assertFalse(afterReset.customLayout.portrait.enabled)
+        assertFalse(afterReset.customLayout.landscape.enabled)
+        assertTrue(flipPresetRepo.getAllPresets().any { it.presetId == "custom_focus_55" })
+    }
+
+    @Test
+    fun `flip clock screen opens layout editor confirms persistence and selects compact timer preset`() {
+        val manager = kotlinx.coroutines.runBlocking {
+            flipPresetRepo.ensureDefaultPresetsSeeded()
+            flipPresetRepo.restoreMissingBuiltInsWithinCap(1L)
+            FlipClockManager(prefs, flipPresetRepo, FlipTimerNotificationHelper(context), engine, clock).also {
+                it.initialize()
+            }
+        }
+        var controlsVisible by mutableStateOf(true)
+        var initialPage by mutableStateOf(com.example.domain.model.FlipClockPage.CLOCK)
+
+        composeRule.setContent {
+            ResolveTheme {
+                com.example.flipclock.FlipClockScreen(
+                    manager = manager,
+                    initialPage = initialPage,
+                    isRestrictedLock = false,
+                    initialBrightnessPercent = 50f,
+                    controlsVisible = controlsVisible,
+                    onControlsVisibleChange = { controlsVisible = it },
+                    onBrightnessChanged = {},
+                    onRequestTimerStartWithNotificationCheck = {},
+                    onOpenAppNotificationSettings = {},
+                    onExit = {}
+                )
+            }
+        }
+        composeRule.waitForIdle()
+
+        assertTrue(composeRule.onAllNodesWithTag("flip_top_layout_editor_btn").fetchSemanticsNodes().isEmpty())
+        composeRule.onNodeWithTag("flip_settings_open_btn").assertIsDisplayed().performClick()
+        composeRule.waitForIdle()
+        composeRule.onNodeWithTag("flip_open_layout_editor_btn").performScrollTo().assertIsDisplayed().performClick()
+        composeRule.waitForIdle()
+        composeRule.onNodeWithTag("flip_layout_confirm_btn").assertIsDisplayed().performClick()
+        composeRule.waitForIdle()
+
+        composeRule.onNodeWithTag("flip_page_pill_timer").assertIsDisplayed().performClick()
+        composeRule.waitForIdle()
+        composeRule.onNodeWithTag("flip_timer_preset_list")
+            .performScrollToNode(hasTestTag("flip_preset_item_flip_builtin_120m"))
+        composeRule.onNodeWithTag("flip_preset_item_flip_builtin_120m").assertIsDisplayed().performClick()
+        composeRule.waitForIdle()
+        assertEquals("flip_builtin_120m", manager.timerState.value.activePresetId)
+    }
+
+    @Test
+    @Config(sdk = [36], qualifiers = "w800dp-h380dp")
+    fun `landscape lock screen renders Focus Guard header and mascot stage cleanly above countdown`() {
+        composeRule.setContent {
+            ResolveTheme {
+                SignatureLockScreen(
+                    remainingMillis = 600_000L,
+                    progressFraction = 0.65f,
+                    lockMode = LockMode.INSTANT,
+                    enforcementMode = EnforcementMode.ACCESSIBILITY_GUARD,
+                    phoneAccessEnabled = true,
+                    allowedApps = emptyList(),
+                    expectedRecoveryLength = 16,
+                    loadAppIcon = { null },
+                    onLaunchPhone = {},
+                    onLaunchAllowedApp = {},
+                    onSubmitRecoveryCode = { RecoveryVerificationResult.Verified },
+                    isStrictMode = false,
+                    showFlipClockShortcut = true,
+                    allowLandscapeLayout = true,
+                    reducedMotion = true
+                )
+            }
+        }
+        composeRule.waitForIdle()
+        val guardTitleBounds = composeRule.onNodeWithTag("lock_screen_landscape_focus_guard_title")
+            .assertIsDisplayed()
+            .getBoundsInRoot()
+        val mascotBounds = composeRule.onNodeWithTag("lock_screen_mascot_stage")
+            .assertIsDisplayed()
+            .getBoundsInRoot()
+        val countdownBounds = composeRule.onNodeWithTag("lock_screen_countdown_card")
+            .assertIsDisplayed()
+            .getBoundsInRoot()
+
+        assertTrue(
+            "Focus Guard title top (${guardTitleBounds.top}) must remain clear of top edge",
+            guardTitleBounds.top.value >= 10f
+        )
+        assertTrue(
+            "Mascot stage bottom (${mascotBounds.bottom}) must stay above countdown card top (${countdownBounds.top})",
+            mascotBounds.bottom <= countdownBounds.top
+        )
+    }
+
+    @Test
+    fun `deep forest green replaces warm paper minimal with original deep forest palette`() {
+        val names = com.example.domain.model.ResolveThemeId.entries.map { it.displayName }
+        assertTrue(names.contains("Deep Forest Green"))
+        assertFalse(names.contains("Warm Paper Minimal"))
+        assertEquals(
+            com.example.domain.model.ResolveThemeId.DEEP_FOREST_GREEN,
+            com.example.domain.model.ResolveThemeId.fromStorageKey("warm_paper")
+        )
+        assertEquals(
+            com.example.domain.model.ResolveThemeId.DEEP_FOREST_GREEN,
+            com.example.domain.model.ResolveThemeId.fromStorageKey(null)
+        )
+
+        var selectedTheme by mutableStateOf(com.example.domain.model.ResolveThemeId.DEEP_FOREST_GREEN)
+        var capturedBgHex: ULong? = null
+        var capturedIsDark: Boolean? = null
+        composeRule.setContent {
+            ResolveTheme(themeId = selectedTheme) {
+                val pal = com.example.designsystem.LocalResolveExtendedPalette.current
+                capturedBgHex = pal.background.value
+                capturedIsDark = pal.isDark
+                com.example.presentation.more.AppThemeAndGoalCard(
+                    appThemeId = selectedTheme,
+                    dailyFocusGoalMinutes = 120,
+                    showSetupTips = false,
+                    onSelectAppTheme = { selectedTheme = it },
+                    onSelectDailyGoalMinutes = {},
+                    onToggleShowSetupTips = {}
+                )
+            }
+        }
+        composeRule.waitForIdle()
+        assertEquals(true, capturedIsDark)
+        assertEquals(androidx.compose.ui.graphics.Color(0xFF0A1713).value, capturedBgHex)
+        composeRule.onNodeWithTag("more_theme_chip_deep_forest_green").assertIsDisplayed()
+        assertTrue(composeRule.onAllNodesWithTag("more_theme_chip_warm_paper").fetchSemanticsNodes().isEmpty())
+    }
+
+    @Test
+    @Config(sdk = [36], qualifiers = "w800dp-h380dp")
+    fun `landscape home restores 3-element header with mascot guard pill on left and avatar on right`() {
+        composeRule.setContent {
+            ResolveTheme {
+                com.example.presentation.home.HomeScreen(
+                    activeSession = null,
+                    remainingMillis = 0L,
+                    capabilities = com.example.domain.model.SystemCapabilityStatus(
+                        isAccessibilityServiceEnabled = true,
+                        isAccessibilityEnabledInSettings = true,
+                        isAccessibilityServiceConnected = true
+                    ),
+                    onOpenInstantSetup = {},
+                    onOpenDelayedSetup = {},
+                    onOpenScheduleSetup = {},
+                    onOpenDeviceOwnerGuide = {},
+                    onReturnToLockScreen = {},
+                    onDismissTerminalSession = {},
+                    accountSyncState = com.example.sync.AccountSyncUiState(
+                        isSignedIn = true,
+                        userId = "u1",
+                        displayName = "Tahan Official"
+                    ),
+                    reducedMotion = true
+                )
+            }
+        }
+        composeRule.waitForIdle()
+        assertTrue(composeRule.onAllNodesWithText("RESOLVE").fetchSemanticsNodes().isEmpty())
+        val mascotBounds = composeRule.onNodeWithTag("home_mascot_badge").assertIsDisplayed().getBoundsInRoot()
+        val guardBounds = composeRule.onNodeWithTag("home_enforcement_status_pill").assertIsDisplayed().getBoundsInRoot()
+        val avatarBounds = composeRule.onNodeWithTag("home_profile_avatar_pill").assertIsDisplayed().getBoundsInRoot()
+        assertTrue("Guard Active pill sits beside mascot", mascotBounds.right <= guardBounds.left + 4.dp)
+        assertTrue("Profile avatar sits on right side", guardBounds.right < avatarBounds.left)
+    }
+
+    @Test
+    fun `insights hub displays Insights title alongside History and Schedule tabs`() {
+        composeRule.setContent {
+            ResolveTheme {
+                com.example.presentation.insights.InsightsScreen(
+                    records = emptyList(),
+                    schedules = emptyList(),
+                    dailyAppUsage = com.example.domain.model.DailyAppUsageSummary(hasUsagePermission = false),
+                    onGrantUsageAccess = {},
+                    onAddSchedule = {},
+                    onEditSchedule = {},
+                    onToggleSchedule = { _, _ -> },
+                    onDeleteSchedule = {},
+                    reducedMotion = true
+                )
+            }
+        }
+        composeRule.waitForIdle()
+        composeRule.onNodeWithTag("insights_title").assertIsDisplayed()
+        composeRule.onNodeWithTag("insights_tab_history").assertIsDisplayed()
+        composeRule.onNodeWithTag("insights_tab_schedule").assertIsDisplayed()
+    }
+
+    @Test
+    @Config(sdk = [23])
+    fun `mainActivity launches without system ActionBar in legacy portrait`() {
+        val controller = org.robolectric.Robolectric.buildActivity(MainActivity::class.java).create()
+        val activity = controller.get()
+        assertEquals(R.style.Theme_Resolve, activity.packageManager.getActivityInfo(activity.componentName, 0).theme)
+        assertTrue(activity.actionBar == null || !activity.actionBar!!.isShowing)
+        assertFalse(activity.window.hasFeature(android.view.Window.FEATURE_ACTION_BAR))
+        controller.destroy()
+    }
+
+    @Test
+    fun `main activity launches without system action bar in portrait`() {
+        val controller = org.robolectric.Robolectric.buildActivity(MainActivity::class.java).setup()
+        val activity = controller.get()
+        assertEquals(R.style.Theme_Resolve, activity.packageManager.getActivityInfo(activity.componentName, 0).theme)
+        assertTrue(activity.actionBar == null || !activity.actionBar!!.isShowing)
+        assertFalse(activity.window.hasFeature(android.view.Window.FEATURE_ACTION_BAR))
+        controller.pause().stop().destroy()
+    }
+
+    @Test
+    @Config(sdk = [36], qualifiers = "w800dp-h380dp")
+    fun `main activity launches without system action bar in landscape`() {
+        val controller = org.robolectric.Robolectric.buildActivity(MainActivity::class.java).setup()
+        val activity = controller.get()
+        assertEquals(R.style.Theme_Resolve, activity.packageManager.getActivityInfo(activity.componentName, 0).theme)
+        assertTrue(activity.actionBar == null || !activity.actionBar!!.isShowing)
+        assertFalse(activity.window.hasFeature(android.view.Window.FEATURE_ACTION_BAR))
+        controller.pause().stop().destroy()
+    }
+
     private class FakeTestClock(var wallMs: Long, var elapsedMs: Long) : ClockProvider {
         override fun wallClockMs(): Long = wallMs
         override fun elapsedRealtimeMs(): Long = elapsedMs
@@ -681,7 +961,10 @@ class NewFeaturesRobolectricTest {
             strictMode: Boolean,
             showFlipClockShortcut: Boolean,
             allowSelectedApps: Boolean,
-            phoneAccessEnabled: Boolean
+            phoneAccessEnabled: Boolean,
+            commandAction: String,
+            targetDeviceId: String,
+            extendMinutes: Long
         ): Result<String> = Result.success("cmd_1")
 
         override suspend fun upsertFlipClockSettings(

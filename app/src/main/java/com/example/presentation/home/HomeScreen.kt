@@ -8,6 +8,7 @@ import androidx.compose.animation.expandVertically
 import androidx.compose.animation.fadeIn
 import androidx.compose.animation.fadeOut
 import androidx.compose.animation.shrinkVertically
+import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
@@ -17,6 +18,8 @@ import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.BoxWithConstraints
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.ExperimentalLayoutApi
+import androidx.compose.foundation.layout.FlowRow
 import androidx.compose.foundation.layout.IntrinsicSize
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
@@ -45,6 +48,7 @@ import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
+import androidx.compose.material3.minimumInteractiveComponentSize
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
@@ -61,10 +65,12 @@ import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.ImageBitmap
 import androidx.compose.ui.graphics.StrokeCap
+import androidx.compose.ui.graphics.drawscope.Stroke
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.hapticfeedback.HapticFeedbackType
 import androidx.compose.ui.platform.LocalHapticFeedback
 import androidx.compose.ui.platform.testTag
+import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.font.FontWeight
@@ -130,7 +136,10 @@ fun HomeScreen(
     onDismissSyncPromo: () -> Unit = {},
     onOpenAccountSettings: () -> Unit = {},
     protectionStatus: ProtectionStatus = ProtectionStatus.ProtectionActive(),
-    onProtectionAction: (ProtectionRecoveryAction) -> Unit = {}
+    onProtectionAction: (ProtectionRecoveryAction) -> Unit = {},
+    dailyFocusGoalMinutes: Int = 120,
+    onQuickStartFocusLock: (Long) -> Unit = {},
+    onOpenFlipClock: () -> Unit = {}
 ) {
     val palette = LocalResolveExtendedPalette.current
     val dockClearance = LocalResolveBottomDockClearance.current
@@ -170,16 +179,18 @@ fun HomeScreen(
         ) {
             item {
                 Row(
-                    modifier = Modifier.fillMaxWidth(),
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .testTag("home_header_row"),
                     horizontalArrangement = Arrangement.SpaceBetween,
                     verticalAlignment = Alignment.CenterVertically
                 ) {
                     Row(
                         modifier = Modifier
-                            .weight(1f)
+                            .weight(1f, fill = false)
                             .padding(end = 8.dp),
                         verticalAlignment = Alignment.CenterVertically,
-                        horizontalArrangement = Arrangement.spacedBy(12.dp)
+                        horizontalArrangement = Arrangement.spacedBy(10.dp)
                     ) {
                         var homeMascotState by remember(mascotType) { mutableStateOf(MascotAnimationState.IDLE) }
                         var homePeekProgress by remember(mascotType) { mutableStateOf(1f) }
@@ -214,8 +225,8 @@ fun HomeScreen(
 
                         Box(
                             modifier = Modifier
-                                .size(50.dp)
-                                .clip(RoundedCornerShape(16.dp))
+                                .size(48.dp)
+                                .clip(RoundedCornerShape(15.dp))
                                 .background(
                                     Brush.verticalGradient(
                                         listOf(palette.surfaceElevated, palette.cardBottom)
@@ -223,8 +234,8 @@ fun HomeScreen(
                                 )
                                 .border(
                                     1.dp,
-                                    palette.accent.copy(alpha = 0.28f),
-                                    RoundedCornerShape(16.dp)
+                                    palette.accent.copy(alpha = 0.30f),
+                                    RoundedCornerShape(15.dp)
                                 )
                                 .clickable {
                                     if (mascotType == MascotType.RESOLVE_BUNNY) {
@@ -245,48 +256,29 @@ fun HomeScreen(
                         ) {
                             MascotRenderer(
                                 mascot = mascotType,
-                                size = 46.dp,
+                                size = 42.dp,
                                 showFocusAura = false,
                                 animationState = homeMascotState,
                                 peekProgress = homePeekProgress,
                                 reducedMotion = reducedMotion
                             )
                         }
-                        Column {
-                            Text(
-                                text = "RESOLVE",
-                                style = MaterialTheme.typography.headlineLarge.copy(
-                                    fontWeight = FontWeight.Bold,
-                                    letterSpacing = 1.sp
-                                ),
-                                color = palette.textPrimary
-                            )
-                            Text(
-                                text = "Device Focus Control",
-                                style = MaterialTheme.typography.bodyMedium,
-                                color = palette.textSecondary
-                            )
-                        }
-                    }
 
-                    Row(
-                        verticalAlignment = Alignment.CenterVertically,
-                        horizontalArrangement = Arrangement.spacedBy(8.dp)
-                    ) {
-                        if (accountSyncState.isSignedIn) {
-                            SyncedAvatarBadge(
-                                displayName = accountSyncState.displayName,
-                                avatarBase64 = accountSyncState.avatarBase64,
-                                photoUrl = accountSyncState.photoUrl,
-                                size = 34.dp,
-                                onClick = onOpenAccountSettings,
-                                modifier = Modifier.testTag("home_profile_avatar_pill")
-                            )
-                        }
                         EnforcementStatusPill(
                             capabilities = capabilities,
                             reducedMotion = reducedMotion,
                             onClick = onOpenDeviceOwnerGuide
+                        )
+                    }
+
+                    if (accountSyncState.isSignedIn) {
+                        SyncedAvatarBadge(
+                            displayName = accountSyncState.displayName,
+                            avatarBase64 = accountSyncState.avatarBase64,
+                            photoUrl = accountSyncState.photoUrl,
+                            size = 38.dp,
+                            onClick = onOpenAccountSettings,
+                            modifier = Modifier.testTag("home_profile_avatar_pill")
                         )
                     }
                 }
@@ -502,9 +494,18 @@ fun HomeScreen(
                 }
             }
 
-            // Compact Progress Overview derived strictly from real local history
+            // Bento Focus Ring, Streak, Quick-Start Presets & Linked Device Lock Telemetry
             item {
-                ProgressOverviewCard(records = historyRecords, reducedMotion = reducedMotion)
+                ProgressOverviewCard(
+                    records = historyRecords,
+                    dailyFocusGoalMinutes = dailyFocusGoalMinutes,
+                    activeSession = activeSession,
+                    accountSyncState = accountSyncState,
+                    reducedMotion = reducedMotion,
+                    onQuickStartFocusLock = onQuickStartFocusLock,
+                    onOpenFlipClock = onOpenFlipClock,
+                    onOpenAccountSettings = onOpenAccountSettings
+                )
             }
 
             // Compact Today's App Usage Dashboard (real UsageStatsManager data or honest permission notice)
@@ -616,14 +617,23 @@ private fun ModeFeatureCard(
     }
 }
 
+@OptIn(ExperimentalLayoutApi::class)
 @Composable
 private fun ProgressOverviewCard(
     records: List<SessionHistoryRecord>,
-    reducedMotion: Boolean = false
+    dailyFocusGoalMinutes: Int,
+    activeSession: ActiveSession?,
+    accountSyncState: AccountSyncUiState,
+    reducedMotion: Boolean = false,
+    onQuickStartFocusLock: (Long) -> Unit = {},
+    onOpenFlipClock: () -> Unit = {},
+    onOpenAccountSettings: () -> Unit = {}
 ) {
     val palette = LocalResolveExtendedPalette.current
-    val todayStartMs = remember {
-        LocalDate.now().atStartOfDay(ZoneId.systemDefault()).toInstant().toEpochMilli()
+    val zoneId = remember { ZoneId.systemDefault() }
+    val today = remember { LocalDate.now(zoneId) }
+    val todayStartMs = remember(today, zoneId) {
+        today.atStartOfDay(zoneId).toInstant().toEpochMilli()
     }
     val todayRecords = remember(records, todayStartMs) {
         records.filter { it.endedAtWallMs >= todayStartMs || it.startedAtWallMs >= todayStartMs }
@@ -634,14 +644,37 @@ private fun ProgressOverviewCard(
     val todayFocusMinutes = remember(todayRecords) {
         todayRecords.filter { it.outcome == SessionOutcome.COMPLETED }.sumOf { it.lockDurationMinutes }
     }
-    val completionRatio = remember(todayRecords, todayCompleted) {
-        if (todayRecords.isEmpty()) 0f else (todayCompleted.toFloat() / todayRecords.size.toFloat()).coerceIn(0f, 1f)
+    val goalMinutes = dailyFocusGoalMinutes.coerceAtLeast(15)
+    val goalRatio = remember(todayFocusMinutes, goalMinutes) {
+        (todayFocusMinutes.toFloat() / goalMinutes.toFloat()).coerceIn(0f, 1f)
     }
     val animatedRatio by animateFloatAsState(
-        targetValue = completionRatio,
-        animationSpec = tween(if (reducedMotion) 0 else 360, easing = FastOutSlowInEasing),
-        label = "home_today_completion_ratio"
+        targetValue = goalRatio,
+        animationSpec = tween(if (reducedMotion) 0 else 420, easing = FastOutSlowInEasing),
+        label = "home_today_goal_ratio"
     )
+    val streakDays = remember(records, today, zoneId) {
+        val completedDays = records
+            .filter { it.outcome == SessionOutcome.COMPLETED }
+            .mapTo(HashSet()) {
+                java.time.Instant.ofEpochMilli(it.endedAtWallMs).atZone(zoneId).toLocalDate()
+            }
+        var cursor = if (completedDays.contains(today)) today else today.minusDays(1)
+        var streak = 0
+        while (completedDays.contains(cursor)) {
+            streak++
+            cursor = cursor.minusDays(1)
+        }
+        streak
+    }
+    val linkedLockedCount = remember(accountSyncState.connectedDevices, accountSyncState.thisDeviceId) {
+        val nowWall = System.currentTimeMillis()
+        accountSyncState.connectedDevices.count {
+            it.deviceId != accountSyncState.thisDeviceId &&
+                it.activeLockMode.isNotBlank() &&
+                it.activeLockExpiresWallMs > nowWall
+        }
+    }
 
     Column(
         modifier = Modifier
@@ -652,61 +685,145 @@ private fun ProgressOverviewCard(
             )
             .padding(16.dp)
             .testTag("home_progress_overview_card"),
-        verticalArrangement = Arrangement.spacedBy(10.dp)
+        verticalArrangement = Arrangement.spacedBy(12.dp)
     ) {
         Row(
             modifier = Modifier.fillMaxWidth(),
-            horizontalArrangement = Arrangement.SpaceBetween,
-            verticalAlignment = Alignment.CenterVertically
+            verticalAlignment = Alignment.CenterVertically,
+            horizontalArrangement = Arrangement.spacedBy(14.dp)
         ) {
-            Text(
-                text = "Today's Focus Progress",
-                style = MaterialTheme.typography.titleMedium,
-                color = palette.textPrimary
-            )
-            Text(
-                text = if (todayFocusMinutes > 0L) {
-                    DurationSelection.fromTotalMinutes(todayFocusMinutes).formattedCompact()
-                } else {
-                    "0m"
-                },
-                style = MaterialTheme.typography.titleSmall.copy(
-                    fontFamily = JetBrainsMonoFamily,
-                    fontWeight = FontWeight.SemiBold
-                ),
-                color = palette.textPrimary
-            )
+            Box(
+                modifier = Modifier.size(64.dp),
+                contentAlignment = Alignment.Center
+            ) {
+                val trackColor = palette.divider
+                val ringColor = if (goalRatio >= 1f) palette.success else palette.accentStrong
+                Canvas(modifier = Modifier.fillMaxSize()) {
+                    val strokePx = 6.dp.toPx()
+                    drawArc(
+                        color = trackColor,
+                        startAngle = -90f,
+                        sweepAngle = 360f,
+                        useCenter = false,
+                        style = Stroke(width = strokePx, cap = StrokeCap.Round)
+                    )
+                    drawArc(
+                        color = ringColor,
+                        startAngle = -90f,
+                        sweepAngle = 360f * animatedRatio,
+                        useCenter = false,
+                        style = Stroke(width = strokePx, cap = StrokeCap.Round)
+                    )
+                }
+                Text(
+                    text = "${(goalRatio * 100).toInt()}%",
+                    style = MaterialTheme.typography.labelMedium.copy(
+                        fontFamily = JetBrainsMonoFamily,
+                        fontWeight = FontWeight.Bold
+                    ),
+                    color = palette.textPrimary
+                )
+            }
+
+            Column(
+                modifier = Modifier.weight(1f),
+                verticalArrangement = Arrangement.spacedBy(3.dp)
+            ) {
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.SpaceBetween,
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    Text(
+                        text = "Today's Focus Goal",
+                        style = MaterialTheme.typography.titleMedium,
+                        color = palette.textPrimary
+                    )
+                    Text(
+                        text = "$streakDays day streak",
+                        style = MaterialTheme.typography.labelSmall.copy(
+                            fontFamily = JetBrainsMonoFamily,
+                            fontWeight = FontWeight.SemiBold
+                        ),
+                        color = if (streakDays > 0) palette.champagneStrong else palette.textMuted,
+                        modifier = Modifier
+                            .clip(CircleShape)
+                            .background(if (streakDays > 0) palette.champagneContainer else palette.surfaceSecondary)
+                            .padding(horizontal = 8.dp, vertical = 3.dp)
+                            .testTag("home_streak_badge")
+                    )
+                }
+
+                Text(
+                    text = "${DurationSelection.fromTotalMinutes(todayFocusMinutes).formattedCompact()} / ${
+                        DurationSelection.fromTotalMinutes(goalMinutes.toLong()).formattedCompact()
+                    } • $todayCompleted completed today",
+                    style = MaterialTheme.typography.bodySmall.copy(fontFamily = JetBrainsMonoFamily),
+                    color = palette.textSecondary
+                )
+
+                if (linkedLockedCount > 0) {
+                    Text(
+                        text = "$linkedLockedCount linked device(s) currently in Focus Lock",
+                        style = MaterialTheme.typography.labelSmall,
+                        color = palette.emeraldStrong,
+                        modifier = Modifier
+                            .clickable(role = Role.Button, onClick = onOpenAccountSettings)
+                            .testTag("home_linked_devices_locked_pill")
+                    )
+                }
+            }
         }
 
-        LinearProgressIndicator(
-            progress = { animatedRatio },
-            color = palette.accentStrong,
-            trackColor = palette.divider,
-            strokeCap = StrokeCap.Round,
-            modifier = Modifier
-                .fillMaxWidth()
-                .height(6.dp)
-                .clip(CircleShape)
-        )
-
-        Row(
+        val quickLockEnabled = activeSession == null || activeSession.isTerminal
+        FlowRow(
             modifier = Modifier.fillMaxWidth(),
-            horizontalArrangement = Arrangement.SpaceBetween
+            horizontalArrangement = Arrangement.spacedBy(8.dp),
+            verticalArrangement = Arrangement.spacedBy(8.dp)
         ) {
-            Text(
-                text = if (todayRecords.isEmpty()) {
-                    "No focus sessions completed today yet"
-                } else {
-                    "$todayCompleted of ${todayRecords.size} sessions completed today"
-                },
-                style = MaterialTheme.typography.bodySmall,
-                color = palette.textSecondary
-            )
-            Text(
-                text = "All-time: ${records.size}",
-                style = MaterialTheme.typography.labelSmall.copy(fontFamily = JetBrainsMonoFamily),
-                color = palette.textSecondary
-            )
+            listOf(15L to "15m Focus", 30L to "30m Focus", 60L to "1h Deep").forEach { (mins, label) ->
+                Box(
+                    modifier = Modifier
+                        .minimumInteractiveComponentSize()
+                        .clip(RoundedCornerShape(12.dp))
+                        .background(if (quickLockEnabled) palette.accentContainer else palette.surfaceSecondary)
+                        .border(
+                            1.dp,
+                            if (quickLockEnabled) palette.accent.copy(alpha = 0.42f) else palette.cardBorder,
+                            RoundedCornerShape(12.dp)
+                        )
+                        .clickable(enabled = quickLockEnabled, role = Role.Button) {
+                            onQuickStartFocusLock(mins)
+                        }
+                        .padding(horizontal = 12.dp, vertical = 8.dp)
+                        .testTag("home_quick_focus_${mins}m"),
+                    contentAlignment = Alignment.Center
+                ) {
+                    Text(
+                        text = label,
+                        style = MaterialTheme.typography.labelMedium.copy(fontWeight = FontWeight.SemiBold),
+                        color = if (quickLockEnabled) palette.accentStrong else palette.textMuted
+                    )
+                }
+            }
+
+            Box(
+                modifier = Modifier
+                    .minimumInteractiveComponentSize()
+                    .clip(RoundedCornerShape(12.dp))
+                    .background(palette.champagneContainer)
+                    .border(1.dp, palette.champagne.copy(alpha = 0.35f), RoundedCornerShape(12.dp))
+                    .clickable(role = Role.Button, onClick = onOpenFlipClock)
+                    .padding(horizontal = 12.dp, vertical = 8.dp)
+                    .testTag("home_quick_flip_clock_chip"),
+                contentAlignment = Alignment.Center
+            ) {
+                Text(
+                    text = "Flip Clock",
+                    style = MaterialTheme.typography.labelMedium.copy(fontWeight = FontWeight.SemiBold),
+                    color = palette.champagneStrong
+                )
+            }
         }
     }
 }
@@ -732,11 +849,23 @@ private fun AppUsageDashboardCard(
             horizontalArrangement = Arrangement.SpaceBetween,
             verticalAlignment = Alignment.CenterVertically
         ) {
-            Text(
-                text = "Today's Screen Time",
-                style = MaterialTheme.typography.titleSmall.copy(fontWeight = FontWeight.SemiBold),
-                color = palette.textPrimary
-            )
+            Row(
+                verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.spacedBy(6.dp)
+            ) {
+                Text(
+                    text = "Today's Screen Time",
+                    style = MaterialTheme.typography.titleSmall.copy(fontWeight = FontWeight.SemiBold),
+                    color = palette.textPrimary
+                )
+                if (summary.excludedCount > 0) {
+                    Text(
+                        text = "${summary.excludedCount} excluded",
+                        style = MaterialTheme.typography.labelSmall,
+                        color = palette.textMuted
+                    )
+                }
+            }
             if (summary.hasUsagePermission) {
                 Text(
                     text = formatUsageDuration(summary.totalScreenTimeMs),
@@ -908,32 +1037,39 @@ private fun EnforcementStatusPill(
         EnforcementMode.NONE -> "Setup Needed"
     }
 
-    Row(
+    Box(
         modifier = Modifier
+            .minimumInteractiveComponentSize()
             .clip(CircleShape)
-            .background(bgColor)
-            .border(1.dp, fgColor.copy(alpha = 0.42f), CircleShape)
-            .clickable(onClick = onClick)
-            .padding(horizontal = 12.dp, vertical = 8.dp)
+            .clickable(role = Role.Button, onClick = onClick)
             .testTag("home_enforcement_status_pill"),
-        verticalAlignment = Alignment.CenterVertically
+        contentAlignment = Alignment.Center
     ) {
-        if (isReady) {
-            PulsingStatusDot(color = fgColor, size = 7.dp, reducedMotion = reducedMotion)
-        } else {
-            Icon(
-                imageVector = Icons.Outlined.Warning,
-                contentDescription = label,
-                tint = fgColor,
-                modifier = Modifier.size(16.dp)
+        Row(
+            modifier = Modifier
+                .clip(CircleShape)
+                .background(bgColor)
+                .border(1.dp, fgColor.copy(alpha = 0.42f), CircleShape)
+                .padding(horizontal = 12.dp, vertical = 7.dp),
+            verticalAlignment = Alignment.CenterVertically
+        ) {
+            if (isReady) {
+                PulsingStatusDot(color = fgColor, size = 7.dp, reducedMotion = reducedMotion)
+            } else {
+                Icon(
+                    imageVector = Icons.Outlined.Warning,
+                    contentDescription = label,
+                    tint = fgColor,
+                    modifier = Modifier.size(16.dp)
+                )
+            }
+            Spacer(Modifier.width(6.dp))
+            Text(
+                text = label,
+                style = MaterialTheme.typography.labelMedium.copy(fontWeight = FontWeight.SemiBold),
+                color = fgColor
             )
         }
-        Spacer(Modifier.width(6.dp))
-        Text(
-            text = label,
-            style = MaterialTheme.typography.labelMedium,
-            color = fgColor
-        )
     }
 }
 

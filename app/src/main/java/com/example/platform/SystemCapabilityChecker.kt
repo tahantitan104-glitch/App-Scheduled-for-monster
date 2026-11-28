@@ -89,7 +89,8 @@ class SystemCapabilityChecker(private val context: Context) {
         val isConnected = isAccessibilityServiceConnected()
         val isEnabledInSettings = isAccessibilityEnabledInSettings()
         val accHealthState = when {
-            isConnected || isEnabledInSettings -> AccessibilityHealthState.ENABLED_CONNECTED
+            isConnected -> AccessibilityHealthState.ENABLED_CONNECTED
+            isEnabledInSettings -> AccessibilityHealthState.ENABLED_DISCONNECTED
             else -> AccessibilityHealthState.DISABLED
         }
         val notificationPolicySupported = Build.VERSION.SDK_INT >= Build.VERSION_CODES.M
@@ -153,8 +154,8 @@ class SystemCapabilityChecker(private val context: Context) {
         isAccessibilityServiceConnected() || isAccessibilityEnabledInSettings()
 
     fun getAccessibilityHealthState(): AccessibilityHealthState = when {
-        isAccessibilityServiceConnected() || isAccessibilityEnabledInSettings() ->
-            AccessibilityHealthState.ENABLED_CONNECTED
+        isAccessibilityServiceConnected() -> AccessibilityHealthState.ENABLED_CONNECTED
+        isAccessibilityEnabledInSettings() -> AccessibilityHealthState.ENABLED_DISCONNECTED
         else -> AccessibilityHealthState.DISABLED
     }
 

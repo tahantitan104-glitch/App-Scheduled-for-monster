@@ -13,28 +13,36 @@ import androidx.lifecycle.viewModelScope
 import androidx.lifecycle.viewmodel.CreationExtras
 import com.example.ResolveApplication
 import com.example.data.repository.DelayedPresetRepository
+import com.example.domain.model.AccountabilityPartnerConfig
 import com.example.domain.model.ActiveSession
 import com.example.domain.model.AppLockAuthMethod
 import com.example.domain.model.AppLockPinLength
 import com.example.domain.model.AppLockVerificationResult
+import com.example.domain.model.AppUsageQuotaRule
+import com.example.domain.model.ContentBlockerConfig
 import com.example.domain.model.DailyAppUsageSummary
 import com.example.domain.model.DelayedLockPreset
 import com.example.domain.model.DeviceAnalysisReport
 import com.example.domain.model.DurationSelection
 import com.example.domain.model.FocusMessageFrequency
+import com.example.domain.model.FocusProfile
 import com.example.domain.model.ForceDarkModeApproach
 import com.example.domain.model.ForceDarkPreferences
 import com.example.domain.model.InstalledAppInfo
+import com.example.domain.model.InterceptedAppStat
 import com.example.domain.model.LockMode
 import com.example.domain.model.LockProfileSettings
 import com.example.domain.model.LockReminderStyle
 import com.example.domain.model.LockSchedule
 import com.example.domain.model.MascotPreferences
 import com.example.domain.model.MascotType
+import com.example.domain.model.MindfulPauseConfig
 import com.example.domain.model.NotificationControlConfig
 import com.example.domain.model.NotificationProtectionState
 import com.example.domain.model.ProtectionRecoveryAction
 import com.example.domain.model.ProtectionStatus
+import com.example.domain.model.RecoveryVerificationResult
+import com.example.domain.model.ResolveThemeId
 import com.example.domain.model.ScheduleType
 import com.example.domain.model.SessionHistoryRecord
 import com.example.domain.model.SystemCapabilityStatus
@@ -58,6 +66,7 @@ import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asSharedFlow
 import kotlinx.coroutines.flow.asStateFlow
+import kotlinx.coroutines.flow.combine
 import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.launch
 import java.time.DayOfWeek
@@ -163,6 +172,54 @@ class ResolveViewModel(
         container.preferencesRepository.landscapeTiltModeFlow
             .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), false)
 
+    val appThemeId: StateFlow<ResolveThemeId> =
+        container.preferencesRepository.appThemeIdFlow
+            .stateIn(viewModelScope, SharingStarted.Eagerly, ResolveThemeId.DEEP_FOREST_GREEN)
+
+    val dailyFocusGoalMinutes: StateFlow<Int> =
+        container.preferencesRepository.dailyFocusGoalMinutesFlow
+            .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), 120)
+
+    val showSetupTips: StateFlow<Boolean> =
+        container.preferencesRepository.showSetupTipsFlow
+            .stateIn(viewModelScope, SharingStarted.Eagerly, false)
+
+    val excludedScreenTimePackages: StateFlow<Set<String>> =
+        container.preferencesRepository.excludedScreenTimePackagesFlow
+            .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), emptySet())
+
+    val customFocusProfiles: StateFlow<List<FocusProfile>> =
+        container.preferencesRepository.customFocusProfilesFlow
+            .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), emptyList())
+
+    val antiBypassStrictGuard: StateFlow<Boolean> =
+        container.preferencesRepository.antiBypassStrictGuardFlow
+            .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), true)
+
+    val emergencyCooldownSeconds: StateFlow<Int> =
+        container.preferencesRepository.emergencyCooldownSecondsFlow
+            .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), 15)
+
+    val mindfulPauseConfig: StateFlow<MindfulPauseConfig> =
+        container.preferencesRepository.mindfulPauseConfigFlow
+            .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), MindfulPauseConfig())
+
+    val dailyQuotaRules: StateFlow<List<AppUsageQuotaRule>> =
+        container.preferencesRepository.dailyQuotaRulesFlow
+            .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), emptyList())
+
+    val contentBlockerConfig: StateFlow<ContentBlockerConfig> =
+        container.preferencesRepository.contentBlockerConfigFlow
+            .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), ContentBlockerConfig())
+
+    val dnsBlockedCount: StateFlow<Int> =
+        container.preferencesRepository.dnsBlockedCountFlow
+            .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), 0)
+
+    val accountabilityPartnerConfig: StateFlow<AccountabilityPartnerConfig> =
+        container.accountabilityPartnerManager.configFlow
+            .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), AccountabilityPartnerConfig())
+
     private val _deviceAnalysisReport = MutableStateFlow(DeviceAnalysisReport())
     val deviceAnalysisReport: StateFlow<DeviceAnalysisReport> = _deviceAnalysisReport.asStateFlow()
 
@@ -182,6 +239,29 @@ class ResolveViewModel(
 
     private val _installedApps = MutableStateFlow<List<InstalledAppInfo>>(emptyList())
     val installedApps: StateFlow<List<InstalledAppInfo>> = _installedApps.asStateFlow()
+
+    val focusProfiles: StateFlow<List<FocusProfile>> =
+        combine(container.preferencesRepository.customFocusProfilesFlow) { (custom) ->
+            FocusProfile.BUILT_IN_PRESETS + custom
+        }.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), FocusProfile.BUILT_IN_PRESETS)
+
+    val interceptedAppStats: StateFlow<List<InterceptedAppStat>> =
+        combine(
+            container.preferencesRepository.interceptedAppCountsFlow,
+            _installedApps
+        ) { counts, apps ->
+            val appNameMap = apps.associateBy({ it.packageName }, { it.appName })
+            counts.entries
+                .filter { it.value > 0 }
+                .sortedByDescending { it.value }
+                .map { (pkg, count) ->
+                    InterceptedAppStat(
+                        packageName = pkg,
+                        appName = appNameMap[pkg] ?: pkg.substringAfterLast('.'),
+                        count = count
+                    )
+                }
+        }.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), emptyList())
 
     // Authoritative saved-state-backed durations (immune to Activity recreation)
     private val _instantDuration = MutableStateFlow(
@@ -280,9 +360,14 @@ class ResolveViewModel(
 
     fun refreshAppUsage() {
         viewModelScope.launch {
-            _dailyAppUsage.value = container.appUsageRepository.queryTodayUsageSummary()
+            val excluded = container.preferencesRepository.getExcludedScreenTimePackagesSnapshot()
+            _dailyAppUsage.value = container.appUsageRepository.queryTodayUsageSummary(
+                excludedPackages = excluded
+            )
         }
     }
+
+    fun refreshDailyAppUsage() = refreshAppUsage()
 
     fun refreshForceDarkReport() {
         _forceDarkReport.value = ForceDarkCapabilityHelper.inspect(getApplication())
@@ -1120,6 +1205,258 @@ class ResolveViewModel(
         viewModelScope.launch {
             container.mascotSelectionManager.setLockReminderStyle(style)
         }
+    }
+
+    // --- v1.0.9 International Features, Themes, Profiles, Quotas, Blocker & Remote Telemetry ---
+
+    fun startQuickFocusLock(durationMinutes: Long) {
+        val safeMinutes = durationMinutes.coerceIn(1L, 720L)
+        viewModelScope.launch {
+            val syncState = accountSyncState.value
+            val shouldSync = syncInstantLockToDevices.value && syncState.isSignedIn && syncState.syncLockEnabled
+            val profile = container.preferencesRepository.getLockProfileSettingsSnapshot(LockMode.INSTANT)
+            val phoneAccess = _phoneAccessEnabled.value
+            val result = engine.startInstantLock(
+                lockDurationMinutes = safeMinutes,
+                allowedPackages = profile.effectiveAllowedPackages,
+                phoneAccessEnabled = phoneAccess,
+                isStrictMode = profile.strictMode,
+                showFlipClockShortcut = profile.showFlipClockShortcut
+            )
+            when (result) {
+                EngineStartResult.Started -> {
+                    if (shouldSync) {
+                        val nowWall = container.clockProvider.wallClockMs()
+                        container.multiDeviceSyncCoordinator.syncLockProfileToCloud(profile)
+                        container.multiDeviceSyncCoordinator.publishLockTriggerIfEnabled(
+                            mode = LockMode.INSTANT,
+                            freeUseMinutes = 0L,
+                            lockDurationMinutes = safeMinutes,
+                            freeUseDeadlineWallMs = 0L,
+                            lockExpirationWallMs = nowWall + safeMinutes * 60_000L,
+                            syncAcrossDevices = true,
+                            strictMode = profile.strictMode,
+                            showFlipClockShortcut = profile.showFlipClockShortcut,
+                            allowSelectedApps = profile.allowSelectedApps,
+                            phoneAccessEnabled = phoneAccess
+                        )
+                    }
+                    _events.emit(UiEvent.ShowMessage("Quick ${safeMinutes}m Focus Lock started."))
+                }
+                is EngineStartResult.Blocked -> _events.emit(UiEvent.ShowMessage(result.reason))
+            }
+        }
+    }
+
+    fun setAppTheme(themeId: ResolveThemeId) {
+        viewModelScope.launch {
+            container.preferencesRepository.setAppThemeId(themeId)
+        }
+    }
+
+    fun setDailyFocusGoalMinutes(minutes: Int) {
+        viewModelScope.launch {
+            container.preferencesRepository.setDailyFocusGoalMinutes(minutes)
+        }
+    }
+
+    fun setShowSetupTips(show: Boolean) {
+        viewModelScope.launch {
+            container.preferencesRepository.setShowSetupTips(show)
+        }
+    }
+
+    fun toggleExcludedScreenTimePackage(packageName: String) {
+        if (packageName.isBlank()) return
+        viewModelScope.launch {
+            val current = container.preferencesRepository.getExcludedScreenTimePackagesSnapshot().toMutableSet()
+            if (!current.add(packageName)) {
+                current.remove(packageName)
+            }
+            container.preferencesRepository.setExcludedScreenTimePackages(current)
+            val excluded = container.preferencesRepository.getExcludedScreenTimePackagesSnapshot()
+            _dailyAppUsage.value = container.appUsageRepository.queryTodayUsageSummary(excludedPackages = excluded)
+        }
+    }
+
+    fun applyFocusProfile(mode: LockMode, profile: FocusProfile) {
+        viewModelScope.launch {
+            val nowWall = container.clockProvider.wallClockMs()
+            val current = container.preferencesRepository.getLockProfileSettingsSnapshot(mode)
+            val updatedPackages = if (!profile.builtIn && profile.allowedPackages.isNotEmpty()) {
+                profile.allowedPackages.distinct()
+            } else {
+                current.allowedPackages
+            }
+            val updated = current.copy(
+                strictMode = profile.strictMode,
+                allowSelectedApps = profile.allowSelectedApps,
+                showFlipClockShortcut = profile.showFlipClockShortcut,
+                allowedPackages = updatedPackages,
+                updatedAtWallMs = nowWall
+            )
+            container.preferencesRepository.saveLockProfileSettings(updated)
+            setPhoneAccessEnabled(profile.phoneAccessEnabled)
+            val durationSelection = DurationSelection.fromTotalMinutes(profile.defaultDurationMinutes)
+            when (mode) {
+                LockMode.INSTANT -> updateInstantDuration(durationSelection)
+                LockMode.DELAYED -> updateDelayedLock(durationSelection)
+                LockMode.SCHEDULED -> updateScheduleLockDuration(durationSelection)
+            }
+            container.multiDeviceSyncCoordinator.syncLockProfileToCloud(updated)
+            _events.emit(UiEvent.ShowMessage("Applied ${profile.name} profile."))
+        }
+    }
+
+    fun saveCustomFocusProfile(
+        name: String,
+        durationMinutes: Long,
+        strictMode: Boolean,
+        allowSelectedApps: Boolean,
+        showFlipClockShortcut: Boolean,
+        allowedPackages: List<String>
+    ) {
+        viewModelScope.launch {
+            val cleanName = name.trim().take(40)
+            if (cleanName.isEmpty()) {
+                _events.emit(UiEvent.ShowMessage("Enter a profile name."))
+                return@launch
+            }
+            val profile = FocusProfile(
+                profileId = "prof_${UUID.randomUUID().toString().replace("-", "").take(12)}",
+                name = cleanName,
+                subtitle = "${durationMinutes}m · ${if (strictMode) "Strict" else "Standard"} · ${allowedPackages.size} apps",
+                defaultDurationMinutes = durationMinutes.coerceIn(5L, 1440L),
+                strictMode = strictMode,
+                allowSelectedApps = allowSelectedApps,
+                phoneAccessEnabled = _phoneAccessEnabled.value,
+                showFlipClockShortcut = showFlipClockShortcut,
+                allowedPackages = allowedPackages.distinct(),
+                builtIn = false
+            )
+            container.preferencesRepository.saveCustomFocusProfile(profile)
+            _events.emit(UiEvent.ShowMessage("Saved Focus Profile \"$cleanName\"."))
+        }
+    }
+
+    fun deleteCustomFocusProfile(profileId: String) {
+        viewModelScope.launch {
+            container.preferencesRepository.deleteCustomFocusProfile(profileId)
+            _events.emit(UiEvent.ShowMessage("Focus Profile deleted."))
+        }
+    }
+
+    fun setAntiBypassStrictGuard(enabled: Boolean) {
+        viewModelScope.launch {
+            container.preferencesRepository.setAntiBypassStrictGuard(enabled)
+        }
+    }
+
+    fun setEmergencyCooldownSeconds(seconds: Int) {
+        viewModelScope.launch {
+            container.preferencesRepository.setEmergencyCooldownSeconds(seconds)
+        }
+    }
+
+    fun saveMindfulPauseConfig(config: MindfulPauseConfig) {
+        viewModelScope.launch {
+            container.preferencesRepository.saveMindfulPauseConfig(config)
+            _events.emit(UiEvent.ShowMessage("Mindful Breathing Pause settings saved."))
+        }
+    }
+
+    fun saveDailyQuotaRule(rule: AppUsageQuotaRule) {
+        viewModelScope.launch {
+            container.preferencesRepository.saveDailyQuotaRule(rule)
+            _events.emit(UiEvent.ShowMessage("Daily quota saved for ${rule.appName}."))
+        }
+    }
+
+    fun deleteDailyQuotaRule(packageName: String) {
+        viewModelScope.launch {
+            container.preferencesRepository.deleteDailyQuotaRule(packageName)
+            _events.emit(UiEvent.ShowMessage("Daily quota rule removed."))
+        }
+    }
+
+    fun saveContentBlockerConfig(config: ContentBlockerConfig) {
+        viewModelScope.launch {
+            container.preferencesRepository.saveContentBlockerConfig(config)
+            val msg = if (config.enabled && config.vpnDnsBlockerEnabled) {
+                "Local VPN DNS & Content Blocker saved."
+            } else {
+                "Content Blocker preferences saved."
+            }
+            _events.emit(UiEvent.ShowMessage(msg))
+        }
+    }
+
+    fun resetDnsBlockedCount() {
+        viewModelScope.launch {
+            container.preferencesRepository.resetDnsBlockedCount()
+            _events.emit(UiEvent.ShowMessage("DNS blocked counter reset."))
+        }
+    }
+
+    fun saveAccountabilityPartner(
+        enabled: Boolean,
+        partnerName: String,
+        newPinOrNull: String?,
+        requireForStrictUnlock: Boolean,
+        requireForQuotaOverride: Boolean
+    ) {
+        viewModelScope.launch {
+            val saved = container.accountabilityPartnerManager.savePartnerSetup(
+                enabled = enabled,
+                partnerName = partnerName,
+                newPinOrNull = newPinOrNull,
+                requireForStrictUnlock = requireForStrictUnlock,
+                requireForQuotaOverride = requireForQuotaOverride
+            )
+            if (saved) {
+                _events.emit(UiEvent.ShowMessage("Accountability Partner protection updated."))
+            } else {
+                _events.emit(UiEvent.ShowMessage("Partner PIN must be 4 to 8 numeric digits."))
+            }
+        }
+    }
+
+    fun clearAccountabilityPartnerPin() {
+        viewModelScope.launch {
+            container.accountabilityPartnerManager.clearPartnerPin()
+            _events.emit(UiEvent.ShowMessage("Accountability Partner PIN cleared."))
+        }
+    }
+
+    fun resetInterceptedStats() {
+        viewModelScope.launch {
+            container.preferencesRepository.clearInterceptedAppCounts()
+            _events.emit(UiEvent.ShowMessage("Intercepted app stats cleared."))
+        }
+    }
+
+    fun sendRemoteExtendCommand(targetDeviceId: String, extendMinutes: Long = 15L) {
+        viewModelScope.launch(syncExceptionHandler) {
+            container.multiDeviceSyncCoordinator.sendRemoteLockCommand(
+                action = "EXTEND",
+                targetDeviceId = targetDeviceId,
+                extendMinutes = extendMinutes
+            )
+        }
+    }
+
+    suspend fun verifyRecoveryCodeForRemoteStop(
+        rawCode: String,
+        targetDeviceId: String
+    ): RecoveryVerificationResult {
+        val verification = container.recoveryCodeManager.verifyRecoveryCode(rawCode)
+        if (verification is RecoveryVerificationResult.Verified) {
+            container.multiDeviceSyncCoordinator.sendRemoteLockCommand(
+                action = "STOP",
+                targetDeviceId = targetDeviceId
+            )
+        }
+        return verification
     }
 
     companion object {

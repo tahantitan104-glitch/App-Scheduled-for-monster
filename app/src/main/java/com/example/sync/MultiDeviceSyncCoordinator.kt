@@ -21,6 +21,9 @@ import com.example.service.ResolveSyncService
 import com.example.session.EngineStartResult
 import com.example.session.LockSessionEngine
 import android.util.Log
+import org.json.JSONArray
+import org.json.JSONObject
+import java.util.UUID
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.CoroutineExceptionHandler
 import kotlinx.coroutines.CoroutineScope
@@ -83,6 +86,7 @@ class MultiDeviceSyncCoordinator(
 
     private val scope = CoroutineScope(SupervisorJob() + Dispatchers.Main.immediate + syncExceptionHandler)
     private val commandMutex = Mutex()
+    private val outboxMutex = Mutex()
 
     private val _uiState = MutableStateFlow(AccountSyncUiState())
     val uiState: StateFlow<AccountSyncUiState> = _uiState.asStateFlow()
@@ -111,6 +115,12 @@ class MultiDeviceSyncCoordinator(
     @Volatile
     private var hasSeenRemoteNonBlankAvatar: Boolean = false
 
+    @Volatile
+    private var lastMissingSelfRegisterWallMs: Long = 0L
+
+    @Volatile
+    private var initialRegistrationComplete: Boolean = false
+
     private data class FlipSyncedSignature(
         val use24HourFormat: Boolean,
         val useSystemTimeFormat: Boolean,
@@ -125,10 +135,21 @@ class MultiDeviceSyncCoordinator(
         val showBattery: Boolean,
         val showWeather: Boolean,
         val weatherLocationQuery: String,
+        val weatherUseFahrenheit: Boolean,
+        val weatherAutoDetect: Boolean,
         val clockTickerSoundEnabled: Boolean,
         val customTag: String,
         val autoRepeat: Boolean,
-        val zoomFraction: Float
+        val zoomFraction: Float,
+        val pomodoroEnabled: Boolean,
+        val pomodoroFocusMinutes: Int,
+        val pomodoroBreakMinutes: Int,
+        val ambientSoundType: String,
+        val ambientVolume: Float,
+        val oledBurnInProtection: Boolean,
+        val syncFlipTimerWithFocusLock: Boolean,
+        val playAmbientSoundDuringFocusLock: Boolean,
+        val ambientPlayInBackground: Boolean
     )
 
     private fun FlipClockSettings.syncedSignature(): FlipSyncedSignature = FlipSyncedSignature(
@@ -145,10 +166,21 @@ class MultiDeviceSyncCoordinator(
         showBattery = showBattery,
         showWeather = showWeather,
         weatherLocationQuery = weatherLocationQuery,
+        weatherUseFahrenheit = weatherUseFahrenheit,
+        weatherAutoDetect = weatherAutoDetect,
         clockTickerSoundEnabled = clockTickerSoundEnabled,
         customTag = customTag,
         autoRepeat = autoRepeat,
-        zoomFraction = clampedZoomFraction
+        zoomFraction = clampedZoomFraction,
+        pomodoroEnabled = pomodoroEnabled,
+        pomodoroFocusMinutes = pomodoroFocusMinutes,
+        pomodoroBreakMinutes = pomodoroBreakMinutes,
+        ambientSoundType = ambientSoundType.storageKey,
+        ambientVolume = ambientVolume,
+        oledBurnInProtection = oledBurnInProtection,
+        syncFlipTimerWithFocusLock = syncFlipTimerWithFocusLock,
+        playAmbientSoundDuringFocusLock = playAmbientSoundDuringFocusLock,
+        ambientPlayInBackground = ambientPlayInBackground
     )
 
     fun start() {
@@ -332,14 +364,40 @@ class MultiDeviceSyncCoordinator(
             )
         }
 
+        initialRegistrationComplete = false
+        lastMissingSelfRegisterWallMs = 0L
         scope.launch {
-            gateway.ensureUserProfile(user)
-            gateway.registerOrUpdateDevice(
-                userId = uid,
-                deviceId = deviceId,
-                deviceName = deviceName,
-                syncEnabled = syncEnabled
-            )
+            var attempt = 0
+            var profileDone = false
+            var deviceDone = false
+            while (attempt < 4 && activeUid == uid && (!profileDone || !deviceDone)) {
+                if (!profileDone) {
+                    val pRes = gateway.ensureUserProfile(user)
+                    if (pRes.isSuccess) {
+                        profileDone = true
+                    } else if (pRes.exceptionOrNull()?.let { CloudAccountRepository.isAuthOrPermissionError(it) } == true) {
+                        break
+                    }
+                }
+                if (!deviceDone) {
+                    val dRes = gateway.registerOrUpdateDevice(
+                        userId = uid,
+                        deviceId = deviceId,
+                        deviceName = deviceName,
+                        syncEnabled = preferencesRepository.isSyncLockEnabledSnapshot()
+                    )
+                    if (dRes.isSuccess) {
+                        deviceDone = true
+                        gateway.refreshSyncNow()
+                    } else if (dRes.exceptionOrNull()?.let { CloudAccountRepository.isAuthOrPermissionError(it) } == true) {
+                        break
+                    }
+                }
+                if (profileDone && deviceDone) break
+                attempt++
+                delay(1_800L * attempt)
+            }
+            initialRegistrationComplete = true
         }
 
         startUserListeners(uid, deviceId)
@@ -360,6 +418,9 @@ class MultiDeviceSyncCoordinator(
 
     private fun startUserListeners(uid: String, localDeviceId: String) {
         activeUserListenersJob = scope.launch {
+            launch {
+                runCatching { flushPendingLockCommands() }
+            }
             // 1. Profile & Synced Avatar stream
             launch {
                 gateway.observeUserProfile(uid)
@@ -450,9 +511,46 @@ class MultiDeviceSyncCoordinator(
                     .catch { error ->
                         if (error is CancellationException) throw error
                     }
-                    .collect { devices ->
+                    .collect { rawDevices ->
+                        val normalized = rawDevices
+                            .filter { it.deviceId.isNotBlank() }
+                            .distinctBy { it.deviceId }
+                            .map { dev ->
+                                val cleanName = dev.deviceName.trim()
+                                    .takeUnless { it.equals("unknown", ignoreCase = true) }
+                                    .orEmpty()
+                                    .ifBlank {
+                                        if (dev.deviceId == localDeviceId) resolveReadableDeviceName()
+                                        else "Android Device"
+                                    }
+                                if (cleanName == dev.deviceName) dev else dev.copy(deviceName = cleanName)
+                            }
+                            .sortedWith(
+                                compareByDescending<CloudDeviceInfo> { it.deviceId == localDeviceId }
+                                    .thenByDescending { it.syncEnabled }
+                                    .thenBy { it.deviceName.lowercase() }
+                            )
                         _uiState.update { state ->
-                            state.copy(connectedDevices = devices.sortedByDescending { it.syncEnabled })
+                            state.copy(connectedDevices = normalized)
+                        }
+                        if (initialRegistrationComplete &&
+                            localDeviceId.isNotBlank() &&
+                            normalized.none { it.deviceId == localDeviceId }
+                        ) {
+                            val now = clockProvider.wallClockMs()
+                            if (now - lastMissingSelfRegisterWallMs > 15_000L) {
+                                lastMissingSelfRegisterWallMs = now
+                                scope.launch {
+                                    if (activeUid == uid) {
+                                        gateway.registerOrUpdateDevice(
+                                            userId = uid,
+                                            deviceId = localDeviceId,
+                                            deviceName = resolveReadableDeviceName(),
+                                            syncEnabled = preferencesRepository.isSyncLockEnabledSnapshot()
+                                        )
+                                    }
+                                }
+                            }
                         }
                     }
             }
@@ -551,6 +649,40 @@ class MultiDeviceSyncCoordinator(
                         }
                 }
             }
+            // 9. Live device lock status telemetry publisher
+            launch {
+                var lastPushed: Triple<String, Long, Long>? = null
+                sessionEngine.activeSession.collect { session ->
+                    val mode = when {
+                        session == null || session.isTerminal -> ""
+                        session.state == com.example.domain.model.SessionState.DELAYED_FREE_USE_ACTIVE -> "DELAYED"
+                        session.state == com.example.domain.model.SessionState.LOCK_ENFORCEMENT_ACTIVE ||
+                            session.state == com.example.domain.model.SessionState.LOCK_TRANSITION_PENDING ||
+                            session.state == com.example.domain.model.SessionState.PHONE_CALL_ACTIVE ->
+                            session.mode.name
+                        else -> ""
+                    }
+                    val serverOffset = gateway.estimatedServerOffsetMs()
+                    val expWall = if (mode.isNotEmpty() && (session?.lockExpirationWallMs ?: 0L) > 0L) {
+                        (session!!.lockExpirationWallMs!! + serverOffset).coerceAtLeast(0L)
+                    } else 0L
+                    val freeWall = if (mode == "DELAYED" && (session?.freeUseDeadlineWallMs ?: 0L) > 0L) {
+                        (session!!.freeUseDeadlineWallMs!! + serverOffset).coerceAtLeast(0L)
+                    } else 0L
+                    val key = Triple(mode, expWall, freeWall)
+                    if (key != lastPushed) {
+                        lastPushed = key
+                        gateway.updateDeviceLockStatus(
+                            userId = uid,
+                            deviceId = localDeviceId,
+                            activeLockMode = mode,
+                            activeLockExpiresWallMs = expWall,
+                            activeLockFreeUseWallMs = freeWall,
+                            activeLockUpdatedWallMs = clockProvider.wallClockMs()
+                        )
+                    }
+                }
+            }
         }
     }
 
@@ -573,8 +705,38 @@ class MultiDeviceSyncCoordinator(
             // Always record this command ID as seen so stale commands never re-fire later
             preferencesRepository.recordProcessedSyncCommandId(command.commandId)
 
-            // Respect device-level opt-out toggle ("alada alada" independent operation)
-            if (!preferencesRepository.isSyncLockEnabledSnapshot()) return
+            if (command.targetDeviceId.isNotBlank() && command.targetDeviceId != localDeviceId) {
+                return
+            }
+
+            val action = command.commandAction.uppercase().ifBlank { "START" }
+            val isTargetedToThisDevice = command.targetDeviceId == localDeviceId
+
+            // Respect device-level opt-out toggle for broadcast commands; allow targeted remote control
+            if (!isTargetedToThisDevice && !preferencesRepository.isSyncLockEnabledSnapshot()) return
+
+            if (action == "EXTEND" || action == "STOP") {
+                val result = sessionEngine.applyRemoteLockCommand(
+                    command = command,
+                    allowedPackages = emptyList(),
+                    phoneAccessEnabled = command.phoneAccessEnabled,
+                    isStrictMode = command.strictMode,
+                    showFlipClockShortcut = command.showFlipClockShortcut,
+                    serverClockOffsetMs = gateway.estimatedServerOffsetMs(),
+                    localDeviceId = localDeviceId
+                )
+                val fromName = command.originDeviceName.ifBlank { "another device" }
+                if (result is EngineStartResult.Started) {
+                    val label = if (action == "STOP") {
+                        "Remote stop applied from $fromName"
+                    } else {
+                        "Lock extended by +${command.extendMinutes.coerceAtLeast(1L)}m from $fromName"
+                    }
+                    _uiState.update { it.copy(lastSyncedStatusMessage = label) }
+                    _syncEvents.tryEmit(label)
+                }
+                return
+            }
 
             // Align lock system preferences on this device with the incoming command,
             // while preserving this device's own installed package allowlist
@@ -602,7 +764,8 @@ class MultiDeviceSyncCoordinator(
                 phoneAccessEnabled = command.phoneAccessEnabled,
                 isStrictMode = command.strictMode,
                 showFlipClockShortcut = command.showFlipClockShortcut,
-                serverClockOffsetMs = gateway.estimatedServerOffsetMs()
+                serverClockOffsetMs = gateway.estimatedServerOffsetMs(),
+                localDeviceId = localDeviceId
             )
             if (result is EngineStartResult.Started) {
                 val fromName = command.originDeviceName.ifBlank { "another device" }
@@ -755,6 +918,8 @@ class MultiDeviceSyncCoordinator(
                 showBattery = remote.showBattery,
                 showWeather = remote.showWeather,
                 weatherLocationQuery = remote.weatherLocationQuery,
+                weatherUseFahrenheit = remote.weatherUseFahrenheit,
+                weatherAutoDetect = remote.weatherAutoDetect,
                 clockTickerSoundEnabled = remote.clockTickerSoundEnabled,
                 customTag = remote.customTag,
                 autoRepeat = remote.autoRepeat,
@@ -762,6 +927,15 @@ class MultiDeviceSyncCoordinator(
                     FlipClockSettings.MIN_ZOOM_FRACTION,
                     FlipClockSettings.MAX_ZOOM_FRACTION
                 ),
+                pomodoroEnabled = remote.pomodoroEnabled,
+                pomodoroFocusMinutes = remote.pomodoroFocusMinutes.coerceIn(5, 90),
+                pomodoroBreakMinutes = remote.pomodoroBreakMinutes.coerceIn(1, 30),
+                ambientSoundType = com.example.domain.model.AmbientSoundType.fromKey(remote.ambientSoundType),
+                ambientVolume = remote.ambientVolume.toFloat().coerceIn(0.05f, 1f),
+                oledBurnInProtection = remote.oledBurnInProtection,
+                syncFlipTimerWithFocusLock = remote.syncFlipTimerWithFocusLock,
+                playAmbientSoundDuringFocusLock = remote.playAmbientSoundDuringFocusLock,
+                ambientPlayInBackground = remote.ambientPlayInBackground,
                 updatedAtWallMs = remote.updatedAtWallMs
             )
             lastRemoteOrUploadedFlipSettingsWallMs = remote.updatedAtWallMs
@@ -1018,9 +1192,39 @@ class MultiDeviceSyncCoordinator(
     }
 
     fun refreshSyncNow() {
-        if (!activeUid.isNullOrBlank()) {
-            gateway.refreshSyncNow()
+        val uid = activeUid ?: return
+        gateway.refreshSyncNow()
+        scope.launch {
+            performWakefulSyncCheckInternal(uid)
         }
+    }
+
+    /**
+     * Suspends until pending offline lock commands have been flushed, the local device
+     * heartbeat is refreshed, and the gateway poll/listener signal is poked. Ideal for
+     * SyncWakeAlarmReceiver and foreground sync heartbeats on Android 5.1.1 through 16.
+     */
+    suspend fun performWakefulSyncCheck(): Boolean {
+        val uid = activeUid ?: return false
+        return performWakefulSyncCheckInternal(uid)
+    }
+
+    private suspend fun performWakefulSyncCheckInternal(uid: String): Boolean {
+        gateway.refreshSyncNow()
+        val flushed = runCatching { flushPendingLockCommands() }.getOrDefault(0)
+        val deviceId = preferencesRepository.getOrCreateDeviceInstallId()
+        val syncEnabled = preferencesRepository.isSyncLockEnabledSnapshot()
+        val result = gateway.registerOrUpdateDevice(
+            userId = uid,
+            deviceId = deviceId,
+            deviceName = resolveReadableDeviceName(),
+            syncEnabled = syncEnabled
+        )
+        if (result.isSuccess || flushed > 0) {
+            gateway.refreshSyncNow()
+            _uiState.update { it.copy(lastSyncedStatusMessage = "Sync & device list refreshed.") }
+        }
+        return result.isSuccess || flushed > 0
     }
 
     suspend fun publishLockTriggerIfEnabled(
@@ -1072,8 +1276,247 @@ class MultiDeviceSyncCoordinator(
             }
             _syncEvents.tryEmit("Lock synced to connected devices.")
         } else {
-            _syncEvents.tryEmit("Locked this device (cloud sync skipped while offline).")
+            enqueuePendingLockCommand(
+                PendingSyncLockCommand(
+                    localQueueId = UUID.randomUUID().toString(),
+                    userId = uid,
+                    originDeviceId = deviceId,
+                    originDeviceName = deviceName,
+                    modeName = mode.name,
+                    freeUseDurationMinutes = freeUseMinutes,
+                    lockDurationMinutes = lockDurationMinutes,
+                    issuedAtWallMs = serverNowWall,
+                    intendedStartWallMs = serverNowWall,
+                    freeUseDeadlineWallMs = serverFreeDeadline,
+                    lockExpirationWallMs = serverLockExpire,
+                    scheduleId = scheduleId,
+                    occurrenceId = occurrenceId,
+                    strictMode = strictMode,
+                    showFlipClockShortcut = showFlipClockShortcut,
+                    allowSelectedApps = allowSelectedApps,
+                    phoneAccessEnabled = phoneAccessEnabled,
+                    commandAction = "START",
+                    targetDeviceId = "",
+                    extendMinutes = 0L
+                )
+            )
+            _syncEvents.tryEmit("Locked this device (queued for cloud sync when online).")
         }
+    }
+
+    suspend fun sendRemoteLockCommand(
+        action: String,
+        targetDeviceId: String = "",
+        extendMinutes: Long = 0L,
+        lockDurationMinutes: Long = 15L
+    ): Boolean {
+        val uid = activeUid ?: return false
+        val deviceId = preferencesRepository.getOrCreateDeviceInstallId()
+        val deviceName = resolveReadableDeviceName()
+        val nowWall = clockProvider.wallClockMs()
+        val serverOffset = gateway.estimatedServerOffsetMs()
+        val serverNowWall = nowWall + serverOffset
+        val safeAction = action.uppercase().takeIf { it in setOf("START", "EXTEND", "STOP") } ?: "START"
+        val safeDuration = lockDurationMinutes.coerceIn(1L, 1440L)
+        val safeExtend = extendMinutes.coerceIn(0L, 720L)
+        val targetExpireWall = serverNowWall + safeDuration * 60_000L
+        val result = gateway.publishLockCommand(
+            userId = uid,
+            originDeviceId = deviceId,
+            originDeviceName = deviceName,
+            mode = LockMode.INSTANT,
+            freeUseDurationMinutes = 0L,
+            lockDurationMinutes = safeDuration,
+            issuedAtWallMs = serverNowWall,
+            intendedStartWallMs = serverNowWall,
+            freeUseDeadlineWallMs = 0L,
+            lockExpirationWallMs = targetExpireWall,
+            commandAction = safeAction,
+            targetDeviceId = targetDeviceId,
+            extendMinutes = safeExtend
+        )
+        return if (result.isSuccess) {
+            val commandId = result.getOrNull().orEmpty()
+            if (commandId.isNotBlank()) {
+                preferencesRepository.recordProcessedSyncCommandId(commandId)
+            }
+            val msg = when (safeAction) {
+                "STOP" -> "Remote stop signal sent."
+                "EXTEND" -> "Remote +${safeExtend}m extend sent."
+                else -> "Remote lock command sent."
+            }
+            _syncEvents.tryEmit(msg)
+            true
+        } else {
+            enqueuePendingLockCommand(
+                PendingSyncLockCommand(
+                    localQueueId = UUID.randomUUID().toString(),
+                    userId = uid,
+                    originDeviceId = deviceId,
+                    originDeviceName = deviceName,
+                    modeName = LockMode.INSTANT.name,
+                    freeUseDurationMinutes = 0L,
+                    lockDurationMinutes = safeDuration,
+                    issuedAtWallMs = serverNowWall,
+                    intendedStartWallMs = serverNowWall,
+                    freeUseDeadlineWallMs = 0L,
+                    lockExpirationWallMs = targetExpireWall,
+                    scheduleId = "",
+                    occurrenceId = "",
+                    strictMode = false,
+                    showFlipClockShortcut = false,
+                    allowSelectedApps = true,
+                    phoneAccessEnabled = true,
+                    commandAction = safeAction,
+                    targetDeviceId = targetDeviceId,
+                    extendMinutes = safeExtend
+                )
+            )
+            _syncEvents.tryEmit("Remote command queued — will send automatically when online.")
+            false
+        }
+    }
+
+    suspend fun flushPendingLockCommands(): Int {
+        val uid = activeUid ?: return 0
+        return outboxMutex.withLock {
+            val allPending = decodePendingCommands(preferencesRepository.getPendingLockCommandsRaw())
+            if (allPending.isEmpty()) return@withLock 0
+            val nowServerWall = clockProvider.wallClockMs() + gateway.estimatedServerOffsetMs()
+            val remaining = mutableListOf<PendingSyncLockCommand>()
+            var sentCount = 0
+
+            for (cmd in allPending) {
+                if (cmd.userId != uid) {
+                    remaining.add(cmd)
+                    continue
+                }
+                val expiredStart = cmd.commandAction == "START" &&
+                    cmd.lockExpirationWallMs > 0L &&
+                    nowServerWall >= cmd.lockExpirationWallMs
+                if (expiredStart) {
+                    continue
+                }
+                val mode = LockMode.entries.firstOrNull { it.name == cmd.modeName } ?: LockMode.INSTANT
+                val res = gateway.publishLockCommand(
+                    userId = cmd.userId,
+                    originDeviceId = cmd.originDeviceId,
+                    originDeviceName = cmd.originDeviceName,
+                    mode = mode,
+                    freeUseDurationMinutes = cmd.freeUseDurationMinutes,
+                    lockDurationMinutes = cmd.lockDurationMinutes,
+                    issuedAtWallMs = cmd.issuedAtWallMs,
+                    intendedStartWallMs = cmd.intendedStartWallMs,
+                    freeUseDeadlineWallMs = cmd.freeUseDeadlineWallMs,
+                    lockExpirationWallMs = cmd.lockExpirationWallMs,
+                    scheduleId = cmd.scheduleId,
+                    occurrenceId = cmd.occurrenceId,
+                    strictMode = cmd.strictMode,
+                    showFlipClockShortcut = cmd.showFlipClockShortcut,
+                    allowSelectedApps = cmd.allowSelectedApps,
+                    phoneAccessEnabled = cmd.phoneAccessEnabled,
+                    commandAction = cmd.commandAction,
+                    targetDeviceId = cmd.targetDeviceId,
+                    extendMinutes = cmd.extendMinutes
+                )
+                if (res.isSuccess) {
+                    sentCount++
+                    val commandId = res.getOrNull().orEmpty()
+                    if (commandId.isNotBlank()) {
+                        preferencesRepository.recordProcessedSyncCommandId(commandId)
+                    }
+                } else {
+                    remaining.add(cmd)
+                }
+            }
+
+            preferencesRepository.savePendingLockCommandsRaw(encodePendingCommands(remaining))
+            if (sentCount > 0) {
+                gateway.refreshSyncNow()
+                _syncEvents.tryEmit("Flushed $sentCount queued sync command(s).")
+            }
+            sentCount
+        }
+    }
+
+    suspend fun pendingLockCommandsCount(): Int = outboxMutex.withLock {
+        decodePendingCommands(preferencesRepository.getPendingLockCommandsRaw()).size
+    }
+
+    private suspend fun enqueuePendingLockCommand(cmd: PendingSyncLockCommand) {
+        outboxMutex.withLock {
+            val current = decodePendingCommands(preferencesRepository.getPendingLockCommandsRaw())
+            val next = (current + cmd).takeLast(MAX_PENDING_LOCK_COMMANDS)
+            preferencesRepository.savePendingLockCommandsRaw(encodePendingCommands(next))
+        }
+    }
+
+    private fun decodePendingCommands(raw: String?): List<PendingSyncLockCommand> {
+        if (raw.isNullOrBlank()) return emptyList()
+        return runCatching {
+            val arr = JSONArray(raw)
+            buildList {
+                for (i in 0 until arr.length()) {
+                    val o = arr.optJSONObject(i) ?: continue
+                    add(
+                        PendingSyncLockCommand(
+                            localQueueId = o.optString("localQueueId"),
+                            userId = o.optString("userId"),
+                            originDeviceId = o.optString("originDeviceId"),
+                            originDeviceName = o.optString("originDeviceName"),
+                            modeName = o.optString("modeName", LockMode.INSTANT.name),
+                            freeUseDurationMinutes = o.optLong("freeUseDurationMinutes", 0L),
+                            lockDurationMinutes = o.optLong("lockDurationMinutes", 15L),
+                            issuedAtWallMs = o.optLong("issuedAtWallMs", 0L),
+                            intendedStartWallMs = o.optLong("intendedStartWallMs", 0L),
+                            freeUseDeadlineWallMs = o.optLong("freeUseDeadlineWallMs", 0L),
+                            lockExpirationWallMs = o.optLong("lockExpirationWallMs", 0L),
+                            scheduleId = o.optString("scheduleId"),
+                            occurrenceId = o.optString("occurrenceId"),
+                            strictMode = o.optBoolean("strictMode", false),
+                            showFlipClockShortcut = o.optBoolean("showFlipClockShortcut", false),
+                            allowSelectedApps = o.optBoolean("allowSelectedApps", true),
+                            phoneAccessEnabled = o.optBoolean("phoneAccessEnabled", true),
+                            commandAction = o.optString("commandAction", "START"),
+                            targetDeviceId = o.optString("targetDeviceId"),
+                            extendMinutes = o.optLong("extendMinutes", 0L)
+                        )
+                    )
+                }
+            }
+        }.getOrDefault(emptyList())
+    }
+
+    private fun encodePendingCommands(list: List<PendingSyncLockCommand>): String? {
+        if (list.isEmpty()) return null
+        val arr = JSONArray()
+        list.forEach { cmd ->
+            arr.put(
+                JSONObject().apply {
+                    put("localQueueId", cmd.localQueueId)
+                    put("userId", cmd.userId)
+                    put("originDeviceId", cmd.originDeviceId)
+                    put("originDeviceName", cmd.originDeviceName)
+                    put("modeName", cmd.modeName)
+                    put("freeUseDurationMinutes", cmd.freeUseDurationMinutes)
+                    put("lockDurationMinutes", cmd.lockDurationMinutes)
+                    put("issuedAtWallMs", cmd.issuedAtWallMs)
+                    put("intendedStartWallMs", cmd.intendedStartWallMs)
+                    put("freeUseDeadlineWallMs", cmd.freeUseDeadlineWallMs)
+                    put("lockExpirationWallMs", cmd.lockExpirationWallMs)
+                    put("scheduleId", cmd.scheduleId)
+                    put("occurrenceId", cmd.occurrenceId)
+                    put("strictMode", cmd.strictMode)
+                    put("showFlipClockShortcut", cmd.showFlipClockShortcut)
+                    put("allowSelectedApps", cmd.allowSelectedApps)
+                    put("phoneAccessEnabled", cmd.phoneAccessEnabled)
+                    put("commandAction", cmd.commandAction)
+                    put("targetDeviceId", cmd.targetDeviceId)
+                    put("extendMinutes", cmd.extendMinutes)
+                }
+            )
+        }
+        return arr.toString()
     }
 
     suspend fun syncDelayedPresetToCloud(preset: DelayedLockPreset, deleted: Boolean = false) {
@@ -1161,10 +1604,21 @@ class MultiDeviceSyncCoordinator(
                 showBattery = settings.showBattery,
                 showWeather = settings.showWeather,
                 weatherLocationQuery = settings.weatherLocationQuery,
+                weatherUseFahrenheit = settings.weatherUseFahrenheit,
+                weatherAutoDetect = settings.weatherAutoDetect,
                 clockTickerSoundEnabled = settings.clockTickerSoundEnabled,
                 customTag = settings.customTag,
                 autoRepeat = settings.autoRepeat,
                 zoomFraction = settings.clampedZoomFraction.toDouble(),
+                pomodoroEnabled = settings.pomodoroEnabled,
+                pomodoroFocusMinutes = settings.pomodoroFocusMinutes,
+                pomodoroBreakMinutes = settings.pomodoroBreakMinutes,
+                ambientSoundType = settings.ambientSoundType.storageKey,
+                ambientVolume = settings.ambientVolume.toDouble(),
+                oledBurnInProtection = settings.oledBurnInProtection,
+                syncFlipTimerWithFocusLock = settings.syncFlipTimerWithFocusLock,
+                playAmbientSoundDuringFocusLock = settings.playAmbientSoundDuringFocusLock,
+                ambientPlayInBackground = settings.ambientPlayInBackground,
                 originDeviceId = deviceId,
                 updatedAtWallMs = settings.updatedAtWallMs.takeIf { it > 0L } ?: clockProvider.wallClockMs()
             )
@@ -1202,5 +1656,32 @@ class MultiDeviceSyncCoordinator(
     private fun stopUserListeners() {
         activeUserListenersJob?.cancel()
         activeUserListenersJob = null
+    }
+
+    data class PendingSyncLockCommand(
+        val localQueueId: String,
+        val userId: String,
+        val originDeviceId: String,
+        val originDeviceName: String,
+        val modeName: String,
+        val freeUseDurationMinutes: Long,
+        val lockDurationMinutes: Long,
+        val issuedAtWallMs: Long,
+        val intendedStartWallMs: Long,
+        val freeUseDeadlineWallMs: Long,
+        val lockExpirationWallMs: Long,
+        val scheduleId: String,
+        val occurrenceId: String,
+        val strictMode: Boolean,
+        val showFlipClockShortcut: Boolean,
+        val allowSelectedApps: Boolean,
+        val phoneAccessEnabled: Boolean,
+        val commandAction: String,
+        val targetDeviceId: String,
+        val extendMinutes: Long
+    )
+
+    companion object {
+        private const val MAX_PENDING_LOCK_COMMANDS = 20
     }
 }

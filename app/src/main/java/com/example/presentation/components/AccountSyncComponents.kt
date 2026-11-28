@@ -71,10 +71,19 @@ import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import androidx.compose.foundation.text.KeyboardOptions
+import androidx.compose.runtime.rememberCoroutineScope
+import androidx.compose.ui.text.input.KeyboardType
+import androidx.compose.ui.text.input.PasswordVisualTransformation
 import com.example.designsystem.LocalResolveExtendedPalette
+import com.example.domain.model.RecoveryVerificationResult
 import com.example.sync.AccountSyncUiState
 import com.example.sync.AvatarImageProcessor
 import com.example.sync.CloudDeviceInfo
+import com.example.sync.hasActiveRemoteLock
+import com.example.sync.resolveReadableDeviceName
+import com.example.sync.resolvedDisplayName
+import kotlinx.coroutines.launch
 
 @Composable
 fun SyncedAvatarBadge(
@@ -352,10 +361,16 @@ fun SettingsAccountSyncCard(
     onUpdateProfileName: (String) -> Unit = {},
     onPickAvatarError: (String) -> Unit = {},
     syncReadinessHint: String? = null,
-    isSyncReady: Boolean = true
+    isSyncReady: Boolean = true,
+    onRefreshSync: () -> Unit = {},
+    onSendRemoteExtend: (String, Long) -> Unit = { _, _ -> },
+    onVerifyRecoveryForRemoteStop: suspend (String, String) -> RecoveryVerificationResult = { _, _ ->
+        RecoveryVerificationResult.NotConfigured
+    }
 ) {
     val palette = LocalResolveExtendedPalette.current
     val context = LocalContext.current
+    val coroutineScope = rememberCoroutineScope()
     val photoPickerLauncher = rememberLauncherForActivityResult(
         contract = ActivityResultContracts.PickVisualMedia()
     ) { uri ->
@@ -379,6 +394,10 @@ fun SettingsAccountSyncCard(
         }
     }
     var pendingUnlinkDevice by remember { mutableStateOf<CloudDeviceInfo?>(null) }
+    var pendingRemoteStopDevice by remember { mutableStateOf<CloudDeviceInfo?>(null) }
+    var remoteStopCodeInput by remember { mutableStateOf("") }
+    var remoteStopError by remember { mutableStateOf<String?>(null) }
+    var isVerifyingRemoteStop by remember { mutableStateOf(false) }
     var showEditNameDialog by remember { mutableStateOf(false) }
     var draftName by remember(state.displayName) {
         mutableStateOf(state.displayName.ifBlank { "Focus Explorer" })
@@ -696,93 +715,264 @@ fun SettingsAccountSyncCard(
                                 style = MaterialTheme.typography.labelSmall,
                                 color = palette.slateTealStrong,
                                 maxLines = 1,
-                                overflow = TextOverflow.Ellipsis
+                                overflow = TextOverflow.Ellipsis,
+                                modifier = Modifier.weight(1f, fill = false)
                             )
                         }
                     }
 
-                    if (state.avatarBase64.isNotBlank()) {
-                        TextButton(
-                            onClick = onClearAvatar,
-                            enabled = !state.isAvatarUploading,
-                            modifier = Modifier.testTag("settings_clear_avatar_button")
+                    Row(verticalAlignment = Alignment.CenterVertically) {
+                        IconButton(
+                            onClick = onRefreshSync,
+                            modifier = Modifier
+                                .size(36.dp)
+                                .testTag("settings_sync_refresh_btn")
                         ) {
-                            Text(
-                                text = "Reset",
-                                style = MaterialTheme.typography.labelSmall,
-                                color = palette.textSecondary
+                            Icon(
+                                imageVector = ResolveIcons.Sync,
+                                contentDescription = "Refresh device sync",
+                                tint = palette.slateTealStrong,
+                                modifier = Modifier.size(18.dp)
                             )
+                        }
+                        if (state.avatarBase64.isNotBlank()) {
+                            TextButton(
+                                onClick = onClearAvatar,
+                                enabled = !state.isAvatarUploading,
+                                modifier = Modifier.testTag("settings_clear_avatar_button")
+                            ) {
+                                Text(
+                                    text = "Reset",
+                                    style = MaterialTheme.typography.labelSmall,
+                                    color = palette.textSecondary
+                                )
+                            }
                         }
                     }
                 }
 
-                // Connected Devices Pills with safe Unlink trigger
-                if (state.connectedDevices.isNotEmpty()) {
-                    Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
+                // Connected Devices Section with explicit pairing overview, live statuses, & remote controls
+                Column(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .testTag("settings_connected_devices_section"),
+                    verticalArrangement = Arrangement.spacedBy(8.dp)
+                ) {
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.SpaceBetween,
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
                         Text(
-                            text = "Connected Devices (tap to unlink safely)",
-                            style = MaterialTheme.typography.labelSmall,
+                            text = if (state.connectedDevices.isNotEmpty()) {
+                                "Connected Devices (${state.connectedDevices.size})"
+                            } else {
+                                "Connected Devices"
+                            },
+                            style = MaterialTheme.typography.labelMedium.copy(fontWeight = FontWeight.SemiBold),
                             color = palette.textSecondary
                         )
-                        FlowRow(
-                            horizontalArrangement = Arrangement.spacedBy(8.dp),
-                            verticalArrangement = Arrangement.spacedBy(6.dp)
+                        if (state.connectedDevices.size >= 2) {
+                            val firstDev = state.connectedDevices[0].resolvedDisplayName()
+                            val secondDev = state.connectedDevices[1].resolvedDisplayName()
+                            val pairingText = if (state.connectedDevices.size == 2) {
+                                "$firstDev ↔ $secondDev"
+                            } else {
+                                "$firstDev ↔ $secondDev +${state.connectedDevices.size - 2}"
+                            }
+                            Text(
+                                text = pairingText,
+                                style = MaterialTheme.typography.labelSmall,
+                                color = palette.slateTealStrong,
+                                maxLines = 1,
+                                overflow = TextOverflow.Ellipsis,
+                                modifier = Modifier
+                                    .clip(CircleShape)
+                                    .background(palette.accentSoftContainer.copy(alpha = 0.45f))
+                                    .padding(horizontal = 8.dp, vertical = 2.dp)
+                                    .testTag("settings_device_pairing_banner")
+                            )
+                        }
+                    }
+
+                    if (state.connectedDevices.isEmpty()) {
+                        val localFallbackName = state.thisDeviceName.ifBlank { resolveReadableDeviceName() }
+                        Row(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .clip(RoundedCornerShape(14.dp))
+                                .background(palette.surfaceSecondary)
+                                .border(1.dp, palette.cardBorder, RoundedCornerShape(14.dp))
+                                .padding(horizontal = 12.dp, vertical = 10.dp),
+                            verticalAlignment = Alignment.CenterVertically,
+                            horizontalArrangement = Arrangement.spacedBy(10.dp)
                         ) {
-                            state.connectedDevices.forEach { device ->
-                                val isThisPhone = device.deviceId == state.thisDeviceId
-                                val isUnlinking = state.unlinkingDeviceId == device.deviceId
-                                Row(
-                                    modifier = Modifier
-                                        .clip(CircleShape)
-                                        .background(
-                                            if (device.syncEnabled) {
-                                                palette.surfaceElevated
-                                            } else {
-                                                palette.surfaceSecondary
-                                            }
-                                        )
-                                        .border(
-                                            1.dp,
-                                            if (device.syncEnabled) {
-                                                palette.accentSecondary.copy(alpha = 0.45f)
-                                            } else {
-                                                palette.cardBorder
-                                            },
-                                            CircleShape
-                                        )
-                                        .clickable(enabled = !isUnlinking) {
-                                            pendingUnlinkDevice = device
+                            Icon(
+                                imageVector = ResolveIcons.Devices,
+                                contentDescription = null,
+                                tint = palette.slateTealStrong,
+                                modifier = Modifier.size(18.dp)
+                            )
+                            Column(modifier = Modifier.weight(1f)) {
+                                Text(
+                                    text = "$localFallbackName (This)",
+                                    style = MaterialTheme.typography.titleSmall,
+                                    color = palette.textPrimary
+                                )
+                                Text(
+                                    text = "Syncing device list… tap refresh if another phone was just added",
+                                    style = MaterialTheme.typography.bodySmall,
+                                    color = palette.textSecondary
+                                )
+                            }
+                        }
+                    } else {
+                        state.connectedDevices.forEach { device ->
+                            val isThisPhone = device.deviceId == state.thisDeviceId
+                            val isUnlinking = state.unlinkingDeviceId == device.deviceId
+                            val displayName = device.resolvedDisplayName()
+                            val isLockActive = device.hasActiveRemoteLock()
+                            val lockModeTitle = device.activeLockMode
+                                .lowercase()
+                                .replaceFirstChar { it.uppercase() }
+
+                            Column(
+                                modifier = Modifier
+                                    .fillMaxWidth()
+                                    .clip(RoundedCornerShape(14.dp))
+                                    .background(
+                                        if (device.syncEnabled) {
+                                            palette.surfaceElevated
+                                        } else {
+                                            palette.surfaceSecondary
                                         }
-                                        .padding(horizontal = 10.dp, vertical = 5.dp)
-                                        .testTag("linked_device_chip_${device.deviceId}"),
+                                    )
+                                    .border(
+                                        1.dp,
+                                        when {
+                                            isLockActive -> palette.warn.copy(alpha = 0.45f)
+                                            device.syncEnabled -> palette.accentSecondary.copy(alpha = 0.40f)
+                                            else -> palette.cardBorder
+                                        },
+                                        RoundedCornerShape(14.dp)
+                                    )
+                                    .clickable(enabled = !isUnlinking) {
+                                        pendingUnlinkDevice = device
+                                    }
+                                    .padding(horizontal = 12.dp, vertical = 10.dp)
+                                    .testTag("linked_device_chip_${device.deviceId}"),
+                                verticalArrangement = Arrangement.spacedBy(8.dp)
+                            ) {
+                                Row(
+                                    modifier = Modifier.fillMaxWidth(),
                                     verticalAlignment = Alignment.CenterVertically,
-                                    horizontalArrangement = Arrangement.spacedBy(5.dp)
+                                    horizontalArrangement = Arrangement.spacedBy(10.dp)
                                 ) {
                                     if (isUnlinking) {
                                         CircularProgressIndicator(
                                             color = palette.slateTealStrong,
                                             strokeWidth = 1.5.dp,
-                                            modifier = Modifier.size(12.dp)
+                                            modifier = Modifier.size(18.dp)
                                         )
                                     } else {
                                         Icon(
                                             imageVector = ResolveIcons.Devices,
                                             contentDescription = null,
                                             tint = if (device.syncEnabled) palette.slateTealStrong else palette.textSecondary,
-                                            modifier = Modifier.size(13.dp)
+                                            modifier = Modifier.size(18.dp)
                                         )
                                     }
-                                    Text(
-                                        text = if (isThisPhone) "${device.deviceName} (This)" else device.deviceName,
-                                        style = MaterialTheme.typography.labelSmall,
-                                        color = palette.textPrimary
-                                    )
-                                    Icon(
-                                        imageVector = Icons.Outlined.Close,
-                                        contentDescription = "Unlink ${device.deviceName}",
-                                        tint = palette.textSecondary,
-                                        modifier = Modifier.size(12.dp)
-                                    )
+                                    Column(modifier = Modifier.weight(1f)) {
+                                        Text(
+                                            text = if (isThisPhone) "$displayName (This)" else displayName,
+                                            style = MaterialTheme.typography.titleSmall.copy(fontWeight = FontWeight.SemiBold),
+                                            color = palette.textPrimary,
+                                            maxLines = 1,
+                                            overflow = TextOverflow.Ellipsis
+                                        )
+                                        Spacer(Modifier.height(2.dp))
+                                        FlowRow(
+                                            horizontalArrangement = Arrangement.spacedBy(6.dp),
+                                            verticalArrangement = Arrangement.spacedBy(4.dp)
+                                        ) {
+                                            Text(
+                                                text = if (device.syncEnabled) "Sync Active" else "Sync Paused",
+                                                style = MaterialTheme.typography.labelSmall,
+                                                color = if (device.syncEnabled) palette.emeraldStrong else palette.textSecondary
+                                            )
+                                            Text(
+                                                text = if (isLockActive) "• Locked ($lockModeTitle)" else "• Idle",
+                                                style = MaterialTheme.typography.labelSmall,
+                                                color = if (isLockActive) palette.warn else palette.textSecondary
+                                            )
+                                            if (device.androidVersion >= 21L) {
+                                                Text(
+                                                    text = "• Android ${formatAndroidVersionShort(device.androidVersion)}",
+                                                    style = MaterialTheme.typography.labelSmall,
+                                                    color = palette.textMuted
+                                                )
+                                            }
+                                        }
+                                    }
+                                    IconButton(
+                                        onClick = { pendingUnlinkDevice = device },
+                                        enabled = !isUnlinking,
+                                        modifier = Modifier
+                                            .size(32.dp)
+                                            .testTag("unlink_device_btn_${device.deviceId}")
+                                    ) {
+                                        Icon(
+                                            imageVector = Icons.Outlined.Close,
+                                            contentDescription = "Unlink $displayName",
+                                            tint = palette.textSecondary,
+                                            modifier = Modifier.size(16.dp)
+                                        )
+                                    }
+                                }
+
+                                if (!isThisPhone && isLockActive) {
+                                    Row(
+                                        modifier = Modifier.fillMaxWidth(),
+                                        horizontalArrangement = Arrangement.spacedBy(8.dp)
+                                    ) {
+                                        OutlinedButton(
+                                            onClick = { onSendRemoteExtend(device.deviceId, 15L) },
+                                            shape = RoundedCornerShape(10.dp),
+                                            border = androidx.compose.foundation.BorderStroke(1.dp, palette.cardBorder),
+                                            modifier = Modifier
+                                                .weight(1f)
+                                                .height(36.dp)
+                                                .testTag("remote_extend_btn_${device.deviceId}")
+                                        ) {
+                                            Text(
+                                                text = "+15m Extend",
+                                                style = MaterialTheme.typography.labelSmall,
+                                                color = palette.textPrimary
+                                            )
+                                        }
+                                        OutlinedButton(
+                                            onClick = {
+                                                remoteStopCodeInput = ""
+                                                remoteStopError = null
+                                                pendingRemoteStopDevice = device
+                                            },
+                                            shape = RoundedCornerShape(10.dp),
+                                            border = androidx.compose.foundation.BorderStroke(
+                                                1.dp,
+                                                palette.warn.copy(alpha = 0.45f)
+                                            ),
+                                            modifier = Modifier
+                                                .weight(1f)
+                                                .height(36.dp)
+                                                .testTag("remote_stop_btn_${device.deviceId}")
+                                        ) {
+                                            Text(
+                                                text = "Stop Lock",
+                                                style = MaterialTheme.typography.labelSmall,
+                                                color = palette.warn
+                                            )
+                                        }
+                                    }
                                 }
                             }
                         }
@@ -976,12 +1166,13 @@ fun SettingsAccountSyncCard(
 
     pendingUnlinkDevice?.let { device ->
         val isThis = device.deviceId == state.thisDeviceId
+        val deviceTitle = device.resolvedDisplayName()
         AlertDialog(
             onDismissRequest = { pendingUnlinkDevice = null },
             containerColor = palette.surfaceSecondary,
             title = {
                 Text(
-                    text = "Unlink ${device.deviceName}?",
+                    text = "Unlink $deviceTitle?",
                     style = MaterialTheme.typography.titleLarge,
                     color = palette.textPrimary
                 )
@@ -991,7 +1182,7 @@ fun SettingsAccountSyncCard(
                     text = if (isThis) {
                         "This disconnects this phone from cloud sync and signs out cleanly. All local focus timers, mascots, App Lock, and history stay untouched on this phone."
                     } else {
-                        "Removes ${device.deviceName} from your synced device list without erasing or modifying any local data on that phone."
+                        "Removes $deviceTitle from your synced device list without erasing or modifying any local data on that phone."
                     },
                     style = MaterialTheme.typography.bodyMedium,
                     color = palette.textSecondary
@@ -1020,6 +1211,125 @@ fun SettingsAccountSyncCard(
             }
         )
     }
+
+    pendingRemoteStopDevice?.let { targetDevice ->
+        val targetName = targetDevice.resolvedDisplayName()
+        AlertDialog(
+            onDismissRequest = {
+                if (!isVerifyingRemoteStop) pendingRemoteStopDevice = null
+            },
+            containerColor = palette.surfaceSecondary,
+            title = {
+                Text(
+                    text = "Stop Lock on $targetName?",
+                    style = MaterialTheme.typography.titleLarge,
+                    color = palette.textPrimary
+                )
+            },
+            text = {
+                Column(
+                    verticalArrangement = Arrangement.spacedBy(8.dp),
+                    modifier = Modifier.testTag("remote_stop_recovery_dialog")
+                ) {
+                    Text(
+                        text = "Enter your Recovery Code to remotely end the active focus session on $targetName.",
+                        style = MaterialTheme.typography.bodySmall,
+                        color = palette.textSecondary
+                    )
+                    ProvideSafeTextToolbar {
+                        androidx.compose.material3.OutlinedTextField(
+                            value = remoteStopCodeInput,
+                            onValueChange = { updated ->
+                                if (updated.length <= 16 && updated.all { it.isDigit() }) {
+                                    remoteStopCodeInput = updated
+                                    remoteStopError = null
+                                }
+                            },
+                            singleLine = true,
+                            label = { Text("Recovery Code") },
+                            keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.NumberPassword),
+                            visualTransformation = PasswordVisualTransformation(),
+                            isError = remoteStopError != null,
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .testTag("remote_stop_recovery_input")
+                        )
+                    }
+                    if (!remoteStopError.isNullOrBlank()) {
+                        Text(
+                            text = remoteStopError.orEmpty(),
+                            style = MaterialTheme.typography.labelSmall,
+                            color = palette.warn
+                        )
+                    }
+                }
+            },
+            confirmButton = {
+                Button(
+                    enabled = !isVerifyingRemoteStop && remoteStopCodeInput.isNotBlank(),
+                    onClick = {
+                        isVerifyingRemoteStop = true
+                        remoteStopError = null
+                        coroutineScope.launch {
+                            when (val result = onVerifyRecoveryForRemoteStop(remoteStopCodeInput, targetDevice.deviceId)) {
+                                is RecoveryVerificationResult.Verified -> {
+                                    isVerifyingRemoteStop = false
+                                    pendingRemoteStopDevice = null
+                                    remoteStopCodeInput = ""
+                                }
+                                is RecoveryVerificationResult.InvalidCode -> {
+                                    isVerifyingRemoteStop = false
+                                    remoteStopError = "Incorrect recovery code. ${result.remainingAttemptsBeforeCooldown} left."
+                                }
+                                is RecoveryVerificationResult.Throttled -> {
+                                    isVerifyingRemoteStop = false
+                                    remoteStopError = "Too many attempts. Wait ${result.retryAfterSeconds}s."
+                                }
+                                RecoveryVerificationResult.NotConfigured -> {
+                                    isVerifyingRemoteStop = false
+                                    remoteStopError = "Set up a Recovery Code first in Settings."
+                                }
+                            }
+                        }
+                    },
+                    colors = ButtonDefaults.buttonColors(
+                        containerColor = palette.warn,
+                        contentColor = palette.onAccent
+                    ),
+                    modifier = Modifier.testTag("remote_stop_recovery_confirm_btn")
+                ) {
+                    Text(if (isVerifyingRemoteStop) "Verifying…" else "Stop Remote Lock")
+                }
+            },
+            dismissButton = {
+                TextButton(
+                    enabled = !isVerifyingRemoteStop,
+                    onClick = { pendingRemoteStopDevice = null }
+                ) {
+                    Text("Cancel", color = palette.textSecondary)
+                }
+            }
+        )
+    }
+}
+
+private fun formatAndroidVersionShort(sdkInt: Long): String = when (sdkInt.toInt()) {
+    22 -> "5.1"
+    23 -> "6"
+    24 -> "7.0"
+    25 -> "7.1"
+    26 -> "8.0"
+    27 -> "8.1"
+    28 -> "9"
+    29 -> "10"
+    30 -> "11"
+    31 -> "12"
+    32 -> "12L"
+    33 -> "13"
+    34 -> "14"
+    35 -> "15"
+    36 -> "16"
+    else -> "API $sdkInt"
 }
 
 @Composable

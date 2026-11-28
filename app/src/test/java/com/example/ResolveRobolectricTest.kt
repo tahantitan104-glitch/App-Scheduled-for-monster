@@ -9,6 +9,7 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.test.assertIsDisplayed
 import androidx.compose.ui.test.hasTestTag
 import androidx.compose.ui.test.junit4.createComposeRule
+import androidx.compose.ui.test.onAllNodesWithText
 import androidx.compose.ui.test.onNodeWithTag
 import androidx.compose.ui.test.onNodeWithText
 import androidx.compose.ui.test.performClick
@@ -250,7 +251,10 @@ class ResolveRobolectricTest {
             }
         }
         composeRule.waitForIdle()
-        composeRule.onNodeWithText("RESOLVE").assertIsDisplayed()
+        composeRule.onNodeWithTag("home_header_row").assertIsDisplayed()
+        composeRule.onNodeWithTag("home_mascot_badge").assertIsDisplayed()
+        composeRule.onNodeWithTag("home_enforcement_status_pill").assertIsDisplayed()
+        assertTrue(composeRule.onAllNodesWithText("RESOLVE").fetchSemanticsNodes().isEmpty())
         composeRule.onNodeWithTag("mode_card_instant").assertIsDisplayed()
         composeRule.onNodeWithTag("mode_card_delayed").assertIsDisplayed()
         composeRule.onNodeWithTag("home_list")

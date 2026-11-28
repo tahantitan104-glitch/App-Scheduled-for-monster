@@ -53,7 +53,8 @@ class InstalledAppsRepository(
                         packageName = appInfo.packageName,
                         appName = label,
                         isSystemApp = isSystem,
-                        isDialerOrTelecom = dialerPackages.contains(appInfo.packageName)
+                        isDialerOrTelecom = dialerPackages.contains(appInfo.packageName),
+                        category = AppCategoryHelper.classify(appInfo, label)
                     )
                 }
                 .sortedWith(

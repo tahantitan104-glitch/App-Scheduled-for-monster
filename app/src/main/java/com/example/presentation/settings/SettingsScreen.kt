@@ -126,6 +126,11 @@ fun SettingsScreen(
     onUnlinkDevice: (String) -> Unit = {},
     onUpdateProfileName: (String) -> Unit = {},
     onPickAvatarError: (String) -> Unit = {},
+    onRefreshSync: () -> Unit = {},
+    onSendRemoteExtend: (String, Long) -> Unit = { _, _ -> },
+    onVerifyRecoveryForRemoteStop: suspend (String, String) -> com.example.domain.model.RecoveryVerificationResult = { _, _ ->
+        com.example.domain.model.RecoveryVerificationResult.NotConfigured
+    },
     protectionStatus: ProtectionStatus? = null,
     onProtectionAction: (ProtectionRecoveryAction) -> Unit = {},
     notificationControlConfig: NotificationControlConfig = NotificationControlConfig(),
@@ -344,7 +349,10 @@ fun SettingsScreen(
                     onUpdateProfileName = onUpdateProfileName,
                     onPickAvatarError = onPickAvatarError,
                     syncReadinessHint = syncReadinessHint,
-                    isSyncReady = syncReady
+                    isSyncReady = syncReady,
+                    onRefreshSync = onRefreshSync,
+                    onSendRemoteExtend = onSendRemoteExtend,
+                    onVerifyRecoveryForRemoteStop = onVerifyRecoveryForRemoteStop
                 )
             }
 

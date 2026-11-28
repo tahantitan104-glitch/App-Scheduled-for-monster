@@ -95,7 +95,9 @@ fun SplitFlipCard(
     seamThickness: Dp = 3.2.dp,
     digitGap: Dp = 4.dp,
     digitColor: Color = FlipClockPalette.DigitGrey,
-    showFlipAxis: Boolean = true
+    showFlipAxis: Boolean = true,
+    digitScaleX: Float = 1.07f,
+    digitScaleY: Float = 0.90f
 ) {
     val normalized = value.ifEmpty { "0" }
     val digits = normalized.toCharArray()
@@ -117,7 +119,9 @@ fun SplitFlipCard(
                     fontSize = fontSize,
                     seamThickness = seamThickness,
                     digitColor = digitColor,
-                    showFlipAxis = showFlipAxis
+                    showFlipAxis = showFlipAxis,
+                    digitScaleX = digitScaleX,
+                    digitScaleY = digitScaleY
                 )
             }
         } else {
@@ -142,7 +146,9 @@ fun SplitFlipCard(
                             fontSize = fontSize,
                             seamThickness = seamThickness,
                             digitColor = digitColor,
-                            showFlipAxis = showFlipAxis
+                            showFlipAxis = showFlipAxis,
+                            digitScaleX = digitScaleX,
+                            digitScaleY = digitScaleY
                         )
                     }
                 }
@@ -159,7 +165,9 @@ private fun SplitFlipSingleDigit(
     fontSize: TextUnit,
     seamThickness: Dp,
     digitColor: Color,
-    showFlipAxis: Boolean
+    showFlipAxis: Boolean,
+    digitScaleX: Float,
+    digitScaleY: Float
 ) {
     var currentDigit by remember { mutableStateOf(digit) }
     var previousDigit by remember { mutableStateOf(digit) }
@@ -202,15 +210,18 @@ private fun SplitFlipSingleDigit(
 
     // Measure reference glyph "8" synchronously so every digit shares identical baseline & exact 50% ink center
     val textMeasurer = rememberTextMeasurer()
-    val exactTranslationY = remember(digitTextStyle, cardHeightPx, fontSizePx) {
-        val referenceBaseline = textMeasurer.measure(
+    val (exactTranslationY, pivotFractionY) = remember(digitTextStyle, cardHeightPx, fontSizePx) {
+        val refLayout = textMeasurer.measure(
             text = AnnotatedString("8"),
             style = digitTextStyle,
             softWrap = false,
             maxLines = 1
-        ).firstBaseline
-        val numeralVisualMidInLayout = referenceBaseline - (FJALLA_NUMERAL_MID_RATIO * fontSizePx)
-        (cardHeightPx * 0.5f) - numeralVisualMidInLayout
+        )
+        val numeralVisualMidInLayout = refLayout.firstBaseline - (FJALLA_NUMERAL_MID_RATIO * fontSizePx)
+        val ty = (cardHeightPx * 0.5f) - numeralVisualMidInLayout
+        val pivotY = (numeralVisualMidInLayout / refLayout.size.height.toFloat().coerceAtLeast(1f))
+            .coerceIn(0.1f, 0.9f)
+        ty to pivotY
     }
 
     val currentText = currentDigit.toString()
@@ -232,6 +243,9 @@ private fun SplitFlipSingleDigit(
             style = digitTextStyle,
             digitColor = digitColor.copy(alpha = topRevealAlpha),
             translationYPx = exactTranslationY,
+            pivotFractionY = pivotFractionY,
+            digitScaleX = digitScaleX,
+            digitScaleY = digitScaleY,
             plateBackground = Color.Transparent,
             modifier = Modifier
                 .fillMaxSize()
@@ -250,6 +264,9 @@ private fun SplitFlipSingleDigit(
             style = digitTextStyle,
             digitColor = digitColor.copy(alpha = bottomFadeAlpha),
             translationYPx = exactTranslationY,
+            pivotFractionY = pivotFractionY,
+            digitScaleX = digitScaleX,
+            digitScaleY = digitScaleY,
             plateBackground = Color.Transparent,
             modifier = Modifier
                 .fillMaxSize()
@@ -268,6 +285,9 @@ private fun SplitFlipSingleDigit(
                 style = digitTextStyle,
                 digitColor = FlipClockPalette.DigitGreyFlip.copy(alpha = 1f - phase * 0.45f),
                 translationYPx = exactTranslationY,
+                pivotFractionY = pivotFractionY,
+                digitScaleX = digitScaleX,
+                digitScaleY = digitScaleY,
                 plateBackground = FlipClockPalette.CanvasBlack,
                 modifier = Modifier
                     .fillMaxSize()
@@ -290,6 +310,9 @@ private fun SplitFlipSingleDigit(
                 style = digitTextStyle,
                 digitColor = digitColor.copy(alpha = 0.72f + 0.28f * phase),
                 translationYPx = exactTranslationY,
+                pivotFractionY = pivotFractionY,
+                digitScaleX = digitScaleX,
+                digitScaleY = digitScaleY,
                 plateBackground = FlipClockPalette.CanvasBlack,
                 modifier = Modifier
                     .fillMaxSize()
@@ -322,6 +345,9 @@ private fun FullCardClippedDigitFace(
     style: TextStyle,
     digitColor: Color,
     translationYPx: Float,
+    pivotFractionY: Float,
+    digitScaleX: Float,
+    digitScaleY: Float,
     plateBackground: Color,
     modifier: Modifier = Modifier
 ) {
@@ -339,6 +365,9 @@ private fun FullCardClippedDigitFace(
             modifier = Modifier
                 .wrapContentHeight(unbounded = true)
                 .graphicsLayer {
+                    transformOrigin = TransformOrigin(0.5f, pivotFractionY)
+                    scaleX = digitScaleX
+                    scaleY = digitScaleY
                     translationY = translationYPx
                 }
         )

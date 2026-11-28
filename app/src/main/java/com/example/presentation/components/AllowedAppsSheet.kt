@@ -16,6 +16,7 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyColumn
+import androidx.compose.foundation.lazy.LazyRow
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
@@ -26,6 +27,8 @@ import androidx.compose.material.icons.outlined.Search
 import androidx.compose.material3.Button
 import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.ExperimentalMaterial3Api
+import androidx.compose.material3.FilterChip
+import androidx.compose.material3.FilterChipDefaults
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.ModalBottomSheet
@@ -44,9 +47,12 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.ImageBitmap
 import androidx.compose.ui.platform.testTag
+import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import com.example.designsystem.LocalResolveExtendedPalette
+import com.example.domain.model.AppCategory
+import com.example.domain.model.FocusProfile
 import com.example.domain.model.InstalledAppInfo
 
 @OptIn(ExperimentalMaterial3Api::class)
@@ -56,11 +62,14 @@ fun AllowedAppsPickerSheet(
     initialSelectedPackages: Set<String>,
     loadIcon: suspend (String) -> ImageBitmap?,
     onDismiss: () -> Unit,
-    onSaveSelection: (Set<String>) -> Unit
+    onSaveSelection: (Set<String>) -> Unit,
+    focusProfiles: List<FocusProfile> = emptyList(),
+    onApplyFocusProfile: ((FocusProfile) -> Unit)? = null
 ) {
     val palette = LocalResolveExtendedPalette.current
     val sheetState = rememberModalBottomSheetState(skipPartiallyExpanded = true)
     var searchQuery by remember { mutableStateOf("") }
+    var selectedCategory by remember { mutableStateOf<AppCategory?>(null) }
     var selectedPackages by remember(initialSelectedPackages) {
         mutableStateOf(initialSelectedPackages)
     }
@@ -74,18 +83,27 @@ fun AllowedAppsPickerSheet(
             .sorted()
     }
 
-    val filteredMissing = remember(missingSelectedPackages, searchQuery) {
-        val q = searchQuery.trim()
-        if (q.isEmpty()) missingSelectedPackages
-        else missingSelectedPackages.filter { it.contains(q, ignoreCase = true) }
+    val filteredMissing = remember(missingSelectedPackages, searchQuery, selectedCategory) {
+        if (selectedCategory != null) emptyList()
+        else {
+            val q = searchQuery.trim()
+            if (q.isEmpty()) missingSelectedPackages
+            else missingSelectedPackages.filter { it.contains(q, ignoreCase = true) }
+        }
     }
 
-    val filteredApps = remember(installedApps, searchQuery) {
+    val availableCategories = remember(installedApps) {
+        AppCategory.entries.filter { cat -> installedApps.any { it.category == cat } }
+    }
+
+    val filteredApps = remember(installedApps, searchQuery, selectedCategory) {
         val q = searchQuery.trim()
-        if (q.isEmpty()) installedApps
-        else installedApps.filter {
-            it.appName.contains(q, ignoreCase = true) ||
-                it.packageName.contains(q, ignoreCase = true)
+        installedApps.filter { app ->
+            val matchesCategory = selectedCategory == null || app.category == selectedCategory
+            val matchesQuery = q.isEmpty() ||
+                app.appName.contains(q, ignoreCase = true) ||
+                app.packageName.contains(q, ignoreCase = true)
+            matchesCategory && matchesQuery
         }
     }
 
@@ -160,7 +178,51 @@ fun AllowedAppsPickerSheet(
                     }
                 }
 
-                Spacer(modifier = Modifier.height(12.dp))
+                if (focusProfiles.isNotEmpty() && onApplyFocusProfile != null) {
+                    Spacer(modifier = Modifier.height(10.dp))
+                    LazyRow(
+                        horizontalArrangement = Arrangement.spacedBy(8.dp),
+                        modifier = Modifier.fillMaxWidth()
+                    ) {
+                        items(focusProfiles, key = { it.profileId }) { profile ->
+                            FilterChip(
+                                selected = false,
+                                onClick = {
+                                    if (!profile.builtIn && profile.allowedPackages.isNotEmpty()) {
+                                        selectedPackages = profile.allowedPackages.toSet()
+                                    } else if (profile.profileId == "preset_study") {
+                                        val studyPkgs = installedApps
+                                            .filter { it.category == AppCategory.PRODUCTIVITY || it.isDialerOrTelecom }
+                                            .map { it.packageName }
+                                            .toSet()
+                                        if (studyPkgs.isNotEmpty()) selectedPackages = studyPkgs
+                                    } else if (!profile.allowSelectedApps) {
+                                        selectedPackages = emptySet()
+                                    }
+                                    onApplyFocusProfile(profile)
+                                },
+                                label = {
+                                    Text(
+                                        text = profile.name,
+                                        style = MaterialTheme.typography.labelMedium.copy(fontWeight = FontWeight.SemiBold)
+                                    )
+                                },
+                                colors = FilterChipDefaults.filterChipColors(
+                                    containerColor = palette.surfaceElevated,
+                                    labelColor = palette.accentStrong
+                                ),
+                                border = FilterChipDefaults.filterChipBorder(
+                                    enabled = true,
+                                    selected = false,
+                                    borderColor = palette.accent.copy(alpha = 0.35f)
+                                ),
+                                modifier = Modifier.testTag("allowed_apps_profile_${profile.profileId}")
+                            )
+                        }
+                    }
+                }
+
+                Spacer(modifier = Modifier.height(10.dp))
 
                 OutlinedTextField(
                     value = searchQuery,
@@ -179,7 +241,63 @@ fun AllowedAppsPickerSheet(
                         .testTag("allowed_apps_search_input")
                 )
 
-                Spacer(modifier = Modifier.height(12.dp))
+                if (availableCategories.isNotEmpty()) {
+                    Spacer(modifier = Modifier.height(8.dp))
+                    LazyRow(
+                        horizontalArrangement = Arrangement.spacedBy(8.dp),
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .testTag("allowed_apps_category_row")
+                    ) {
+                        item(key = "cat_all") {
+                            val selected = selectedCategory == null
+                            FilterChip(
+                                selected = selected,
+                                onClick = { selectedCategory = null },
+                                label = { Text("All (${installedApps.size})") },
+                                colors = FilterChipDefaults.filterChipColors(
+                                    selectedContainerColor = palette.accent,
+                                    selectedLabelColor = palette.onAccent,
+                                    containerColor = palette.cardBottom,
+                                    labelColor = palette.textSecondary
+                                ),
+                                border = FilterChipDefaults.filterChipBorder(
+                                    enabled = true,
+                                    selected = selected,
+                                    borderColor = palette.cardBorder,
+                                    selectedBorderColor = palette.accent
+                                ),
+                                modifier = Modifier.testTag("allowed_apps_cat_all")
+                            )
+                        }
+                        items(availableCategories, key = { it.name }) { category ->
+                            val selected = selectedCategory == category
+                            val count = installedApps.count { it.category == category }
+                            FilterChip(
+                                selected = selected,
+                                onClick = {
+                                    selectedCategory = if (selected) null else category
+                                },
+                                label = { Text("${category.displayName} ($count)") },
+                                colors = FilterChipDefaults.filterChipColors(
+                                    selectedContainerColor = palette.accent,
+                                    selectedLabelColor = palette.onAccent,
+                                    containerColor = palette.cardBottom,
+                                    labelColor = palette.textSecondary
+                                ),
+                                border = FilterChipDefaults.filterChipBorder(
+                                    enabled = true,
+                                    selected = selected,
+                                    borderColor = palette.cardBorder,
+                                    selectedBorderColor = palette.accent
+                                ),
+                                modifier = Modifier.testTag("allowed_apps_cat_${category.name.lowercase()}")
+                            )
+                        }
+                    }
+                }
+
+                Spacer(modifier = Modifier.height(10.dp))
 
                 if (filteredApps.isEmpty() && filteredMissing.isEmpty()) {
                     Box(
@@ -392,8 +510,13 @@ private fun AppPickerRow(
                 overflow = TextOverflow.Ellipsis
             )
             Text(
-                text = if (app.isDialerOrTelecom) "${app.packageName} • System Dialer" else app.packageName,
-                style = MaterialTheme.typography.bodyMedium,
+                text = buildString {
+                    append(app.category.displayName)
+                    if (app.isDialerOrTelecom) append(" • System Dialer")
+                    append(" • ")
+                    append(app.packageName)
+                },
+                style = MaterialTheme.typography.bodySmall,
                 color = palette.textSecondary,
                 maxLines = 1,
                 overflow = TextOverflow.Ellipsis

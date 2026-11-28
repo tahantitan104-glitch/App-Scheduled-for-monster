@@ -19,4 +19,13 @@
     <string name="lock_strict_label">STRICT</string>
     <string name="lock_allow_selected_apps">Allow Selected Apps</string>
     <string name="lock_show_flip_clock_shortcut">Show Flip Clock Shortcut</string>
+    <string name="resolve_widget_description">Shows active Resolve focus status with 1-tap 15m, 30m, and Flip Clock shortcuts.</string>
+    <string name="resolve_widget_ready">READY</string>
+    <string name="resolve_widget_idle_status">Ready to Focus</string>
+    <string name="resolve_widget_15m">15m Focus</string>
+    <string name="resolve_widget_30m">30m Focus</string>
+    <string name="resolve_widget_clock">Flip Clock</string>
+    <string name="resolve_tile_label">Resolve Focus</string>
+    <string name="notification_channel_vpn_name">Local DNS Filter</string>
+    <string name="notification_channel_vpn_desc">Runs an on-device local VPN to block distracting websites and short-video domains.</string>
 </resources>

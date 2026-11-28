@@ -21,6 +21,7 @@ import java.util.Date
 import java.util.Locale
 import kotlin.math.PI
 import kotlin.math.exp
+import kotlin.math.roundToInt
 import kotlin.math.sin
 
 data class FlipBatteryTelemetry(
@@ -36,9 +37,23 @@ sealed interface FlipWeatherResult {
     data class Ready(
         val cityLabel: String,
         val temperatureCelsius: Int,
-        val conditionLabel: String
+        val conditionLabel: String,
+        val isCachedOffline: Boolean = false,
+        val fetchedAtWallMs: Long = 0L
     ) : FlipWeatherResult {
-        fun formatLabel(): String = "${temperatureCelsius}°C · $conditionLabel · $cityLabel"
+        val temperatureFahrenheit: Int
+            get() = ((temperatureCelsius * 9.0) / 5.0 + 32.0).roundToInt()
+
+        fun temperatureFormatted(useFahrenheit: Boolean): String =
+            if (useFahrenheit) "${temperatureFahrenheit}°F" else "${temperatureCelsius}°C"
+
+        fun formatLabel(): String = formatLabel(useFahrenheit = false, compact = false)
+
+        fun formatLabel(useFahrenheit: Boolean, compact: Boolean = false): String {
+            val temp = temperatureFormatted(useFahrenheit)
+            val base = if (compact) "$temp · $conditionLabel" else "$temp · $conditionLabel · $cityLabel"
+            return if (isCachedOffline) "$base (cached)" else base
+        }
     }
 
     data object Unavailable : FlipWeatherResult
@@ -73,6 +88,8 @@ object FlipClockTelemetry {
 
 object FlipWeatherRepository {
     private const val CACHE_TTL_MS = 30 * 60_000L
+    private const val PREFS_NAME = "resolve_weather_cache"
+    private const val PREF_KEY_LAST_WEATHER = "last_weather_json"
 
     @Volatile
     private var cachedKey: String? = null
@@ -83,48 +100,175 @@ object FlipWeatherRepository {
     @Volatile
     private var cachedResult: FlipWeatherResult.Ready? = null
 
-    suspend fun fetchWeather(cityQuery: String): FlipWeatherResult {
-        val cleanCity = cityQuery.trim()
-        if (cleanCity.isEmpty()) return FlipWeatherResult.NeedsCity
+    internal fun clearMemoryCacheForTests() {
+        cachedKey = null
+        cachedAtMs = 0L
+        cachedResult = null
+    }
+
+    internal fun extractCityFromTimeZoneId(zoneId: String): String? {
+        val clean = zoneId.trim()
+        if (!clean.contains('/')) return null
+        val segment = clean.substringAfterLast('/').replace('_', ' ').trim()
+        if (segment.isBlank() || segment.equals("GMT", ignoreCase = true) || segment.equals("UTC", ignoreCase = true)) {
+            return null
+        }
+        return segment
+    }
+
+    internal fun parseAutoDetectedCityJson(body: String): String? = runCatching {
+        val obj = JSONObject(body)
+        val city = obj.optString("city").trim()
+        if (city.isNotEmpty() && !city.equals("null", ignoreCase = true)) {
+            city
+        } else {
+            obj.optString("regionName").trim().takeIf { it.isNotEmpty() }
+        }
+    }.getOrNull()
+
+    internal fun encodeWeatherCacheJson(queryKey: String, result: FlipWeatherResult.Ready): String {
+        return JSONObject().apply {
+            put("queryKey", queryKey)
+            put("cityLabel", result.cityLabel)
+            put("temperatureCelsius", result.temperatureCelsius)
+            put("conditionLabel", result.conditionLabel)
+            put("fetchedAtWallMs", result.fetchedAtWallMs)
+        }.toString()
+    }
+
+    internal fun decodeWeatherCacheJson(raw: String?): Pair<String, FlipWeatherResult.Ready>? {
+        if (raw.isNullOrBlank()) return null
+        return runCatching {
+            val obj = JSONObject(raw)
+            val queryKey = obj.optString("queryKey").trim()
+            val cityLabel = obj.optString("cityLabel").trim()
+            if (cityLabel.isEmpty()) return null
+            val tempC = obj.getInt("temperatureCelsius")
+            val cond = obj.optString("conditionLabel").ifBlank { "Fair" }
+            val fetchedAt = obj.optLong("fetchedAtWallMs", 0L)
+            queryKey to FlipWeatherResult.Ready(
+                cityLabel = cityLabel,
+                temperatureCelsius = tempC,
+                conditionLabel = cond,
+                isCachedOffline = false,
+                fetchedAtWallMs = fetchedAt
+            )
+        }.getOrNull()
+    }
+
+    private fun saveDiskCache(context: Context?, queryKey: String, result: FlipWeatherResult.Ready) {
+        val appCtx = context?.applicationContext ?: return
+        runCatching {
+            appCtx.getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE)
+                .edit()
+                .putString(PREF_KEY_LAST_WEATHER, encodeWeatherCacheJson(queryKey, result))
+                .apply()
+        }
+    }
+
+    private fun loadDiskCache(context: Context?): Pair<String, FlipWeatherResult.Ready>? {
+        val appCtx = context?.applicationContext ?: return null
+        return runCatching {
+            val raw = appCtx.getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE)
+                .getString(PREF_KEY_LAST_WEATHER, null)
+            decodeWeatherCacheJson(raw)
+        }.getOrNull()
+    }
+
+    private fun detectCityFromNetworkOrTimezone(): String? {
+        val ipSources = listOf(
+            "https://ipwho.is/",
+            "https://ipapi.co/json/"
+        )
+        for (url in ipSources) {
+            val detected = runCatching {
+                val json = httpGetJson(url) ?: return@runCatching null
+                parseAutoDetectedCityJson(json.toString())
+            }.getOrNull()
+            if (!detected.isNullOrBlank()) return detected
+        }
+        return extractCityFromTimeZoneId(java.util.TimeZone.getDefault().id)
+    }
+
+    suspend fun fetchWeather(
+        cityQuery: String,
+        autoDetect: Boolean = false,
+        context: Context? = null,
+        forceRefresh: Boolean = false
+    ): FlipWeatherResult {
+        val manualCity = cityQuery.trim()
+        if (manualCity.isEmpty() && !autoDetect) return FlipWeatherResult.NeedsCity
 
         val now = System.currentTimeMillis()
+        if (cachedResult == null) {
+            loadDiskCache(context)?.let { (diskKey, diskWeather) ->
+                cachedKey = diskKey
+                cachedAtMs = diskWeather.fetchedAtWallMs
+                cachedResult = diskWeather
+            }
+        }
+
+        val lookupKey = if (manualCity.isNotEmpty()) manualCity else "__AUTO__"
         val existing = cachedResult
-        if (existing != null &&
-            cachedKey.equals(cleanCity, ignoreCase = true) &&
+        if (!forceRefresh &&
+            existing != null &&
+            cachedKey.equals(lookupKey, ignoreCase = true) &&
             (now - cachedAtMs) < CACHE_TTL_MS
         ) {
-            return existing
+            return existing.copy(isCachedOffline = false)
         }
 
         return withContext(Dispatchers.IO) {
+            val resolvedQueryCity = manualCity.ifEmpty { detectCityFromNetworkOrTimezone().orEmpty() }
+            if (resolvedQueryCity.isEmpty()) {
+                val fallback = existing?.takeIf {
+                    cachedKey.equals(lookupKey, ignoreCase = true) || manualCity.isEmpty()
+                }
+                return@withContext fallback?.copy(isCachedOffline = true) ?: FlipWeatherResult.Unavailable
+            }
+
             runCatching {
-                val encoded = URLEncoder.encode(cleanCity, "UTF-8")
+                val encoded = URLEncoder.encode(resolvedQueryCity, "UTF-8")
                 val geoUrl = "https://geocoding-api.open-meteo.com/v1/search?name=$encoded&count=1&language=en&format=json"
-                val geoJson = httpGetJson(geoUrl) ?: return@runCatching FlipWeatherResult.Unavailable
-                val results = geoJson.optJSONArray("results") ?: return@runCatching FlipWeatherResult.Unavailable
-                if (results.length() == 0) return@runCatching FlipWeatherResult.Unavailable
+                val geoJson = httpGetJson(geoUrl) ?: throw IllegalStateException("Geo failed")
+                val results = geoJson.optJSONArray("results") ?: throw IllegalStateException("No geo results")
+                if (results.length() == 0) throw IllegalStateException("City not found")
 
                 val first = results.getJSONObject(0)
                 val lat = first.getDouble("latitude")
                 val lon = first.getDouble("longitude")
-                val resolvedName = first.optString("name").ifBlank { cleanCity }
+                val resolvedName = first.optString("name").ifBlank { resolvedQueryCity }
 
                 val forecastUrl =
                     "https://api.open-meteo.com/v1/forecast?latitude=$lat&longitude=$lon&current=temperature_2m,weather_code&timezone=auto"
-                val forecastJson = httpGetJson(forecastUrl) ?: return@runCatching FlipWeatherResult.Unavailable
-                val current = forecastJson.optJSONObject("current") ?: return@runCatching FlipWeatherResult.Unavailable
+                val forecastJson = httpGetJson(forecastUrl) ?: throw IllegalStateException("Forecast failed")
+                val current = forecastJson.optJSONObject("current") ?: throw IllegalStateException("No current")
                 val temp = kotlin.math.round(current.getDouble("temperature_2m")).toInt()
                 val code = current.optInt("weather_code", -1)
+                val fetchedAt = System.currentTimeMillis()
                 val ready = FlipWeatherResult.Ready(
                     cityLabel = resolvedName,
                     temperatureCelsius = temp,
-                    conditionLabel = wmoCodeLabel(code)
+                    conditionLabel = wmoCodeLabel(code),
+                    isCachedOffline = false,
+                    fetchedAtWallMs = fetchedAt
                 )
-                cachedKey = cleanCity
-                cachedAtMs = System.currentTimeMillis()
+                cachedKey = lookupKey
+                cachedAtMs = fetchedAt
                 cachedResult = ready
+                saveDiskCache(context, lookupKey, ready)
                 ready
-            }.getOrElse { FlipWeatherResult.Unavailable }
+            }.getOrElse {
+                val diskOrMemFallback = cachedResult ?: loadDiskCache(context)?.second
+                val matchesManual = manualCity.isEmpty() ||
+                    cachedKey.equals(lookupKey, ignoreCase = true) ||
+                    diskOrMemFallback?.cityLabel.equals(manualCity, ignoreCase = true)
+                if (diskOrMemFallback != null && matchesManual) {
+                    diskOrMemFallback.copy(isCachedOffline = true)
+                } else {
+                    FlipWeatherResult.Unavailable
+                }
+            }
         }
     }
 

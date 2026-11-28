@@ -9,6 +9,7 @@
     <uses-permission android:name="android.permission.ACCESS_NETWORK_STATE" />
     <uses-permission android:name="android.permission.FOREGROUND_SERVICE" />
     <uses-permission android:name="android.permission.FOREGROUND_SERVICE_DATA_SYNC" />
+    <uses-permission android:name="android.permission.FOREGROUND_SERVICE_MEDIA_PLAYBACK" />
     <uses-permission android:name="android.permission.FOREGROUND_SERVICE_SPECIAL_USE" />
     <uses-permission android:name="android.permission.RECEIVE_BOOT_COMPLETED" />
     <uses-permission android:name="android.permission.POST_NOTIFICATIONS" />
@@ -54,7 +55,7 @@
             android:name=".MainActivity"
             android:exported="true"
             android:label="@string/app_name"
-            android:theme="@style/Theme.Resolve.Starting"
+            android:theme="@style/Theme.Resolve"
             android:windowSoftInputMode="adjustResize">
             <intent-filter>
                 <action android:name="android.intent.action.MAIN" />
@@ -101,6 +102,24 @@
             android:configChanges="orientation|screenSize|smallestScreenSize|screenLayout|keyboardHidden"
             android:theme="@style/Theme.Resolve.TranslucentSignIn" />
 
+        <activity
+            android:name=".presentation.guard.MindfulPauseActivity"
+            android:exported="false"
+            android:excludeFromRecents="true"
+            android:taskAffinity="com.resolve.guard"
+            android:launchMode="singleTop"
+            android:configChanges="orientation|screenSize|smallestScreenSize|screenLayout"
+            android:theme="@style/Theme.Resolve.LockScreen" />
+
+        <activity
+            android:name=".presentation.guard.QuotaReachedActivity"
+            android:exported="false"
+            android:excludeFromRecents="true"
+            android:taskAffinity="com.resolve.guard"
+            android:launchMode="singleTop"
+            android:configChanges="orientation|screenSize|smallestScreenSize|screenLayout"
+            android:theme="@style/Theme.Resolve.LockScreen" />
+
         <service
             android:name=".accessibility.ResolveAccessibilityService"
             android:exported="true"
@@ -142,6 +161,34 @@
             android:exported="false"
             android:foregroundServiceType="dataSync" />
 
+        <service
+            android:name=".flipclock.ResolveAmbientAudioService"
+            android:exported="false"
+            android:foregroundServiceType="mediaPlayback" />
+
+        <service
+            android:name=".tile.ResolveFocusTileService"
+            android:exported="true"
+            android:icon="@drawable/ic_notification_resolve"
+            android:label="@string/resolve_tile_label"
+            android:permission="android.permission.BIND_QUICK_SETTINGS_TILE">
+            <intent-filter>
+                <action android:name="android.service.quicksettings.action.QS_TILE" />
+            </intent-filter>
+        </service>
+
+        <receiver
+            android:name=".widget.ResolveHomeWidgetProvider"
+            android:exported="true"
+            android:label="@string/app_name">
+            <intent-filter>
+                <action android:name="android.appwidget.action.APPWIDGET_UPDATE" />
+            </intent-filter>
+            <meta-data
+                android:name="android.appwidget.provider"
+                android:resource="@xml/resolve_home_widget_info" />
+        </receiver>
+
         <receiver
             android:name=".receiver.LockTransitionAlarmReceiver"
             android:exported="false" />
@@ -149,6 +196,23 @@
         <receiver
             android:name=".flipclock.FlipTimerAlarmReceiver"
             android:exported="false" />
+
+        <receiver
+            android:name=".service.SyncWakeAlarmReceiver"
+            android:exported="false" />
+
+        <service
+            android:name=".vpn.ResolveDnsVpnService"
+            android:exported="false"
+            android:permission="android.permission.BIND_VPN_SERVICE"
+            android:foregroundServiceType="specialUse">
+            <intent-filter>
+                <action android:name="android.net.VpnService" />
+            </intent-filter>
+            <property
+                android:name="android.app.PROPERTY_SPECIAL_USE_FGS_SUBTYPE"
+                android:value="Local on-device DNS-only distraction and website domain filter" />
+        </service>
 
         <service
             android:name=".service.SessionRecoveryJobService"

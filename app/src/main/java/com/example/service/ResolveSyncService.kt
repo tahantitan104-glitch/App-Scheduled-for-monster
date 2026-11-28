@@ -12,6 +12,7 @@ import android.content.IntentFilter
 import android.content.pm.ServiceInfo
 import android.net.ConnectivityManager
 import android.net.Network
+import android.net.NetworkCapabilities
 import android.os.Build
 import android.os.IBinder
 import androidx.core.app.NotificationCompat
@@ -72,9 +73,11 @@ class ResolveSyncService : Service() {
             stateObserverJob = serviceScope.launch {
                 coordinator.uiState.collect { state ->
                     if (!state.isSignedIn || !state.syncLockEnabled) {
+                        SyncWakeAlarmReceiver.cancel(this@ResolveSyncService)
                         stopForegroundCompat()
                         stopSelf()
                     } else {
+                        SyncWakeAlarmReceiver.scheduleNextWake(this@ResolveSyncService)
                         runCatching {
                             val nm = getSystemService(Context.NOTIFICATION_SERVICE) as? NotificationManager
                             nm?.notify(
@@ -90,12 +93,13 @@ class ResolveSyncService : Service() {
         if (heartbeatJob?.isActive != true) {
             heartbeatJob = serviceScope.launch(Dispatchers.Default) {
                 while (isActive) {
-                    runCatching { coordinator.refreshSyncNow() }
-                    delay(20_000L)
+                    runCatching { coordinator.performWakefulSyncCheck() }
+                    delay(8_000L)
                 }
             }
         }
 
+        SyncWakeAlarmReceiver.scheduleNextWake(this)
         return START_STICKY
     }
 
@@ -103,6 +107,7 @@ class ResolveSyncService : Service() {
 
     override fun onDestroy() {
         unregisterWakeSignals()
+        SyncWakeAlarmReceiver.cancel(this)
         heartbeatJob?.cancel()
         stateObserverJob?.cancel()
         serviceScope.cancel()
@@ -120,6 +125,7 @@ class ResolveSyncService : Service() {
             val filter = IntentFilter().apply {
                 addAction(Intent.ACTION_SCREEN_ON)
                 addAction(Intent.ACTION_USER_PRESENT)
+                addAction(Intent.ACTION_POWER_CONNECTED)
                 if (Build.VERSION.SDK_INT < Build.VERSION_CODES.N) {
                     @Suppress("DEPRECATION")
                     addAction(ConnectivityManager.CONNECTIVITY_ACTION)
@@ -141,6 +147,15 @@ class ResolveSyncService : Service() {
                 val callback = object : ConnectivityManager.NetworkCallback() {
                     override fun onAvailable(network: Network) {
                         app.container.multiDeviceSyncCoordinator.refreshSyncNow()
+                    }
+
+                    override fun onCapabilitiesChanged(
+                        network: Network,
+                        networkCapabilities: NetworkCapabilities
+                    ) {
+                        if (networkCapabilities.hasCapability(NetworkCapabilities.NET_CAPABILITY_INTERNET)) {
+                            app.container.multiDeviceSyncCoordinator.refreshSyncNow()
+                        }
                     }
                 }
                 cm?.registerDefaultNetworkCallback(callback)
@@ -239,6 +254,7 @@ class ResolveSyncService : Service() {
         }
 
         fun stop(context: Context) {
+            SyncWakeAlarmReceiver.cancel(context)
             val intent = Intent(context, ResolveSyncService::class.java)
             runCatching { context.stopService(intent) }
         }

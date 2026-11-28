@@ -151,7 +151,10 @@ private fun tabIndexForRoute(route: String?): Int =
     TOP_LEVEL_TABS.indexOfFirst { it.route == route }
 
 @Composable
-fun ResolveAppShell(viewModel: ResolveViewModel) {
+fun ResolveAppShell(
+    viewModel: ResolveViewModel,
+    onOpenFlipClock: () -> Unit = {}
+) {
     val palette = LocalResolveExtendedPalette.current
     val navController = rememberNavController()
     val notificationController = rememberResolveNotificationController()
@@ -199,6 +202,18 @@ fun ResolveAppShell(viewModel: ResolveViewModel) {
     val notificationProtectionState by viewModel.notificationProtectionState.collectAsStateWithLifecycle()
     val deviceAnalysisReport by viewModel.deviceAnalysisReport.collectAsStateWithLifecycle()
     val landscapeTiltMode by viewModel.landscapeTiltMode.collectAsStateWithLifecycle()
+    val appThemeId by viewModel.appThemeId.collectAsStateWithLifecycle()
+    val dailyFocusGoalMinutes by viewModel.dailyFocusGoalMinutes.collectAsStateWithLifecycle()
+    val showSetupTips by viewModel.showSetupTips.collectAsStateWithLifecycle()
+    val excludedScreenTimePackages by viewModel.excludedScreenTimePackages.collectAsStateWithLifecycle()
+    val focusProfiles by viewModel.focusProfiles.collectAsStateWithLifecycle()
+    val antiBypassStrictGuard by viewModel.antiBypassStrictGuard.collectAsStateWithLifecycle()
+    val emergencyCooldownSeconds by viewModel.emergencyCooldownSeconds.collectAsStateWithLifecycle()
+    val mindfulPauseConfig by viewModel.mindfulPauseConfig.collectAsStateWithLifecycle()
+    val dailyQuotaRules by viewModel.dailyQuotaRules.collectAsStateWithLifecycle()
+    val contentBlockerConfig by viewModel.contentBlockerConfig.collectAsStateWithLifecycle()
+    val accountabilityPartnerConfig by viewModel.accountabilityPartnerConfig.collectAsStateWithLifecycle()
+    val interceptedAppStats by viewModel.interceptedAppStats.collectAsStateWithLifecycle()
 
     var showDeviceOwnerGuide by remember { mutableStateOf(false) }
     val haptic = LocalHapticFeedback.current
@@ -472,7 +487,10 @@ fun ResolveAppShell(viewModel: ResolveViewModel) {
                                                 onDismissSyncPromo = { viewModel.dismissSyncPromoBanner() },
                                                 onOpenAccountSettings = { navigateSafely(ResolveRoutes.SETTINGS) },
                                                 protectionStatus = protectionStatus,
-                                                onProtectionAction = { viewModel.executeProtectionAction(it) }
+                                                onProtectionAction = { viewModel.executeProtectionAction(it) },
+                                                dailyFocusGoalMinutes = dailyFocusGoalMinutes,
+                                                onQuickStartFocusLock = { viewModel.startQuickFocusLock(it) },
+                                                onOpenFlipClock = onOpenFlipClock
                                             )
                                         }
 
@@ -493,7 +511,10 @@ fun ResolveAppShell(viewModel: ResolveViewModel) {
                                                     viewModel.toggleScheduleEnabled(schedule, enabled)
                                                 },
                                                 onDeleteSchedule = { id -> viewModel.deleteSchedule(id) },
-                                                reducedMotion = reducedMotion
+                                                reducedMotion = reducedMotion,
+                                                dailyFocusGoalMinutes = dailyFocusGoalMinutes,
+                                                interceptedAppStats = interceptedAppStats,
+                                                onResetInterceptedStats = { viewModel.resetInterceptedStats() }
                                             )
                                         }
 
@@ -571,7 +592,45 @@ fun ResolveAppShell(viewModel: ResolveViewModel) {
                                         onUpdateProfilePhoto = { viewModel.updateProfilePhoto(it) },
                                         onClearProfilePhoto = { viewModel.clearProfilePhoto() },
                                         onUnlinkDevice = { viewModel.unlinkDevice(it) },
-                                        onPickAvatarError = { viewModel.reportSyncMessage(it) }
+                                        onPickAvatarError = { viewModel.reportSyncMessage(it) },
+                                        appThemeId = appThemeId,
+                                        dailyFocusGoalMinutes = dailyFocusGoalMinutes,
+                                        showSetupTips = showSetupTips,
+                                        excludedScreenTimePackages = excludedScreenTimePackages,
+                                        installedApps = installedApps,
+                                        focusProfiles = focusProfiles,
+                                        antiBypassStrictGuard = antiBypassStrictGuard,
+                                        emergencyCooldownSeconds = emergencyCooldownSeconds,
+                                        mindfulPauseConfig = mindfulPauseConfig,
+                                        dailyQuotaRules = dailyQuotaRules,
+                                        contentBlockerConfig = contentBlockerConfig,
+                                        accountabilityPartnerConfig = accountabilityPartnerConfig,
+                                        onSelectAppTheme = { viewModel.setAppTheme(it) },
+                                        onSelectDailyGoalMinutes = { viewModel.setDailyFocusGoalMinutes(it) },
+                                        onToggleShowSetupTips = { viewModel.setShowSetupTips(it) },
+                                        onToggleExcludedScreenTimePackage = { viewModel.toggleExcludedScreenTimePackage(it) },
+                                        onSaveCustomFocusProfile = { name, mins, strict, allowApps, flip, pkgs ->
+                                            viewModel.saveCustomFocusProfile(name, mins, strict, allowApps, flip, pkgs)
+                                        },
+                                        onDeleteCustomFocusProfile = { viewModel.deleteCustomFocusProfile(it) },
+                                        onToggleAntiBypassStrictGuard = { viewModel.setAntiBypassStrictGuard(it) },
+                                        onSelectEmergencyCooldownSeconds = { viewModel.setEmergencyCooldownSeconds(it) },
+                                        onSaveMindfulPauseConfig = { viewModel.saveMindfulPauseConfig(it) },
+                                        onSaveDailyQuotaRule = { viewModel.saveDailyQuotaRule(it) },
+                                        onDeleteDailyQuotaRule = { viewModel.deleteDailyQuotaRule(it) },
+                                        onSaveContentBlockerConfig = { viewModel.saveContentBlockerConfig(it) },
+                                        onSaveAccountabilityPartner = { enabled, name, pin, strictUnlock, quotaOverride ->
+                                            viewModel.saveAccountabilityPartner(enabled, name, pin, strictUnlock, quotaOverride)
+                                        },
+                                        onClearAccountabilityPartnerPin = { viewModel.clearAccountabilityPartnerPin() },
+                                        onRefreshSync = { viewModel.refreshSyncNow() },
+                                        onSendRemoteExtend = { devId, mins -> viewModel.sendRemoteExtendCommand(devId, mins) },
+                                        onVerifyRecoveryForRemoteStop = { code, devId ->
+                                            viewModel.verifyRecoveryCodeForRemoteStop(code, devId)
+                                        },
+                                        dnsBlockedCount = viewModel.dnsBlockedCount.collectAsStateWithLifecycle().value,
+                                        isFocusLockActive = activeSession?.isEnforcementPhase == true,
+                                        onResetDnsBlockedCount = { viewModel.resetDnsBlockedCount() }
                                     )
                                 }
 
@@ -611,6 +670,11 @@ fun ResolveAppShell(viewModel: ResolveViewModel) {
                                         onUnlinkDevice = { viewModel.unlinkDevice(it) },
                                         onUpdateProfileName = { viewModel.updateProfileName(it) },
                                         onPickAvatarError = { viewModel.reportSyncMessage(it) },
+                                        onRefreshSync = { viewModel.refreshSyncNow() },
+                                        onSendRemoteExtend = { devId, mins -> viewModel.sendRemoteExtendCommand(devId, mins) },
+                                        onVerifyRecoveryForRemoteStop = { code, devId ->
+                                            viewModel.verifyRecoveryCodeForRemoteStop(code, devId)
+                                        },
                                         protectionStatus = protectionStatus,
                                         onProtectionAction = { viewModel.executeProtectionAction(it) },
                                         notificationControlConfig = notificationControlConfig,
@@ -693,7 +757,9 @@ fun ResolveAppShell(viewModel: ResolveViewModel) {
                                         },
                                         onShowFlipClockShortcutChanged = {
                                             viewModel.setProfileFlipClockShortcut(LockMode.INSTANT, it)
-                                        }
+                                        },
+                                        focusProfiles = focusProfiles,
+                                        onApplyFocusProfile = { viewModel.applyFocusProfile(LockMode.INSTANT, it) }
                                     )
                                 }
 
@@ -741,7 +807,9 @@ fun ResolveAppShell(viewModel: ResolveViewModel) {
                                         },
                                         onShowFlipClockShortcutChanged = {
                                             viewModel.setProfileFlipClockShortcut(LockMode.DELAYED, it)
-                                        }
+                                        },
+                                        focusProfiles = focusProfiles,
+                                        onApplyFocusProfile = { viewModel.applyFocusProfile(LockMode.DELAYED, it) }
                                     )
                                 }
 
@@ -792,7 +860,9 @@ fun ResolveAppShell(viewModel: ResolveViewModel) {
                                         isAccountSignedIn = accountSyncState.isSignedIn,
                                         defaultStrictMode = scheduledProfile.strictMode,
                                         defaultAllowSelectedApps = scheduledProfile.allowSelectedApps,
-                                        defaultShowFlipClockShortcut = scheduledProfile.showFlipClockShortcut
+                                        defaultShowFlipClockShortcut = scheduledProfile.showFlipClockShortcut,
+                                        focusProfiles = focusProfiles,
+                                        onApplyFocusProfile = { viewModel.applyFocusProfile(LockMode.SCHEDULED, it) }
                                     )
                                 }
 

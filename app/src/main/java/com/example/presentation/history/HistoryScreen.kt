@@ -52,6 +52,7 @@ import com.example.designsystem.LocalResolveBottomDockClearance
 import com.example.designsystem.LocalResolveExtendedPalette
 import com.example.domain.model.DailyAppUsageSummary
 import com.example.domain.model.DurationSelection
+import com.example.domain.model.InterceptedAppStat
 import com.example.domain.model.LockMode
 import com.example.domain.model.SessionHistoryRecord
 import com.example.domain.model.SessionOutcome
@@ -59,6 +60,7 @@ import com.example.domain.scheduling.ScheduleCalculator
 import com.example.presentation.components.FeatureTipNote
 import com.example.presentation.components.ResolveIcons
 import com.example.presentation.components.resolveGlassCard
+import androidx.compose.material3.TextButton
 import java.time.Instant
 import java.time.LocalDate
 import java.time.ZoneId
@@ -76,7 +78,10 @@ fun HistoryScreen(
     records: List<SessionHistoryRecord>,
     modifier: Modifier = Modifier,
     dailyAppUsage: DailyAppUsageSummary = DailyAppUsageSummary(),
-    onGrantUsageAccess: () -> Unit = {}
+    onGrantUsageAccess: () -> Unit = {},
+    dailyFocusGoalMinutes: Int = 120,
+    interceptedAppStats: List<InterceptedAppStat> = emptyList(),
+    onResetInterceptedStats: () -> Unit = {}
 ) {
     val completedCount = remember(records) { records.count { it.outcome == SessionOutcome.COMPLETED } }
     val totalFocusMinutes = remember(records) {
@@ -103,6 +108,7 @@ fun HistoryScreen(
     val instantCount = remember(records) { records.count { it.mode == LockMode.INSTANT } }
     val delayedCount = remember(records) { records.count { it.mode == LockMode.DELAYED } }
     val scheduleCount = remember(records) { records.count { it.mode == LockMode.SCHEDULED } }
+    val todayFocusMinutes = weeklyStats.lastOrNull()?.focusMinutes ?: 0L
 
     val palette = LocalResolveExtendedPalette.current
     val dockClearance = LocalResolveBottomDockClearance.current
@@ -123,7 +129,7 @@ fun HistoryScreen(
             contentPadding = PaddingValues(
                 start = 20.dp,
                 end = 20.dp,
-                top = 12.dp,
+                top = 6.dp,
                 bottom = 16.dp + dockClearance
             ),
             verticalArrangement = Arrangement.spacedBy(12.dp)
@@ -222,6 +228,98 @@ fun HistoryScreen(
                     summary = dailyAppUsage,
                     onGrantUsageAccess = onGrantUsageAccess
                 )
+            }
+
+            // Today's Focus Goal Progress
+            item {
+                val safeGoal = dailyFocusGoalMinutes.coerceAtLeast(1)
+                val goalRatio = (todayFocusMinutes.toFloat() / safeGoal.toFloat()).coerceIn(0f, 1f)
+                Column(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .resolveGlassCard(cornerRadius = 16.dp)
+                        .padding(16.dp)
+                        .testTag("insights_daily_goal_card"),
+                    verticalArrangement = Arrangement.spacedBy(8.dp)
+                ) {
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.SpaceBetween,
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        Text(
+                            text = "Today's Focus Goal",
+                            style = MaterialTheme.typography.titleSmall.copy(fontWeight = FontWeight.SemiBold),
+                            color = palette.textPrimary
+                        )
+                        Text(
+                            text = "${todayFocusMinutes}m / ${safeGoal}m",
+                            style = MaterialTheme.typography.labelMedium.copy(fontFamily = JetBrainsMonoFamily),
+                            color = palette.accentStrong
+                        )
+                    }
+                    LinearProgressIndicator(
+                        progress = { goalRatio },
+                        color = palette.accent,
+                        trackColor = palette.surfaceElevated,
+                        strokeCap = StrokeCap.Round,
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .height(8.dp)
+                    )
+                }
+            }
+
+            if (interceptedAppStats.isNotEmpty()) {
+                item {
+                    Column(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .resolveGlassCard(cornerRadius = 16.dp)
+                            .padding(16.dp)
+                            .testTag("insights_intercepted_apps_card"),
+                        verticalArrangement = Arrangement.spacedBy(8.dp)
+                    ) {
+                        Row(
+                            modifier = Modifier.fillMaxWidth(),
+                            horizontalArrangement = Arrangement.SpaceBetween,
+                            verticalAlignment = Alignment.CenterVertically
+                        ) {
+                            Text(
+                                text = "Intercepted Distractions",
+                                style = MaterialTheme.typography.titleSmall.copy(fontWeight = FontWeight.SemiBold),
+                                color = palette.textPrimary
+                            )
+                            TextButton(
+                                onClick = onResetInterceptedStats,
+                                modifier = Modifier.testTag("insights_reset_intercepted_btn")
+                            ) {
+                                Text("Reset", color = palette.textSecondary)
+                            }
+                        }
+                        interceptedAppStats.take(6).forEach { stat ->
+                            Row(
+                                modifier = Modifier.fillMaxWidth(),
+                                horizontalArrangement = Arrangement.SpaceBetween,
+                                verticalAlignment = Alignment.CenterVertically
+                            ) {
+                                Text(
+                                    text = stat.appName,
+                                    style = MaterialTheme.typography.bodySmall,
+                                    color = palette.textPrimary,
+                                    maxLines = 1,
+                                    overflow = TextOverflow.Ellipsis,
+                                    modifier = Modifier.weight(1f)
+                                )
+                                Text(
+                                    text = "${stat.count} blocked",
+                                    style = MaterialTheme.typography.labelSmall.copy(fontFamily = JetBrainsMonoFamily),
+                                    color = palette.warn
+                                )
+                            }
+                        }
+                    }
+                }
             }
 
             item {

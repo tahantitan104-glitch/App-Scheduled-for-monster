@@ -1,58 +1,99 @@
 package com.example
 
+import android.content.Intent
+import android.graphics.Color
 import android.os.Bundle
 import androidx.activity.ComponentActivity
+import androidx.activity.SystemBarStyle
 import androidx.activity.compose.setContent
 import androidx.activity.enableEdgeToEdge
 import androidx.activity.viewModels
-import androidx.compose.runtime.SideEffect
-import androidx.compose.ui.platform.LocalView
-import androidx.core.splashscreen.SplashScreen.Companion.installSplashScreen
-import androidx.core.view.WindowCompat
+import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.getValue
+import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.example.designsystem.ResolveTheme
-import com.example.domain.startup.StartupStage
-import com.example.platform.ForceDarkCapabilityHelper
+import com.example.designsystem.paletteForTheme
+import com.example.domain.model.FlipClockPage
+import com.example.domain.model.ResolveThemeId
+import com.example.flipclock.FlipClockActivity
 import com.example.presentation.ResolveViewModel
 import com.example.presentation.components.ProvideSafeTextToolbar
 import com.example.presentation.navigation.ResolveAppShell
 
 class MainActivity : ComponentActivity() {
-
     private val viewModel: ResolveViewModel by viewModels { ResolveViewModel.Factory }
 
     override fun onCreate(savedInstanceState: Bundle?) {
-        ForceDarkCapabilityHelper.ensureResolveNightMode(this)
-        val splashScreen = installSplashScreen()
         super.onCreate(savedInstanceState)
-        splashScreen.setKeepOnScreenCondition {
-            viewModel.startupStage.value == StartupStage.RESOLVING
-        }
-
-        enableEdgeToEdge()
+        runCatching { actionBar?.hide() }
+        enableEdgeToEdge(
+            statusBarStyle = SystemBarStyle.dark(Color.TRANSPARENT),
+            navigationBarStyle = SystemBarStyle.dark(Color.TRANSPARENT)
+        )
+        handleWidgetShortcutIntent(intent)
         setContent {
-            val view = LocalView.current
-            if (!view.isInEditMode) {
-                SideEffect {
-                    val controller = WindowCompat.getInsetsController(window, view)
-                    controller.isAppearanceLightStatusBars = false
-                    controller.isAppearanceLightNavigationBars = false
+            val activeTheme by viewModel.appThemeId.collectAsStateWithLifecycle()
+            val showSetupTips by viewModel.showSetupTips.collectAsStateWithLifecycle()
+            val palette = paletteForTheme(activeTheme)
+
+            LaunchedEffect(palette.isDark) {
+                val barStyle = if (palette.isDark) {
+                    SystemBarStyle.dark(Color.TRANSPARENT)
+                } else {
+                    SystemBarStyle.light(Color.TRANSPARENT, Color.TRANSPARENT)
                 }
+                enableEdgeToEdge(
+                    statusBarStyle = barStyle,
+                    navigationBarStyle = barStyle
+                )
             }
 
-            ResolveTheme {
+            ResolveTheme(
+                themeId = activeTheme,
+                showSetupTips = showSetupTips
+            ) {
                 ProvideSafeTextToolbar {
-                    ResolveAppShell(viewModel = viewModel)
+                    ResolveAppShell(
+                        viewModel = viewModel,
+                        onOpenFlipClock = {
+                            startActivity(FlipClockActivity.createIntent(this@MainActivity))
+                        }
+                    )
                 }
             }
         }
     }
 
+    override fun onNewIntent(intent: Intent) {
+        super.onNewIntent(intent)
+        setIntent(intent)
+        handleWidgetShortcutIntent(intent)
+    }
+
     override fun onResume() {
         super.onResume()
         viewModel.refreshCapabilities()
-        viewModel.refreshSyncNow()
-        if (viewModel.startupStage.value != StartupStage.RESTORE_LOCK) {
-            viewModel.refreshInstalledApps()
+        viewModel.refreshDailyAppUsage()
+    }
+
+    private fun handleWidgetShortcutIntent(intent: Intent?) {
+        when (intent?.action) {
+            ACTION_QUICK_LOCK_15M -> viewModel.startQuickFocusLock(15L)
+            ACTION_QUICK_LOCK_30M -> viewModel.startQuickFocusLock(30L)
+            ACTION_OPEN_FLIP_CLOCK -> {
+                startActivity(
+                    FlipClockActivity.createIntent(
+                        context = this,
+                        initialPage = FlipClockPage.CLOCK
+                    )
+                )
+            }
         }
+    }
+
+    companion object {
+        const val ACTION_QUICK_LOCK_15M = "com.example.action.QUICK_LOCK_15M"
+        const val ACTION_QUICK_LOCK_30M = "com.example.action.QUICK_LOCK_30M"
+        const val ACTION_OPEN_FLIP_CLOCK = "com.example.action.OPEN_FLIP_CLOCK"
     }
 }

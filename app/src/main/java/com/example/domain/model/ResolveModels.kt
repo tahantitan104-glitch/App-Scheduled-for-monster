@@ -190,6 +190,124 @@ enum class FlipDateFormat(val pattern: String, val label: String) {
     }
 }
 
+enum class FlipClockElementId(val label: String) {
+    HOUR("Hour"),
+    MINUTE("Minute"),
+    AM_PM("AM/PM"),
+    SECONDS("Seconds"),
+    DATE("Date"),
+    WEEKDAY("Weekday"),
+    WEATHER("Weather"),
+    BATTERY("Battery %")
+}
+
+enum class FlipClockElementAlign(val label: String) {
+    LEFT("Left"),
+    CENTER("Center"),
+    RIGHT("Right")
+}
+
+enum class FlipWeekdayStyle(val label: String) {
+    FULL("Full"),
+    SHORT("Short")
+}
+
+enum class FlipBatteryStyle(val label: String) {
+    ICON_AND_PERCENT("Icon + %"),
+    PERCENT_ONLY("% Only")
+}
+
+enum class FlipWeatherStyle(val label: String) {
+    COMPACT("Compact"),
+    DETAILED("Detailed")
+}
+
+data class FlipElementPlacement(
+    val offsetXFrac: Float = 0f,
+    val offsetYFrac: Float = 0f
+)
+
+data class FlipClockOrientationLayout(
+    val enabled: Boolean = false,
+    val hourPlacement: FlipElementPlacement = FlipElementPlacement(),
+    val minutePlacement: FlipElementPlacement = FlipElementPlacement(),
+    val amPmPlacement: FlipElementPlacement = FlipElementPlacement(),
+    val secondsPlacement: FlipElementPlacement = FlipElementPlacement(),
+    val datePlacement: FlipElementPlacement = FlipElementPlacement(),
+    val weekdayPlacement: FlipElementPlacement = FlipElementPlacement(),
+    val weatherPlacement: FlipElementPlacement = FlipElementPlacement(),
+    val batteryPlacement: FlipElementPlacement = FlipElementPlacement(),
+    val hourScale: Float = 1.0f,
+    val minuteScale: Float = 1.0f,
+    val amPmAlign: FlipClockElementAlign = FlipClockElementAlign.LEFT,
+    val secondsAlign: FlipClockElementAlign = FlipClockElementAlign.RIGHT,
+    val weekdayStyle: FlipWeekdayStyle = FlipWeekdayStyle.FULL,
+    val batteryStyle: FlipBatteryStyle = FlipBatteryStyle.ICON_AND_PERCENT,
+    val weatherStyle: FlipWeatherStyle = FlipWeatherStyle.COMPACT
+) {
+    fun placementFor(id: FlipClockElementId): FlipElementPlacement = when (id) {
+        FlipClockElementId.HOUR -> hourPlacement
+        FlipClockElementId.MINUTE -> minutePlacement
+        FlipClockElementId.AM_PM -> amPmPlacement
+        FlipClockElementId.SECONDS -> secondsPlacement
+        FlipClockElementId.DATE -> datePlacement
+        FlipClockElementId.WEEKDAY -> weekdayPlacement
+        FlipClockElementId.WEATHER -> weatherPlacement
+        FlipClockElementId.BATTERY -> batteryPlacement
+    }
+
+    fun withPlacement(id: FlipClockElementId, placement: FlipElementPlacement): FlipClockOrientationLayout {
+        val clamped = FlipElementPlacement(
+            offsetXFrac = placement.offsetXFrac.coerceIn(-0.44f, 0.44f),
+            offsetYFrac = placement.offsetYFrac.coerceIn(-0.44f, 0.44f)
+        )
+        return when (id) {
+            FlipClockElementId.HOUR -> copy(enabled = true, hourPlacement = clamped)
+            FlipClockElementId.MINUTE -> copy(enabled = true, minutePlacement = clamped)
+            FlipClockElementId.AM_PM -> copy(enabled = true, amPmPlacement = clamped)
+            FlipClockElementId.SECONDS -> copy(enabled = true, secondsPlacement = clamped)
+            FlipClockElementId.DATE -> copy(enabled = true, datePlacement = clamped)
+            FlipClockElementId.WEEKDAY -> copy(enabled = true, weekdayPlacement = clamped)
+            FlipClockElementId.WEATHER -> copy(enabled = true, weatherPlacement = clamped)
+            FlipClockElementId.BATTERY -> copy(enabled = true, batteryPlacement = clamped)
+        }
+    }
+
+    companion object {
+        const val MIN_DIGIT_SCALE = 0.65f
+        const val MAX_DIGIT_SCALE = 1.45f
+
+        fun defaultPortrait(): FlipClockOrientationLayout = FlipClockOrientationLayout(
+            enabled = false,
+            hourPlacement = FlipElementPlacement(0f, -0.17f),
+            minutePlacement = FlipElementPlacement(0f, 0.14f),
+            amPmPlacement = FlipElementPlacement(-0.18f, -0.02f),
+            secondsPlacement = FlipElementPlacement(0.18f, 0.29f),
+            datePlacement = FlipElementPlacement(0.16f, -0.02f),
+            weekdayPlacement = FlipElementPlacement(0f, -0.005f),
+            weatherPlacement = FlipElementPlacement(-0.14f, 0.37f),
+            batteryPlacement = FlipElementPlacement(0.16f, 0.37f)
+        )
+
+        fun defaultLandscape(): FlipClockOrientationLayout = FlipClockOrientationLayout(
+            enabled = false,
+            hourPlacement = FlipElementPlacement(-0.18f, 0f),
+            minutePlacement = FlipElementPlacement(0.18f, 0f),
+            amPmPlacement = FlipElementPlacement(-0.24f, 0.24f),
+            secondsPlacement = FlipElementPlacement(0.24f, 0.24f),
+            datePlacement = FlipElementPlacement(-0.14f, -0.24f),
+            weekdayPlacement = FlipElementPlacement(0.18f, -0.24f),
+            weatherPlacement = FlipElementPlacement(-0.12f, 0.36f),
+            batteryPlacement = FlipElementPlacement(0.14f, 0.36f)
+        )
+    }
+}
+
+data class FlipClockCustomLayout(
+    val portrait: FlipClockOrientationLayout = FlipClockOrientationLayout.defaultPortrait(),
+    val landscape: FlipClockOrientationLayout = FlipClockOrientationLayout.defaultLandscape()
+)
+
 data class FlipClockSettings(
     val use24HourFormat: Boolean = false,
     val useSystemTimeFormat: Boolean = false,
@@ -204,12 +322,24 @@ data class FlipClockSettings(
     val showBattery: Boolean = false,
     val showWeather: Boolean = false,
     val weatherLocationQuery: String = "",
+    val weatherUseFahrenheit: Boolean = false,
+    val weatherAutoDetect: Boolean = false,
     val sleepTimerMinutes: Int = 0,
     val clockTickerSoundEnabled: Boolean = false,
     val customTag: String = "",
     val autoRepeat: Boolean = false,
     val zoomFraction: Float = DEFAULT_ZOOM_FRACTION,
     val lastBrightnessPercent: Float? = null,
+    val pomodoroEnabled: Boolean = false,
+    val pomodoroFocusMinutes: Int = 25,
+    val pomodoroBreakMinutes: Int = 5,
+    val ambientSoundType: AmbientSoundType = AmbientSoundType.OFF,
+    val ambientVolume: Float = 0.45f,
+    val oledBurnInProtection: Boolean = false,
+    val syncFlipTimerWithFocusLock: Boolean = false,
+    val playAmbientSoundDuringFocusLock: Boolean = false,
+    val ambientPlayInBackground: Boolean = false,
+    val customLayout: FlipClockCustomLayout = FlipClockCustomLayout(),
     val updatedAtWallMs: Long = 0L
 ) {
     val clampedZoomFraction: Float
@@ -299,6 +429,7 @@ data class DailyAppUsageSummary(
     val hasUsagePermission: Boolean = false,
     val totalScreenTimeMs: Long = 0L,
     val topApps: List<DailyAppUsageItem> = emptyList(),
+    val excludedCount: Int = 0,
     val refreshedAtWallMs: Long = 0L
 )
 
@@ -335,7 +466,8 @@ data class InstalledAppInfo(
     val packageName: String,
     val appName: String,
     val isSystemApp: Boolean = false,
-    val isDialerOrTelecom: Boolean = false
+    val isDialerOrTelecom: Boolean = false,
+    val category: AppCategory = AppCategory.OTHER
 )
 
 enum class DeviceOwnerState {
@@ -544,3 +676,164 @@ data class ScheduleConflict(
     val conflictingScheduleName: String,
     val description: String
 )
+
+enum class ResolveThemeId(
+    val storageKey: String,
+    val displayName: String,
+    val subtitle: String,
+    val isDark: Boolean
+) {
+    DEEP_FOREST_GREEN("deep_forest_green", "Deep Forest Green", "Original deep evergreen & mint sanctuary", true),
+    EMERALD_FOREST("emerald_forest", "Emerald Forest", "Charcoal-emerald dark focus", true),
+    MIDNIGHT_OBSIDIAN("midnight_obsidian", "Midnight Obsidian OLED", "True-black OLED energy saver", true),
+    COBALT_STUDIO("cobalt_studio", "Cobalt Studio", "Crisp indigo-slate studio desk", true);
+
+    companion object {
+        fun fromStorageKey(key: String?): ResolveThemeId {
+            if (key == "warm_paper") return DEEP_FOREST_GREEN
+            return entries.firstOrNull { it.storageKey == key } ?: DEEP_FOREST_GREEN
+        }
+    }
+}
+
+enum class AppCategory(val displayName: String) {
+    SOCIAL("Social"),
+    GAMES("Games"),
+    VIDEO("Video"),
+    PRODUCTIVITY("Productivity"),
+    COMMUNICATION("Communication"),
+    BROWSERS("Browsers"),
+    OTHER("Other")
+}
+
+data class FocusProfile(
+    val profileId: String,
+    val name: String,
+    val subtitle: String = "",
+    val defaultDurationMinutes: Long = 30L,
+    val strictMode: Boolean = false,
+    val allowSelectedApps: Boolean = true,
+    val phoneAccessEnabled: Boolean = true,
+    val showFlipClockShortcut: Boolean = false,
+    val allowedPackages: List<String> = emptyList(),
+    val builtIn: Boolean = false
+) {
+    companion object {
+        val BUILT_IN_PRESETS: List<FocusProfile> = listOf(
+            FocusProfile(
+                profileId = "preset_study",
+                name = "Study Mode",
+                subtitle = "45m · Phone ON · Flip Clock ON",
+                defaultDurationMinutes = 45L,
+                strictMode = false,
+                allowSelectedApps = true,
+                phoneAccessEnabled = true,
+                showFlipClockShortcut = true,
+                builtIn = true
+            ),
+            FocusProfile(
+                profileId = "preset_deep_work",
+                name = "Deep Work",
+                subtitle = "90m · Strict ON · Apps Paused",
+                defaultDurationMinutes = 90L,
+                strictMode = true,
+                allowSelectedApps = false,
+                phoneAccessEnabled = true,
+                showFlipClockShortcut = true,
+                builtIn = true
+            ),
+            FocusProfile(
+                profileId = "preset_sleep",
+                name = "Sleep Mode",
+                subtitle = "7h · Strict ON · Calls Only",
+                defaultDurationMinutes = 420L,
+                strictMode = true,
+                allowSelectedApps = false,
+                phoneAccessEnabled = true,
+                showFlipClockShortcut = false,
+                builtIn = true
+            )
+        )
+    }
+}
+
+data class MindfulPauseConfig(
+    val enabled: Boolean = false,
+    val delaySeconds: Int = 10,
+    val passMinutes: Int = 5,
+    val targetPackages: List<String> = emptyList()
+) {
+    val clampedDelaySeconds: Int get() = delaySeconds.coerceIn(5, 15)
+    val clampedPassMinutes: Int get() = passMinutes.coerceIn(1, 30)
+}
+
+data class AppUsageQuotaRule(
+    val packageName: String,
+    val appName: String,
+    val dailyLimitMinutes: Int,
+    val enabled: Boolean = true
+)
+
+data class ContentBlockerConfig(
+    val enabled: Boolean = false,
+    val blockYouTubeShorts: Boolean = true,
+    val blockInstagramReels: Boolean = true,
+    val blockedDomains: List<String> = emptyList(),
+    val onlyDuringFocusLock: Boolean = false,
+    val vpnDnsBlockerEnabled: Boolean = false,
+    val blockAdultDomains: Boolean = false,
+    val blockShortVideoDomains: Boolean = false,
+    val blockSocialDomains: Boolean = false
+)
+
+data class AccountabilityPartnerConfig(
+    val enabled: Boolean = false,
+    val partnerName: String = "",
+    val hasPartnerPin: Boolean = false,
+    val requireForStrictUnlock: Boolean = true,
+    val requireForQuotaOverride: Boolean = true
+)
+
+enum class AmbientSoundType(
+    val storageKey: String,
+    val label: String,
+    val subtitle: String = "",
+    val categoryLabel: String = "Sound"
+) {
+    OFF("off", "Off", "Silence", "Muted"),
+    WHITE_NOISE("white_noise", "White Noise", "Velvet studio distraction masking", "Studio"),
+    RAIN("rain", "Soft Rain", "Gentle rainfall & leaf droplet wash", "Rain"),
+    WARM_HUM("warm_hum", "Warm Hum", "Cozy low cabin harmonic drone", "Tones"),
+    BROWN_NOISE("brown_noise", "Deep Brown", "Warm low-frequency deep focus blanket", "Studio"),
+    BONFIRE("bonfire", "Bonfire", "Crackling wood fire & cozy embers", "Fire"),
+    RIVER_WAVES("river_waves", "River Waves", "Flowing stream & rolling shore laps", "Water"),
+    OCEAN_WAVES("ocean_waves", "Ocean Waves", "Slow hypnotic surf swell & recede", "Water"),
+    THUNDERSTORM("thunderstorm", "Thunderstorm", "Steady rainfall & distant low thunder", "Rain"),
+    FOREST_WIND("forest_wind", "Forest Wind", "Rustling pine canopy & distant birds", "Nature"),
+    FOCUS_PAD("focus_pad", "Lo-Fi Pad", "Warm breathing harmonic ambient pad", "Tones");
+
+    companion object {
+        val studioDisplayOrder: List<AmbientSoundType> = listOf(
+            WHITE_NOISE,
+            RAIN,
+            BONFIRE,
+            FOREST_WIND,
+            RIVER_WAVES,
+            OCEAN_WAVES,
+            THUNDERSTORM,
+            BROWN_NOISE,
+            WARM_HUM,
+            FOCUS_PAD
+        )
+
+        fun fromKey(key: String?): AmbientSoundType =
+            entries.firstOrNull { it.storageKey == key } ?: OFF
+    }
+}
+
+data class InterceptedAppStat(
+    val packageName: String,
+    val appName: String,
+    val count: Int
+)
+

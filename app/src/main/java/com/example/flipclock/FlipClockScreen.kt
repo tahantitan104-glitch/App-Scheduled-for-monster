@@ -2,6 +2,7 @@ package com.example.flipclock
 
 import android.os.SystemClock
 import android.text.format.DateFormat
+import android.widget.Toast
 import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.animation.core.FastOutSlowInEasing
 import androidx.compose.animation.core.animateDpAsState
@@ -30,6 +31,7 @@ import androidx.compose.foundation.layout.WindowInsets
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.offset
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.safeDrawing
 import androidx.compose.foundation.layout.size
@@ -61,9 +63,11 @@ import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableFloatStateOf
+import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableLongStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
@@ -90,18 +94,31 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.Dp
+import androidx.compose.ui.unit.IntOffset
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.min
 import androidx.compose.ui.unit.sp
+import androidx.activity.compose.BackHandler
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.example.designsystem.FlipClockLabelFamily
 import com.example.designsystem.ResolveColors
+import com.example.domain.model.FlipBatteryStyle
+import com.example.domain.model.FlipClockCustomLayout
+import com.example.domain.model.FlipClockElementAlign
+import com.example.domain.model.FlipClockElementId
+import com.example.domain.model.FlipClockOrientationLayout
 import com.example.domain.model.FlipClockPage
 import com.example.domain.model.FlipClockSettings
+import com.example.domain.model.FlipDateFormat
 import com.example.domain.model.FlipStopwatchState
 import com.example.domain.model.FlipTimerPreset
 import com.example.domain.model.FlipTimerState
+import com.example.domain.model.FlipWeatherStyle
+import com.example.domain.model.FlipWeekdayStyle
 import com.example.presentation.components.ResolveIcons
+import com.example.session.EngineStartResult
+import androidx.compose.material.icons.outlined.Edit
+import kotlin.math.roundToInt
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 import java.time.Instant
@@ -134,6 +151,9 @@ fun FlipClockScreen(
     val timerFinishedBannerVisible by manager.timerFinishedBannerVisible.collectAsStateWithLifecycle()
     val stopwatchState by manager.stopwatchState.collectAsStateWithLifecycle()
     val stopwatchElapsedMs by manager.stopwatchElapsedMs.collectAsStateWithLifecycle()
+    val pomodoroStatus by manager.pomodoroStatus.collectAsStateWithLifecycle()
+    val focusLockSession by manager.focusLockSession.collectAsStateWithLifecycle()
+    val focusLockRemainingMs by manager.focusLockRemainingMs.collectAsStateWithLifecycle()
 
     val pagerState = rememberPagerState(
         initialPage = initialPage.ordinal,
@@ -146,9 +166,40 @@ fun FlipClockScreen(
     }
 
     var showSettingsSheet by remember { mutableStateOf(false) }
+    var showWhiteNoiseStudio by remember { mutableStateOf(false) }
     var showCustomDurationDialog by remember { mutableStateOf(false) }
     var showResetTimerConfirm by remember { mutableStateOf(false) }
     var pendingPresetSwitch by remember { mutableStateOf<FlipTimerPreset?>(null) }
+
+    var isLayoutEditMode by remember { mutableStateOf(false) }
+    var currentCanvasIsLandscape by remember { mutableStateOf(false) }
+    var selectedEditorElement by remember { mutableStateOf(FlipClockElementId.HOUR) }
+    var draftCustomLayout by remember(settings.customLayout) { mutableStateOf(settings.customLayout) }
+    var draftShowSeconds by remember(settings.showSeconds) { mutableStateOf(settings.showSeconds) }
+    var draftShowDate by remember(settings.showDate) { mutableStateOf(settings.showDate) }
+    var draftShowWeekday by remember(settings.showWeekday) { mutableStateOf(settings.showWeekday) }
+    var draftShowWeather by remember(settings.showWeather) { mutableStateOf(settings.showWeather) }
+    var draftShowBattery by remember(settings.showBattery) { mutableStateOf(settings.showBattery) }
+    var draftDateFormatPattern by remember(settings.dateFormatPattern) { mutableStateOf(settings.dateFormatPattern) }
+
+    fun enterLayoutEditMode() {
+        draftCustomLayout = settings.customLayout
+        draftShowSeconds = settings.showSeconds
+        draftShowDate = settings.showDate
+        draftShowWeekday = settings.showWeekday
+        draftShowWeather = settings.showWeather
+        draftShowBattery = settings.showBattery
+        draftDateFormatPattern = settings.dateFormatPattern
+        selectedEditorElement = FlipClockElementId.HOUR
+        showSettingsSheet = false
+        onControlsVisibleChange(false)
+        isLayoutEditMode = true
+        scope.launch { pagerState.animateScrollToPage(FlipClockPage.CLOCK.ordinal) }
+    }
+
+    BackHandler(enabled = isLayoutEditMode) {
+        isLayoutEditMode = false
+    }
 
     var liveZoomFraction by remember(settings.zoomFraction) {
         mutableFloatStateOf(settings.clampedZoomFraction)
@@ -164,12 +215,14 @@ fun FlipClockScreen(
     var isAdjustingBrightness by remember { mutableStateOf(false) }
     var interactionPulse by remember { mutableStateOf(0) }
 
-    // Pause 5-second auto-hide while a sheet or confirmation dialog is active
+    // Pause 5-second auto-hide while a sheet, editor, or confirmation dialog is active
     val isOverlayPaused = showSettingsSheet ||
+        showWhiteNoiseStudio ||
         showCustomDurationDialog ||
         showResetTimerConfirm ||
         pendingPresetSwitch != null ||
-        isAdjustingBrightness
+        isAdjustingBrightness ||
+        isLayoutEditMode
 
     LaunchedEffect(controlsVisible, interactionPulse, isOverlayPaused) {
         if (controlsVisible && !isOverlayPaused) {
@@ -180,6 +233,40 @@ fun FlipClockScreen(
 
     val context = LocalContext.current
     val tickerAudioPlayer = remember(context) { FlipTickerAudioPlayer(context) }
+
+    DisposableEffect(manager) {
+        manager.setFlipClockUiOpen(true)
+        onDispose { manager.setFlipClockUiOpen(false) }
+    }
+
+    LaunchedEffect(manager) {
+        manager.pomodoroChimeEvents.collect {
+            manager.ambientAudioEngine.playPomodoroChime()
+        }
+    }
+
+    var oledShiftStep by remember { mutableIntStateOf(0) }
+    LaunchedEffect(settings.oledBurnInProtection) {
+        if (!settings.oledBurnInProtection) {
+            oledShiftStep = 0
+            return@LaunchedEffect
+        }
+        while (true) {
+            delay(60_000L)
+            oledShiftStep = (oledShiftStep + 1) % 8
+        }
+    }
+    val oledShiftDp = remember(settings.oledBurnInProtection, oledShiftStep) {
+        if (!settings.oledBurnInProtection) {
+            0 to 0
+        } else {
+            val offsets = listOf(
+                -5 to -3, 0 to -5, 5 to -3, 6 to 0,
+                5 to 3, 0 to 5, -5 to 3, -6 to 0
+            )
+            offsets[oledShiftStep % offsets.size]
+        }
+    }
 
     // Real system clock tick for Clock page
     var currentDateTime by remember { mutableStateOf(ZonedDateTime.now()) }
@@ -228,42 +315,58 @@ fun FlipClockScreen(
             val remMs = deadline - SystemClock.elapsedRealtime()
             if (remMs <= 0L) {
                 sleepRemainingSeconds = 0L
+                manager.ambientAudioEngine.setSleepFadeGain(0f)
                 manager.setSleepTimerMinutes(0)
+                manager.stopAmbientSound()
+                manager.ambientAudioEngine.setSleepFadeGain(1f)
                 onSleepTimerExpired()
                 break
             }
+            if (remMs <= 8_000L) {
+                manager.ambientAudioEngine.setSleepFadeGain((remMs.toFloat() / 8_000f).coerceIn(0.02f, 1f))
+            } else {
+                manager.ambientAudioEngine.setSleepFadeGain(1f)
+            }
             sleepRemainingSeconds = ((remMs + 999L) / 1000L).coerceAtLeast(1L)
-            delay(1_000L)
+            delay(500L)
         }
     }
 
     // Telemetry state for Battery, Upcoming Alarm, and optional Open-Meteo Weather
     val isSystem24Hour = DateFormat.is24HourFormat(context)
     val effective24Hour = if (settings.useSystemTimeFormat) isSystem24Hour else settings.use24HourFormat
+    var batteryTelemetry by remember { mutableStateOf<FlipBatteryTelemetry?>(null) }
     var batteryLabel by remember { mutableStateOf<String?>(null) }
     var alarmLabel by remember { mutableStateOf<String?>(null) }
     var weatherState by remember { mutableStateOf<FlipWeatherResult>(FlipWeatherResult.NeedsCity) }
 
-    LaunchedEffect(settings.showBattery, settings.showUpcomingAlarm, effective24Hour, currentDateTime.minute) {
-        batteryLabel = if (settings.showBattery) {
-            FlipClockTelemetry.readBattery(context)?.formatLabel()
-        } else null
+    val effectiveShowBattery = if (isLayoutEditMode) draftShowBattery else settings.showBattery
+    val effectiveShowWeather = if (isLayoutEditMode) draftShowWeather else settings.showWeather
+
+    LaunchedEffect(effectiveShowBattery, settings.showUpcomingAlarm, effective24Hour, currentDateTime.minute) {
+        val battery = if (effectiveShowBattery) FlipClockTelemetry.readBattery(context) else null
+        batteryTelemetry = battery
+        batteryLabel = battery?.formatLabel()
         alarmLabel = if (settings.showUpcomingAlarm) {
             FlipClockTelemetry.readUpcomingAlarmLabel(context, effective24Hour) ?: "No alarm"
         } else null
     }
 
-    LaunchedEffect(settings.showWeather, settings.weatherLocationQuery) {
-        if (!settings.showWeather) {
+    LaunchedEffect(effectiveShowWeather, settings.weatherLocationQuery, settings.weatherAutoDetect) {
+        if (!effectiveShowWeather) {
             weatherState = FlipWeatherResult.NeedsCity
             return@LaunchedEffect
         }
-        if (settings.weatherLocationQuery.isBlank()) {
+        if (settings.weatherLocationQuery.isBlank() && !settings.weatherAutoDetect) {
             weatherState = FlipWeatherResult.NeedsCity
             return@LaunchedEffect
         }
         weatherState = FlipWeatherResult.Loading
-        weatherState = FlipWeatherRepository.fetchWeather(settings.weatherLocationQuery)
+        weatherState = FlipWeatherRepository.fetchWeather(
+            cityQuery = settings.weatherLocationQuery,
+            autoDetect = settings.weatherAutoDetect,
+            context = context
+        )
     }
 
     val latestControlsVisible by rememberUpdatedState(controlsVisible)
@@ -271,13 +374,20 @@ fun FlipClockScreen(
     val latestBrightness by rememberUpdatedState(liveBrightnessPercent)
     val latestPage by rememberUpdatedState(FlipClockPage.entries[pagerState.currentPage])
     val density = LocalDensity.current
+    val oledOffsetPx = with(density) {
+        IntOffset(
+            x = (oledShiftDp.first.dp).toPx().roundToInt(),
+            y = (oledShiftDp.second.dp).toPx().roundToInt()
+        )
+    }
     val longPressTimeoutMs = 300L
 
     Box(
         modifier = modifier
             .fillMaxSize()
             .background(FlipClockPalette.CanvasBlack)
-            .pointerInput(Unit) {
+            .pointerInput(isLayoutEditMode) {
+                if (isLayoutEditMode) return@pointerInput
                 val touchSlop = viewConfiguration.touchSlop
                 val upSwipeThresholdPx = with(density) { 64.dp.toPx() }
                 val brightnessDragPerPercentPx = with(density) { 4.2.dp.toPx() }
@@ -375,19 +485,26 @@ fun FlipClockScreen(
         HorizontalPager(
             state = pagerState,
             beyondViewportPageCount = 1,
-            userScrollEnabled = !isAdjustingBrightness && !showSettingsSheet,
-            modifier = Modifier.fillMaxSize()
+            userScrollEnabled = !isAdjustingBrightness && !showSettingsSheet && !isLayoutEditMode,
+            modifier = Modifier
+                .fillMaxSize()
+                .offset { oledOffsetPx }
         ) { pageIndex ->
             when (FlipClockPage.entries[pageIndex]) {
                 FlipClockPage.TIMER -> {
                     FlipTimerPage(
                         presets = presets,
                         timerState = timerState,
+                        pomodoroStatus = pomodoroStatus,
+                        pomodoroEnabled = settings.pomodoroEnabled,
                         remainingMs = timerRemainingMs,
                         finishedBannerVisible = timerFinishedBannerVisible,
                         showFlipAxis = settings.showFlipAxis,
                         zoomFraction = liveZoomFraction,
                         controlsVisible = controlsVisible,
+                        syncFlipTimerWithFocusLock = settings.syncFlipTimerWithFocusLock,
+                        focusLockActive = focusLockSession?.isEnforcementPhase == true,
+                        focusLockRemainingMs = focusLockRemainingMs,
                         onTapDisplayToggle = {
                             interactionPulse++
                             scope.launch {
@@ -422,7 +539,18 @@ fun FlipClockScreen(
                             interactionPulse++
                             showCustomDurationDialog = true
                         },
-                        onOpenAppNotificationSettings = onOpenAppNotificationSettings
+                        onOpenAppNotificationSettings = onOpenAppNotificationSettings,
+                        onStartFocusLockFromTimer = {
+                            interactionPulse++
+                            scope.launch {
+                                when (val res = manager.startFocusLockFromFlipTimer()) {
+                                    EngineStartResult.Started -> Unit
+                                    is EngineStartResult.Blocked -> {
+                                        Toast.makeText(context, res.reason, Toast.LENGTH_SHORT).show()
+                                    }
+                                }
+                            }
+                        }
                     )
                 }
 
@@ -431,11 +559,32 @@ fun FlipClockScreen(
                         dateTime = currentDateTime,
                         settings = settings,
                         effective24Hour = effective24Hour,
+                        batteryTelemetry = batteryTelemetry,
                         batteryLabel = batteryLabel,
                         alarmLabel = alarmLabel,
                         weatherResult = weatherState,
                         sleepRemainingSeconds = sleepRemainingSeconds,
-                        zoomFraction = liveZoomFraction
+                        focusLockActive = focusLockSession?.isEnforcementPhase == true,
+                        focusLockRemainingMs = focusLockRemainingMs,
+                        zoomFraction = liveZoomFraction,
+                        isLayoutEditMode = isLayoutEditMode,
+                        selectedEditorElement = selectedEditorElement,
+                        activeCustomLayout = if (isLayoutEditMode) draftCustomLayout else settings.customLayout,
+                        overrideShowSeconds = if (isLayoutEditMode) draftShowSeconds else settings.showSeconds,
+                        overrideShowDate = if (isLayoutEditMode) draftShowDate else settings.showDate,
+                        overrideShowWeekday = if (isLayoutEditMode) draftShowWeekday else settings.showWeekday,
+                        overrideShowWeather = if (isLayoutEditMode) draftShowWeather else settings.showWeather,
+                        overrideShowBattery = if (isLayoutEditMode) draftShowBattery else settings.showBattery,
+                        overrideDateFormatPattern = if (isLayoutEditMode) draftDateFormatPattern else settings.dateFormatPattern,
+                        onLandscapeChanged = { currentCanvasIsLandscape = it },
+                        onSelectEditorElement = { selectedEditorElement = it },
+                        onUpdateOrientationLayout = { isLandscapeCanvas, updatedOrientation ->
+                            draftCustomLayout = if (isLandscapeCanvas) {
+                                draftCustomLayout.copy(landscape = updatedOrientation)
+                            } else {
+                                draftCustomLayout.copy(portrait = updatedOrientation)
+                            }
+                        }
                     )
                 }
 
@@ -512,7 +661,7 @@ fun FlipClockScreen(
 
         // Overlay top chrome (initial hidden, tap canvas to show, auto-hide after 5s)
         AnimatedVisibility(
-            visible = controlsVisible,
+            visible = controlsVisible && !isLayoutEditMode,
             enter = fadeIn(),
             exit = fadeOut(),
             modifier = Modifier
@@ -593,24 +742,137 @@ fun FlipClockScreen(
                     }
                 }
 
-                IconButton(
-                    onClick = {
-                        interactionPulse++
-                        showSettingsSheet = true
-                    },
-                    modifier = Modifier
-                        .clip(CircleShape)
-                        .background(FlipClockPalette.PanelDark.copy(alpha = 0.88f))
-                        .border(1.dp, FlipClockPalette.PanelOutline, CircleShape)
-                        .testTag("flip_settings_open_btn")
+                Row(
+                    horizontalArrangement = Arrangement.spacedBy(8.dp),
+                    verticalAlignment = Alignment.CenterVertically
                 ) {
-                    Icon(
-                        imageVector = Icons.Outlined.Settings,
-                        contentDescription = "Flip Clock Settings",
-                        tint = FlipClockPalette.AccentSoft
-                    )
+                    val soundActive = settings.ambientSoundType != com.example.domain.model.AmbientSoundType.OFF
+                    Surface(
+                        onClick = {
+                            interactionPulse++
+                            showWhiteNoiseStudio = true
+                        },
+                        shape = CircleShape,
+                        color = if (soundActive) FlipClockPalette.PanelActive else FlipClockPalette.PanelDark.copy(alpha = 0.88f),
+                        border = BorderStroke(
+                            1.dp,
+                            if (soundActive) FlipClockPalette.PrimaryCta else FlipClockPalette.PanelOutline
+                        ),
+                        modifier = Modifier.testTag("flip_open_white_noise_btn")
+                    ) {
+                        Row(
+                            modifier = Modifier.padding(horizontal = 12.dp, vertical = 9.dp),
+                            verticalAlignment = Alignment.CenterVertically,
+                            horizontalArrangement = Arrangement.spacedBy(6.dp)
+                        ) {
+                            Box(
+                                modifier = Modifier
+                                    .size(7.dp)
+                                    .clip(CircleShape)
+                                    .background(
+                                        if (soundActive) FlipClockPalette.PrimaryCta else FlipClockPalette.SubTextGrey
+                                    )
+                            )
+                            Text(
+                                text = if (soundActive) settings.ambientSoundType.label else "Sounds",
+                                style = MaterialTheme.typography.labelMedium.copy(fontWeight = FontWeight.SemiBold),
+                                color = FlipClockPalette.AccentSoft,
+                                maxLines = 1
+                            )
+                        }
+                    }
+
+                    IconButton(
+                        onClick = {
+                            interactionPulse++
+                            showSettingsSheet = true
+                        },
+                        modifier = Modifier
+                            .clip(CircleShape)
+                            .background(FlipClockPalette.PanelDark.copy(alpha = 0.88f))
+                            .border(1.dp, FlipClockPalette.PanelOutline, CircleShape)
+                            .testTag("flip_settings_open_btn")
+                    ) {
+                        Icon(
+                            imageVector = Icons.Outlined.Settings,
+                            contentDescription = "Flip Clock Settings",
+                            tint = FlipClockPalette.AccentSoft
+                        )
+                    }
                 }
             }
+        }
+
+        if (isLayoutEditMode) {
+            val activeOrientation = if (currentCanvasIsLandscape) {
+                draftCustomLayout.landscape
+            } else {
+                draftCustomLayout.portrait
+            }
+            FlipLayoutEditorTopBar(
+                isLandscape = currentCanvasIsLandscape,
+                onCancel = {
+                    isLayoutEditMode = false
+                    onControlsVisibleChange(true)
+                    interactionPulse++
+                },
+                onReset = {
+                    draftCustomLayout = if (currentCanvasIsLandscape) {
+                        draftCustomLayout.copy(landscape = FlipClockOrientationLayout.defaultLandscape())
+                    } else {
+                        draftCustomLayout.copy(portrait = FlipClockOrientationLayout.defaultPortrait())
+                    }
+                },
+                onConfirm = {
+                    val committedLayout = if (currentCanvasIsLandscape) {
+                        draftCustomLayout.copy(landscape = draftCustomLayout.landscape.copy(enabled = true))
+                    } else {
+                        draftCustomLayout.copy(portrait = draftCustomLayout.portrait.copy(enabled = true))
+                    }
+                    isLayoutEditMode = false
+                    onControlsVisibleChange(true)
+                    interactionPulse++
+                    scope.launch {
+                        manager.saveCustomLayoutAndDisplay(
+                            layout = committedLayout,
+                            showSeconds = draftShowSeconds,
+                            showDate = draftShowDate,
+                            showWeekday = draftShowWeekday,
+                            showWeather = draftShowWeather,
+                            showBattery = draftShowBattery,
+                            dateFormatPattern = draftDateFormatPattern
+                        )
+                    }
+                },
+                modifier = Modifier.align(Alignment.TopCenter)
+            )
+
+            FlipLayoutEditorInspectorBar(
+                selectedElement = selectedEditorElement,
+                orientationLayout = activeOrientation,
+                effective24Hour = effective24Hour,
+                showSeconds = draftShowSeconds,
+                showDate = draftShowDate,
+                showWeekday = draftShowWeekday,
+                showWeather = draftShowWeather,
+                showBattery = draftShowBattery,
+                dateFormatPattern = draftDateFormatPattern,
+                onSelectElement = { selectedEditorElement = it },
+                onUpdateOrientationLayout = { updated ->
+                    draftCustomLayout = if (currentCanvasIsLandscape) {
+                        draftCustomLayout.copy(landscape = updated)
+                    } else {
+                        draftCustomLayout.copy(portrait = updated)
+                    }
+                },
+                onSetShowSeconds = { draftShowSeconds = it },
+                onSetShowDate = { draftShowDate = it },
+                onSetShowWeekday = { draftShowWeekday = it },
+                onSetShowWeather = { draftShowWeather = it },
+                onSetShowBattery = { draftShowBattery = it },
+                onSetDateFormatPattern = { draftDateFormatPattern = it },
+                modifier = Modifier.align(Alignment.BottomCenter)
+            )
         }
     }
 
@@ -653,7 +915,37 @@ fun FlipClockScreen(
                 }
             },
             onDeletePreset = { presetId -> scope.launch { manager.deleteTimerPreset(presetId) } },
-            onResetSettingsOnly = { scope.launch { manager.resetSettingsToDefaultPreservingCustomPresets() } }
+            onResetSettingsOnly = { scope.launch { manager.resetSettingsToDefaultPreservingCustomPresets() } },
+            onSetPomodoroEnabled = { enabled -> scope.launch { manager.setPomodoroEnabled(enabled) } },
+            onSetPomodoroDurations = { focusM, breakM -> scope.launch { manager.setPomodoroDurations(focusM, breakM) } },
+            onSetAmbientSoundType = { type -> scope.launch { manager.setAmbientSoundType(type) } },
+            onSetAmbientVolume = { vol -> scope.launch { manager.setAmbientVolume(vol) } },
+            onSetOledBurnInProtection = { enabled -> scope.launch { manager.setOledBurnInProtection(enabled) } },
+            onOpenLayoutEditor = { enterLayoutEditMode() },
+            onSetWeatherUseFahrenheit = { enabled -> scope.launch { manager.setWeatherUseFahrenheit(enabled) } },
+            onSetWeatherAutoDetect = { enabled -> scope.launch { manager.setWeatherAutoDetect(enabled) } },
+            onSetPlayAmbientDuringFocusLock = { enabled -> scope.launch { manager.setPlayAmbientSoundDuringFocusLock(enabled) } },
+            onSetAmbientPlayInBackground = { enabled -> scope.launch { manager.setAmbientPlayInBackground(enabled) } },
+            onSetSyncFlipTimerWithFocusLock = { enabled -> scope.launch { manager.setSyncFlipTimerWithFocusLock(enabled) } },
+            onOpenWhiteNoiseStudio = {
+                showSettingsSheet = false
+                showWhiteNoiseStudio = true
+            }
+        )
+    }
+
+    if (showWhiteNoiseStudio) {
+        FlipWhiteNoiseStudioSheet(
+            settings = settings,
+            onDismiss = {
+                showWhiteNoiseStudio = false
+                interactionPulse++
+            },
+            onSelectSound = { type -> scope.launch { manager.setAmbientSoundType(type) } },
+            onVolumeChange = { vol -> scope.launch { manager.setAmbientVolume(vol) } },
+            onSetPlayInBackground = { enabled -> scope.launch { manager.setAmbientPlayInBackground(enabled) } },
+            onSetPlayDuringFocusLock = { enabled -> scope.launch { manager.setPlayAmbientSoundDuringFocusLock(enabled) } },
+            onSetSleepTimerMinutes = { mins -> scope.launch { manager.setSleepTimerMinutes(mins) } }
         )
     }
 
@@ -747,11 +1039,26 @@ private fun FlipClockFacePage(
     dateTime: ZonedDateTime,
     settings: FlipClockSettings,
     effective24Hour: Boolean,
+    batteryTelemetry: FlipBatteryTelemetry?,
     batteryLabel: String?,
     alarmLabel: String?,
     weatherResult: FlipWeatherResult,
     sleepRemainingSeconds: Long,
-    zoomFraction: Float
+    focusLockActive: Boolean = false,
+    focusLockRemainingMs: Long = 0L,
+    zoomFraction: Float,
+    isLayoutEditMode: Boolean,
+    selectedEditorElement: FlipClockElementId,
+    activeCustomLayout: FlipClockCustomLayout,
+    overrideShowSeconds: Boolean,
+    overrideShowDate: Boolean,
+    overrideShowWeekday: Boolean,
+    overrideShowWeather: Boolean,
+    overrideShowBattery: Boolean,
+    overrideDateFormatPattern: String,
+    onLandscapeChanged: (Boolean) -> Unit,
+    onSelectEditorElement: (FlipClockElementId) -> Unit,
+    onUpdateOrientationLayout: (Boolean, FlipClockOrientationLayout) -> Unit
 ) {
     val rawHour = if (effective24Hour) {
         dateTime.hour
@@ -767,11 +1074,14 @@ private fun FlipClockFacePage(
     val minuteValue = "%02d".format(dateTime.minute)
     val secondValue = "%02d".format(dateTime.second)
     val amPmText = if (dateTime.hour < 12) "AM" else "PM"
-    val weekdayText = remember(dateTime.toLocalDate()) {
+    val fullWeekdayText = remember(dateTime.toLocalDate()) {
         dateTime.format(DateTimeFormatter.ofPattern("EEEE", Locale.getDefault()))
     }
-    val dateLineText = remember(dateTime.toLocalDate(), settings.dateFormatPattern) {
-        val fmt = settings.resolvedDateFormat.pattern
+    val shortWeekdayText = remember(dateTime.toLocalDate()) {
+        dateTime.format(DateTimeFormatter.ofPattern("EEE", Locale.getDefault()))
+    }
+    val dateLineText = remember(dateTime.toLocalDate(), overrideDateFormatPattern) {
+        val fmt = FlipDateFormat.fromPattern(overrideDateFormatPattern).pattern
         runCatching {
             dateTime.format(DateTimeFormatter.ofPattern(fmt, Locale.getDefault()))
         }.getOrElse {
@@ -781,13 +1091,19 @@ private fun FlipClockFacePage(
 
     val statusItems = buildList {
         if (settings.customTag.isNotBlank()) add(settings.customTag.trim())
-        if (settings.showBattery && !batteryLabel.isNullOrBlank()) add(batteryLabel)
+        if (settings.syncFlipTimerWithFocusLock && focusLockActive && focusLockRemainingMs > 0L) {
+            val totalSec = (focusLockRemainingMs / 1000L).coerceAtLeast(0L)
+            val mins = totalSec / 60L
+            val secs = totalSec % 60L
+            add("Focus Lock %02d:%02d".format(mins, secs))
+        }
+        if (overrideShowBattery && !batteryLabel.isNullOrBlank()) add(batteryLabel)
         if (settings.showUpcomingAlarm && !alarmLabel.isNullOrBlank()) add(alarmLabel)
-        if (settings.showWeather) {
+        if (overrideShowWeather) {
             when (weatherResult) {
-                FlipWeatherResult.NeedsCity -> add("Weather: Set city")
+                FlipWeatherResult.NeedsCity -> add(if (settings.weatherAutoDetect) "Weather: Auto" else "Weather: Set city")
                 FlipWeatherResult.Loading -> add("Weather...")
-                is FlipWeatherResult.Ready -> add(weatherResult.formatLabel())
+                is FlipWeatherResult.Ready -> add(weatherResult.formatLabel(useFahrenheit = settings.weatherUseFahrenheit))
                 FlipWeatherResult.Unavailable -> add("Weather offline")
             }
         }
@@ -805,10 +1121,15 @@ private fun FlipClockFacePage(
         contentAlignment = Alignment.Center
     ) {
         val isLandscape = maxWidth > maxHeight
+        LaunchedEffect(isLandscape) {
+            onLandscapeChanged(isLandscape)
+        }
         val scale = zoomFraction.coerceIn(
             FlipClockSettings.MIN_ZOOM_FRACTION,
             FlipClockSettings.MAX_ZOOM_FRACTION
         )
+        val orientationLayout = if (isLandscape) activeCustomLayout.landscape else activeCustomLayout.portrait
+        val useFreeCanvas = isLayoutEditMode || orientationLayout.enabled
 
         var showColon by rememberSaveable { mutableStateOf(true) }
         val colonAlpha by animateFloatAsState(
@@ -818,10 +1139,332 @@ private fun FlipClockFacePage(
         )
         val colonInteractionSource = remember { MutableInteractionSource() }
 
-        if (isLandscape) {
+        val weekdayDisplayText = when (orientationLayout.weekdayStyle) {
+            FlipWeekdayStyle.FULL -> fullWeekdayText
+            FlipWeekdayStyle.SHORT -> shortWeekdayText
+        }
+        val batteryDisplayText = when {
+            batteryTelemetry == null && isLayoutEditMode ->
+                if (orientationLayout.batteryStyle == FlipBatteryStyle.PERCENT_ONLY) "85%" else "85% ⚡"
+            batteryTelemetry == null -> ""
+            orientationLayout.batteryStyle == FlipBatteryStyle.PERCENT_ONLY -> "${batteryTelemetry.percent}%"
+            else -> batteryTelemetry.formatLabel()
+        }
+        val weatherDisplayText = when (weatherResult) {
+            FlipWeatherResult.NeedsCity -> when {
+                isLayoutEditMode -> if (settings.weatherUseFahrenheit) "75°F · Weather" else "24°C · Weather"
+                settings.weatherAutoDetect -> "Weather: Auto"
+                else -> "Weather: Set city"
+            }
+            FlipWeatherResult.Loading -> "Weather..."
+            is FlipWeatherResult.Ready -> when (orientationLayout.weatherStyle) {
+                FlipWeatherStyle.COMPACT -> weatherResult.formatLabel(
+                    useFahrenheit = settings.weatherUseFahrenheit,
+                    compact = true
+                )
+                FlipWeatherStyle.DETAILED -> weatherResult.formatLabel(
+                    useFahrenheit = settings.weatherUseFahrenheit,
+                    compact = false
+                )
+            }
+            FlipWeatherResult.Unavailable -> "Weather offline"
+        }
+
+        if (useFreeCanvas) {
+            val densityLocal = LocalDensity.current
+            val canvasWidthPx = with(densityLocal) { maxWidth.toPx() }
+            val canvasHeightPx = with(densityLocal) { maxHeight.toPx() }
+            val baseHeight = if (isLandscape) {
+                min(maxHeight * 0.62f, maxWidth * 0.29f).coerceIn(116.dp, 240.dp)
+            } else {
+                min(maxHeight * 0.26f, maxWidth * 0.54f).coerceIn(124.dp, 220.dp)
+            }
+            val digitGap = (baseHeight * 0.035f).coerceIn(4.dp, 8.dp)
+            val singleSlotWidth = (baseHeight * 0.50f).coerceAtLeast(64.dp)
+            val pairWidth = singleSlotWidth * 2 + digitGap
+            val isSingleHour = hourValue.length == 1
+            val hourScale = orientationLayout.hourScale.coerceIn(
+                FlipClockOrientationLayout.MIN_DIGIT_SCALE,
+                FlipClockOrientationLayout.MAX_DIGIT_SCALE
+            )
+            val minuteScale = orientationLayout.minuteScale.coerceIn(
+                FlipClockOrientationLayout.MIN_DIGIT_SCALE,
+                FlipClockOrientationLayout.MAX_DIGIT_SCALE
+            )
+            val hourGroupWidth by animateDpAsState(
+                targetValue = (if (isSingleHour) singleSlotWidth else pairWidth) * hourScale,
+                animationSpec = tween(durationMillis = 300, easing = FastOutSlowInEasing),
+                label = "flip_clock_custom_hour_width"
+            )
+            val hourCardHeight = baseHeight * hourScale
+            val minuteCardWidth = pairWidth * minuteScale
+            val minuteCardHeight = baseHeight * minuteScale
+            val hourFontSize = (hourCardHeight.value * 0.90f).sp
+            val minuteFontSize = (minuteCardHeight.value * 0.90f).sp
+            val seamThickness = (baseHeight * 0.015f).coerceIn(2.6.dp, 4.0.dp)
+            val labelStyle = MaterialTheme.typography.titleSmall.copy(
+                fontFamily = FlipClockLabelFamily,
+                fontWeight = FontWeight.SemiBold,
+                letterSpacing = 0.7.sp
+            )
+
+            fun updateDrag(id: FlipClockElementId, dx: Float, dy: Float) {
+                val cur = orientationLayout.placementFor(id)
+                onUpdateOrientationLayout(
+                    isLandscape,
+                    orientationLayout.withPlacement(
+                        id,
+                        cur.copy(
+                            offsetXFrac = cur.offsetXFrac + dx,
+                            offsetYFrac = cur.offsetYFrac + dy
+                        )
+                    )
+                )
+            }
+
+            Box(
+                modifier = Modifier
+                    .fillMaxSize()
+                    .graphicsLayer {
+                        scaleX = scale
+                        scaleY = scale
+                    }
+                    .testTag(if (isLandscape) "flip_clock_landscape_cluster" else "flip_clock_portrait_cluster"),
+                contentAlignment = Alignment.Center
+            ) {
+                // Hour group
+                FlipDraggableElementBox(
+                    elementId = FlipClockElementId.HOUR,
+                    isEditMode = isLayoutEditMode,
+                    isSelected = selectedEditorElement == FlipClockElementId.HOUR,
+                    placement = orientationLayout.hourPlacement,
+                    canvasWidthPx = canvasWidthPx,
+                    canvasHeightPx = canvasHeightPx,
+                    onSelect = { onSelectEditorElement(FlipClockElementId.HOUR) },
+                    onDragFractionDelta = { dx, dy -> updateDrag(FlipClockElementId.HOUR, dx, dy) }
+                ) {
+                    SplitFlipCard(
+                        value = hourValue,
+                        cardWidth = hourGroupWidth,
+                        cardHeight = hourCardHeight,
+                        fontSize = hourFontSize,
+                        seamThickness = seamThickness,
+                        digitGap = digitGap * hourScale,
+                        showFlipAxis = settings.showFlipAxis,
+                        modifier = Modifier.testTag("flip_clock_hour_card")
+                    )
+                }
+
+                // Interactive Colon between Hour & Minute when arranged horizontally
+                val hPlace = orientationLayout.hourPlacement
+                val mPlace = orientationLayout.minutePlacement
+                if (isLandscape && abs(hPlace.offsetYFrac - mPlace.offsetYFrac) < 0.18f && mPlace.offsetXFrac > hPlace.offsetXFrac) {
+                    val midX = ((hPlace.offsetXFrac + mPlace.offsetXFrac) * 0.5f * canvasWidthPx).roundToInt()
+                    val midY = ((hPlace.offsetYFrac + mPlace.offsetYFrac) * 0.5f * canvasHeightPx).roundToInt()
+                    val colonDotSize = (baseHeight * 0.082f).coerceIn(10.dp, 18.dp)
+                    val colonDotGap = (baseHeight * 0.18f).coerceIn(20.dp, 36.dp)
+                    Box(
+                        modifier = Modifier
+                            .offset { IntOffset(midX, midY) }
+                            .clickable(
+                                interactionSource = colonInteractionSource,
+                                indication = null,
+                                enabled = !isLayoutEditMode,
+                                role = Role.Button,
+                                onClick = { showColon = !showColon }
+                            )
+                            .semantics {
+                                contentDescription = if (showColon) "Hide clock colon" else "Show clock colon"
+                            }
+                            .testTag("flip_clock_colon_toggle"),
+                        contentAlignment = Alignment.Center
+                    ) {
+                        Column(
+                            horizontalAlignment = Alignment.CenterHorizontally,
+                            verticalArrangement = Arrangement.spacedBy(colonDotGap),
+                            modifier = Modifier.graphicsLayer { alpha = colonAlpha }
+                        ) {
+                            Box(Modifier.size(colonDotSize).clip(CircleShape).background(FlipClockPalette.DigitGrey))
+                            Box(Modifier.size(colonDotSize).clip(CircleShape).background(FlipClockPalette.DigitGrey))
+                        }
+                    }
+                }
+
+                // Minute group
+                FlipDraggableElementBox(
+                    elementId = FlipClockElementId.MINUTE,
+                    isEditMode = isLayoutEditMode,
+                    isSelected = selectedEditorElement == FlipClockElementId.MINUTE,
+                    placement = orientationLayout.minutePlacement,
+                    canvasWidthPx = canvasWidthPx,
+                    canvasHeightPx = canvasHeightPx,
+                    onSelect = { onSelectEditorElement(FlipClockElementId.MINUTE) },
+                    onDragFractionDelta = { dx, dy -> updateDrag(FlipClockElementId.MINUTE, dx, dy) }
+                ) {
+                    SplitFlipCard(
+                        value = minuteValue,
+                        cardWidth = minuteCardWidth,
+                        cardHeight = minuteCardHeight,
+                        fontSize = minuteFontSize,
+                        seamThickness = seamThickness,
+                        digitGap = digitGap * minuteScale,
+                        showFlipAxis = settings.showFlipAxis,
+                        modifier = Modifier.testTag("flip_clock_minute_card")
+                    )
+                }
+
+                // AM/PM
+                if (!effective24Hour) {
+                    FlipDraggableElementBox(
+                        elementId = FlipClockElementId.AM_PM,
+                        isEditMode = isLayoutEditMode,
+                        isSelected = selectedEditorElement == FlipClockElementId.AM_PM,
+                        placement = orientationLayout.amPmPlacement,
+                        canvasWidthPx = canvasWidthPx,
+                        canvasHeightPx = canvasHeightPx,
+                        onSelect = { onSelectEditorElement(FlipClockElementId.AM_PM) },
+                        onDragFractionDelta = { dx, dy -> updateDrag(FlipClockElementId.AM_PM, dx, dy) }
+                    ) {
+                        Text(
+                            text = amPmText,
+                            style = labelStyle.copy(fontSize = 16.sp),
+                            textAlign = when (orientationLayout.amPmAlign) {
+                                FlipClockElementAlign.LEFT -> TextAlign.Start
+                                FlipClockElementAlign.CENTER -> TextAlign.Center
+                                FlipClockElementAlign.RIGHT -> TextAlign.End
+                            },
+                            color = FlipClockPalette.SubTextGrey,
+                            modifier = Modifier
+                                .widthIn(min = 56.dp)
+                                .testTag("flip_clock_ampm_label")
+                        )
+                    }
+                }
+
+                // Seconds
+                if (overrideShowSeconds) {
+                    FlipDraggableElementBox(
+                        elementId = FlipClockElementId.SECONDS,
+                        isEditMode = isLayoutEditMode,
+                        isSelected = selectedEditorElement == FlipClockElementId.SECONDS,
+                        placement = orientationLayout.secondsPlacement,
+                        canvasWidthPx = canvasWidthPx,
+                        canvasHeightPx = canvasHeightPx,
+                        onSelect = { onSelectEditorElement(FlipClockElementId.SECONDS) },
+                        onDragFractionDelta = { dx, dy -> updateDrag(FlipClockElementId.SECONDS, dx, dy) }
+                    ) {
+                        Text(
+                            text = secondValue,
+                            style = labelStyle.copy(fontSize = 18.sp, fontFeatureSettings = "tnum"),
+                            textAlign = when (orientationLayout.secondsAlign) {
+                                FlipClockElementAlign.LEFT -> TextAlign.Start
+                                FlipClockElementAlign.CENTER -> TextAlign.Center
+                                FlipClockElementAlign.RIGHT -> TextAlign.End
+                            },
+                            color = FlipClockPalette.SubTextGrey,
+                            modifier = Modifier
+                                .widthIn(min = 48.dp)
+                                .testTag("flip_clock_seconds_label")
+                        )
+                    }
+                }
+
+                // Date
+                if (overrideShowDate) {
+                    FlipDraggableElementBox(
+                        elementId = FlipClockElementId.DATE,
+                        isEditMode = isLayoutEditMode,
+                        isSelected = selectedEditorElement == FlipClockElementId.DATE,
+                        placement = orientationLayout.datePlacement,
+                        canvasWidthPx = canvasWidthPx,
+                        canvasHeightPx = canvasHeightPx,
+                        onSelect = { onSelectEditorElement(FlipClockElementId.DATE) },
+                        onDragFractionDelta = { dx, dy -> updateDrag(FlipClockElementId.DATE, dx, dy) }
+                    ) {
+                        Text(
+                            text = dateLineText,
+                            style = labelStyle,
+                            color = FlipClockPalette.SubTextGrey,
+                            maxLines = 1,
+                            softWrap = false,
+                            modifier = Modifier.testTag("flip_clock_date_text")
+                        )
+                    }
+                }
+
+                // Weekday
+                if (overrideShowWeekday) {
+                    FlipDraggableElementBox(
+                        elementId = FlipClockElementId.WEEKDAY,
+                        isEditMode = isLayoutEditMode,
+                        isSelected = selectedEditorElement == FlipClockElementId.WEEKDAY,
+                        placement = orientationLayout.weekdayPlacement,
+                        canvasWidthPx = canvasWidthPx,
+                        canvasHeightPx = canvasHeightPx,
+                        onSelect = { onSelectEditorElement(FlipClockElementId.WEEKDAY) },
+                        onDragFractionDelta = { dx, dy -> updateDrag(FlipClockElementId.WEEKDAY, dx, dy) }
+                    ) {
+                        Text(
+                            text = weekdayDisplayText,
+                            style = labelStyle,
+                            color = FlipClockPalette.SubTextGrey,
+                            maxLines = 1,
+                            softWrap = false,
+                            modifier = Modifier.testTag("flip_clock_weekday_label")
+                        )
+                    }
+                }
+
+                // Weather
+                if (overrideShowWeather) {
+                    FlipDraggableElementBox(
+                        elementId = FlipClockElementId.WEATHER,
+                        isEditMode = isLayoutEditMode,
+                        isSelected = selectedEditorElement == FlipClockElementId.WEATHER,
+                        placement = orientationLayout.weatherPlacement,
+                        canvasWidthPx = canvasWidthPx,
+                        canvasHeightPx = canvasHeightPx,
+                        onSelect = { onSelectEditorElement(FlipClockElementId.WEATHER) },
+                        onDragFractionDelta = { dx, dy -> updateDrag(FlipClockElementId.WEATHER, dx, dy) }
+                    ) {
+                        Text(
+                            text = weatherDisplayText,
+                            style = labelStyle.copy(fontSize = 13.sp),
+                            color = FlipClockPalette.SubTextGrey,
+                            maxLines = 1,
+                            softWrap = false,
+                            modifier = Modifier.testTag("flip_clock_weather_label")
+                        )
+                    }
+                }
+
+                // Battery %
+                if (overrideShowBattery && batteryDisplayText.isNotEmpty()) {
+                    FlipDraggableElementBox(
+                        elementId = FlipClockElementId.BATTERY,
+                        isEditMode = isLayoutEditMode,
+                        isSelected = selectedEditorElement == FlipClockElementId.BATTERY,
+                        placement = orientationLayout.batteryPlacement,
+                        canvasWidthPx = canvasWidthPx,
+                        canvasHeightPx = canvasHeightPx,
+                        onSelect = { onSelectEditorElement(FlipClockElementId.BATTERY) },
+                        onDragFractionDelta = { dx, dy -> updateDrag(FlipClockElementId.BATTERY, dx, dy) }
+                    ) {
+                        Text(
+                            text = batteryDisplayText,
+                            style = labelStyle.copy(fontSize = 13.sp),
+                            color = FlipClockPalette.SubTextGrey,
+                            maxLines = 1,
+                            softWrap = false,
+                            modifier = Modifier.testTag("flip_clock_battery_label")
+                        )
+                    }
+                }
+            }
+        } else if (isLandscape) {
             val baseHeight = min(maxHeight * 0.64f, maxWidth * 0.30f).coerceIn(124.dp, 256.dp)
             val digitGap = (baseHeight * 0.035f).coerceIn(4.dp, 8.dp)
-            val singleSlotWidth = (baseHeight * 0.46f).coerceAtLeast(60.dp)
+            val singleSlotWidth = (baseHeight * 0.50f).coerceAtLeast(64.dp)
             val pairWidth = singleSlotWidth * 2 + digitGap
             val isSingleHour = hourValue.length == 1
             val hourGroupWidth by animateDpAsState(
@@ -964,7 +1607,7 @@ private fun FlipClockFacePage(
                         horizontalAlignment = Alignment.CenterHorizontally
                     ) {
                         Text(
-                            text = if (settings.showWeekday) weekdayText else " ",
+                            text = if (settings.showWeekday) weekdayDisplayText else " ",
                             style = subLabelTopStyle.copy(letterSpacing = 0.6.sp),
                             color = if (settings.showWeekday) FlipClockPalette.SubTextGrey else Color.Transparent,
                             maxLines = 1,
@@ -1008,7 +1651,7 @@ private fun FlipClockFacePage(
         } else {
             val baseHeight = min(maxHeight * 0.27f, maxWidth * 0.56f).coerceIn(136.dp, 232.dp)
             val digitGap = (baseHeight * 0.035f).coerceIn(4.dp, 8.dp)
-            val singleSlotWidth = (baseHeight * 0.46f).coerceAtLeast(62.dp)
+            val singleSlotWidth = (baseHeight * 0.50f).coerceAtLeast(64.dp)
             val minuteWidth = singleSlotWidth * 2 + digitGap
             val hourWidth by animateDpAsState(
                 targetValue = if (hourValue.length == 1) singleSlotWidth else minuteWidth,
@@ -1078,7 +1721,7 @@ private fun FlipClockFacePage(
 
                 if (settings.showWeekday) {
                     Text(
-                        text = weekdayText,
+                        text = weekdayDisplayText,
                         style = MaterialTheme.typography.titleSmall.copy(
                             fontFamily = FlipClockLabelFamily,
                             fontWeight = FontWeight.SemiBold,
@@ -1165,6 +1808,8 @@ private fun FlipClockSubtleStatusStrip(
 private fun FlipTimerPage(
     presets: List<FlipTimerPreset>,
     timerState: FlipTimerState,
+    pomodoroStatus: FlipPomodoroStatus,
+    pomodoroEnabled: Boolean,
     remainingMs: Long,
     finishedBannerVisible: Boolean,
     showFlipAxis: Boolean,
@@ -1176,7 +1821,11 @@ private fun FlipTimerPage(
     onRequestReset: () -> Unit,
     onSelectPreset: (FlipTimerPreset) -> Unit,
     onOpenCustomDuration: () -> Unit,
-    onOpenAppNotificationSettings: () -> Unit
+    onOpenAppNotificationSettings: () -> Unit,
+    syncFlipTimerWithFocusLock: Boolean = false,
+    focusLockActive: Boolean = false,
+    focusLockRemainingMs: Long = 0L,
+    onStartFocusLockFromTimer: () -> Unit = {}
 ) {
     val totalSeconds = ((remainingMs + 999L) / 1000L).coerceAtLeast(0L)
     val hours = (totalSeconds / 3600L).toInt()
@@ -1200,20 +1849,22 @@ private fun FlipTimerPage(
         )
         val heroCardHeight = if (hours > 0) {
             if (isLandscape) {
-                min(boxMaxHeight * 0.50f, boxMaxWidth * 0.21f).coerceIn(92.dp, 184.dp)
+                min(boxMaxHeight * 0.44f, boxMaxWidth * 0.20f).coerceIn(88.dp, 176.dp)
             } else {
-                min(boxMaxWidth * 0.24f, boxMaxHeight * 0.22f).coerceIn(82.dp, 152.dp)
+                min(boxMaxWidth * 0.24f, boxMaxHeight * 0.21f).coerceIn(82.dp, 148.dp)
             }
         } else {
             if (isLandscape) {
-                min(boxMaxHeight * 0.56f, boxMaxWidth * 0.28f).coerceIn(118.dp, 210.dp)
+                min(boxMaxHeight * 0.48f, boxMaxWidth * 0.26f).coerceIn(106.dp, 196.dp)
             } else {
-                min(boxMaxWidth * 0.36f, boxMaxHeight * 0.26f).coerceIn(106.dp, 184.dp)
+                min(boxMaxWidth * 0.34f, boxMaxHeight * 0.25f).coerceIn(102.dp, 176.dp)
             }
         }
+        val presetColumns = if (isLandscape) 3 else 2
+        val presetSectionMaxWidth = if (isLandscape) 720.dp else 520.dp
 
         // Initial viewport shows ONLY the pure-black split-flap Timer Display (+ playback overlay when shown).
-        // Scrolling vertically reveals Custom Duration and all Timer Presets below cleanly.
+        // Scrolling vertically reveals Custom Duration and compact Timer Presets Grid cleanly below without peeking.
         LazyColumn(
             state = listState,
             modifier = Modifier
@@ -1228,7 +1879,7 @@ private fun FlipTimerPage(
                     modifier = Modifier
                         .fillParentMaxHeight()
                         .fillMaxWidth()
-                        .padding(vertical = 14.dp),
+                        .padding(vertical = 12.dp),
                     contentAlignment = Alignment.Center
                 ) {
                     Column(
@@ -1240,6 +1891,8 @@ private fun FlipTimerPage(
                             minutes = minutes,
                             seconds = seconds,
                             timerState = timerState,
+                            pomodoroStatus = pomodoroStatus,
+                            pomodoroEnabled = pomodoroEnabled,
                             finishedBannerVisible = finishedBannerVisible,
                             showFlipAxis = showFlipAxis,
                             cardHeight = heroCardHeight,
@@ -1262,8 +1915,66 @@ private fun FlipTimerPage(
                                 startTag = "flip_timer_start_btn",
                                 pauseTag = "flip_timer_pause_btn",
                                 resetTag = "flip_timer_reset_btn",
-                                modifier = Modifier.padding(top = 18.dp)
+                                modifier = Modifier.padding(top = 16.dp)
                             )
+                        }
+
+                        if (syncFlipTimerWithFocusLock) {
+                            Spacer(Modifier.height(10.dp))
+                            if (focusLockActive && focusLockRemainingMs > 0L) {
+                                val lockSec = (focusLockRemainingMs / 1000L).coerceAtLeast(0L)
+                                val lh = lockSec / 3600L
+                                val lm = (lockSec % 3600L) / 60L
+                                val ls = lockSec % 60L
+                                val lockText = if (lh > 0) {
+                                    "Focus Lock Active · %02d:%02d:%02d".format(lh, lm, ls)
+                                } else {
+                                    "Focus Lock Active · %02d:%02d".format(lm, ls)
+                                }
+                                Row(
+                                    modifier = Modifier
+                                        .clip(CircleShape)
+                                        .background(FlipClockPalette.PanelDark.copy(alpha = 0.90f))
+                                        .border(1.dp, FlipClockPalette.SageLabel.copy(alpha = 0.5f), CircleShape)
+                                        .padding(horizontal = 14.dp, vertical = 7.dp)
+                                        .testTag("flip_timer_focus_lock_pill"),
+                                    verticalAlignment = Alignment.CenterVertically,
+                                    horizontalArrangement = Arrangement.spacedBy(6.dp)
+                                ) {
+                                    Icon(
+                                        imageVector = Icons.Outlined.Lock,
+                                        contentDescription = null,
+                                        tint = FlipClockPalette.SageLabel,
+                                        modifier = Modifier.size(14.dp)
+                                    )
+                                    Text(
+                                        text = lockText,
+                                        style = MaterialTheme.typography.labelMedium,
+                                        color = FlipClockPalette.SageLabel
+                                    )
+                                }
+                            } else {
+                                val lockMins = (((remainingMs.coerceAtLeast(60_000L)) + 59_999L) / 60_000L).coerceIn(1L, 1440L)
+                                OutlinedButton(
+                                    onClick = onStartFocusLockFromTimer,
+                                    shape = CircleShape,
+                                    border = BorderStroke(1.dp, FlipClockPalette.SageLabel.copy(alpha = 0.55f)),
+                                    modifier = Modifier.testTag("flip_timer_start_focus_lock_btn")
+                                ) {
+                                    Icon(
+                                        imageVector = Icons.Outlined.Lock,
+                                        contentDescription = "Start Focus Lock",
+                                        tint = FlipClockPalette.SageLabel,
+                                        modifier = Modifier.size(15.dp)
+                                    )
+                                    Spacer(Modifier.width(6.dp))
+                                    Text(
+                                        text = "Start Focus Lock (${lockMins}m)",
+                                        style = MaterialTheme.typography.labelMedium,
+                                        color = FlipClockPalette.SageLabel
+                                    )
+                                }
+                            }
                         }
                     }
                 }
@@ -1275,9 +1986,10 @@ private fun FlipTimerPage(
                     style = MaterialTheme.typography.labelMedium.copy(letterSpacing = 1.2.sp),
                     color = FlipClockPalette.SubTextGrey,
                     modifier = Modifier
-                        .widthIn(max = 520.dp)
+                        .widthIn(max = presetSectionMaxWidth)
                         .fillMaxWidth()
-                        .padding(top = 6.dp, bottom = 2.dp)
+                        .padding(top = 24.dp, bottom = 4.dp)
+                        .testTag("flip_timer_presets_heading")
                 )
             }
 
@@ -1288,7 +2000,7 @@ private fun FlipTimerPage(
                     color = FlipClockPalette.PanelElevated,
                     border = BorderStroke(1.dp, FlipClockPalette.PanelOutline),
                     modifier = Modifier
-                        .widthIn(max = 520.dp)
+                        .widthIn(max = presetSectionMaxWidth)
                         .fillMaxWidth()
                         .testTag("flip_timer_custom_duration_btn")
                 ) {
@@ -1315,43 +2027,63 @@ private fun FlipTimerPage(
                 }
             }
 
-            items(presets, key = { it.presetId }) { preset ->
-                val selected = preset.presetId == timerState.activePresetId
-                Surface(
-                    onClick = {
-                        onSelectPreset(preset)
-                        if (!timerState.isRunning && !timerState.isPaused) {
-                            timerScope.launch { listState.animateScrollToItem(0) }
-                        }
-                    },
-                    shape = RoundedCornerShape(16.dp),
-                    color = if (selected) FlipClockPalette.PanelActive else FlipClockPalette.PanelDark,
-                    border = BorderStroke(
-                        1.dp,
-                        if (selected) FlipClockPalette.SageLabel.copy(alpha = 0.65f) else FlipClockPalette.PanelOutline
-                    ),
+            item(key = "timer_presets_grid") {
+                val presetRows = presets.chunked(presetColumns)
+                Column(
                     modifier = Modifier
-                        .widthIn(max = 520.dp)
+                        .widthIn(max = presetSectionMaxWidth)
                         .fillMaxWidth()
-                        .testTag("flip_preset_item_${preset.presetId}")
+                        .testTag("flip_timer_presets_grid"),
+                    verticalArrangement = Arrangement.spacedBy(8.dp)
                 ) {
-                    Row(
-                        modifier = Modifier.padding(horizontal = 16.dp, vertical = 13.dp),
-                        verticalAlignment = Alignment.CenterVertically,
-                        horizontalArrangement = Arrangement.SpaceBetween
-                    ) {
-                        Text(
-                            text = preset.name,
-                            style = MaterialTheme.typography.bodyLarge.copy(fontWeight = FontWeight.Medium),
-                            color = if (selected) FlipClockPalette.SageLabel else FlipClockPalette.AccentSoft,
-                            maxLines = 1,
-                            overflow = TextOverflow.Ellipsis
-                        )
-                        Text(
-                            text = formatDurationWords(preset.durationSeconds),
-                            style = MaterialTheme.typography.labelMedium,
-                            color = if (selected) FlipClockPalette.AccentSoft else FlipClockPalette.SubTextGrey
-                        )
+                    presetRows.forEach { rowPresets ->
+                        Row(
+                            modifier = Modifier.fillMaxWidth(),
+                            horizontalArrangement = Arrangement.spacedBy(8.dp)
+                        ) {
+                            rowPresets.forEach { preset ->
+                                val selected = preset.presetId == timerState.activePresetId
+                                Surface(
+                                    onClick = {
+                                        onSelectPreset(preset)
+                                        if (!timerState.isRunning && !timerState.isPaused) {
+                                            timerScope.launch { listState.animateScrollToItem(0) }
+                                        }
+                                    },
+                                    shape = RoundedCornerShape(14.dp),
+                                    color = if (selected) FlipClockPalette.PanelActive else FlipClockPalette.PanelDark,
+                                    border = BorderStroke(
+                                        1.dp,
+                                        if (selected) FlipClockPalette.SageLabel.copy(alpha = 0.7f) else FlipClockPalette.PanelOutline
+                                    ),
+                                    modifier = Modifier
+                                        .weight(1f)
+                                        .testTag("flip_preset_item_${preset.presetId}")
+                                ) {
+                                    Column(
+                                        modifier = Modifier.padding(horizontal = 12.dp, vertical = 12.dp),
+                                        verticalArrangement = Arrangement.spacedBy(4.dp)
+                                    ) {
+                                        Text(
+                                            text = preset.name,
+                                            style = MaterialTheme.typography.titleSmall.copy(fontWeight = FontWeight.SemiBold),
+                                            color = if (selected) FlipClockPalette.SageLabel else FlipClockPalette.AccentSoft,
+                                            maxLines = 1,
+                                            overflow = TextOverflow.Ellipsis
+                                        )
+                                        Text(
+                                            text = formatDurationWords(preset.durationSeconds),
+                                            style = MaterialTheme.typography.labelMedium,
+                                            color = if (selected) FlipClockPalette.AccentSoft else FlipClockPalette.SubTextGrey,
+                                            maxLines = 1
+                                        )
+                                    }
+                                }
+                            }
+                            repeat(presetColumns - rowPresets.size) {
+                                Spacer(Modifier.weight(1f))
+                            }
+                        }
                     }
                 }
             }
@@ -1365,6 +2097,8 @@ private fun TimerDisplayCluster(
     minutes: Int,
     seconds: Int,
     timerState: FlipTimerState,
+    pomodoroStatus: FlipPomodoroStatus,
+    pomodoroEnabled: Boolean,
     finishedBannerVisible: Boolean,
     showFlipAxis: Boolean,
     cardHeight: Dp,
@@ -1410,6 +2144,23 @@ private fun TimerDisplayCluster(
                 maxLines = 1,
                 overflow = TextOverflow.Ellipsis
             )
+            if (pomodoroEnabled || pomodoroStatus.active) {
+                val phaseLabel = if (pomodoroStatus.phase == PomodoroPhase.BREAK) {
+                    "BREAK · #${pomodoroStatus.completedCycles + 1}"
+                } else {
+                    "FOCUS · #${pomodoroStatus.completedCycles + 1}"
+                }
+                Text(
+                    text = phaseLabel,
+                    style = MaterialTheme.typography.labelSmall.copy(fontWeight = FontWeight.Bold),
+                    color = FlipClockPalette.PrimaryCtaText,
+                    modifier = Modifier
+                        .clip(CircleShape)
+                        .background(FlipClockPalette.PrimaryCta)
+                        .padding(horizontal = 8.dp, vertical = 2.dp)
+                        .testTag("flip_pomodoro_phase_badge")
+                )
+            }
         }
 
         if (finishedBannerVisible) {

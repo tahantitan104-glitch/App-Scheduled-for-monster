@@ -120,15 +120,28 @@ import com.example.designsystem.InterFamily
 import com.example.designsystem.LocalResolveExtendedPalette
 import com.example.designsystem.OutfitTimerFamily
 import com.example.designsystem.ResolveTheme
+import androidx.compose.foundation.text.KeyboardOptions
+import androidx.compose.material3.AlertDialog
+import androidx.compose.material3.Button
+import androidx.compose.material3.ButtonDefaults
+import androidx.compose.material3.OutlinedTextField
+import androidx.compose.material3.TextButton
+import androidx.compose.ui.text.input.KeyboardType
+import androidx.compose.ui.text.input.PasswordVisualTransformation
+import com.example.domain.model.AccountabilityPartnerConfig
+import com.example.domain.model.AmbientSoundType
+import com.example.domain.model.AppLockVerificationResult
 import com.example.domain.model.DefaultLockReminders
 import com.example.domain.model.EnforcementMode
 import com.example.domain.model.FlipClockPage
+import com.example.domain.model.FlipClockSettings
 import com.example.domain.model.InstalledAppInfo
 import com.example.domain.model.LockMode
 import com.example.domain.model.LockReminderStyle
 import com.example.domain.model.MascotPreferences
 import com.example.domain.model.MascotType
 import com.example.domain.model.RecoveryVerificationResult
+import com.example.domain.model.ResolveThemeId
 import com.example.domain.model.SessionState
 import com.example.flipclock.FlipClockActivity
 import com.example.mascot.MascotAnimationController
@@ -220,7 +233,14 @@ class LockScreenActivity : ComponentActivity() {
         }
 
         setContent {
-            ResolveTheme {
+            val activeThemeId by container.preferencesRepository.appThemeIdFlow
+                .collectAsStateWithLifecycle(initialValue = ResolveThemeId.DEEP_FOREST_GREEN)
+            val emergencyCooldownSeconds by container.preferencesRepository.emergencyCooldownSecondsFlow
+                .collectAsStateWithLifecycle(initialValue = 0)
+            val partnerConfig by container.accountabilityPartnerManager.configFlow
+                .collectAsStateWithLifecycle(initialValue = AccountabilityPartnerConfig())
+
+            ResolveTheme(themeId = activeThemeId) {
                 // Disable Back exit ONLY while Lock Mode is still enforced; once session finishes,
                 // tapping Back exits the brief celebration immediately.
                 BackHandler(enabled = !isShowingCompletionCelebration) {}
@@ -233,6 +253,8 @@ class LockScreenActivity : ComponentActivity() {
                     .collectAsStateWithLifecycle(initialValue = MascotPreferences())
                 val landscapeTiltMode by container.preferencesRepository.landscapeTiltModeFlow
                     .collectAsStateWithLifecycle(initialValue = isTiltModeEnabled)
+                val flipClockSettings by container.flipClockManager.settings
+                    .collectAsStateWithLifecycle(initialValue = FlipClockSettings())
                 val effectiveReducedMotion = rememberEffectiveReducedMotion(mascotPreferences.reducedMotionEnabled)
 
                 var isLifecyclePaused by remember { mutableStateOf(false) }
@@ -335,11 +357,28 @@ class LockScreenActivity : ComponentActivity() {
                     }
                 }
 
-                // Exit immediately on terminal or missing session state without stalling on celebration
-                // or uncovering MainActivity underneath LockScreenActivity's isolated task.
-                LaunchedEffect(isEngineInitialized, activeSession?.state) {
+                // Play mascot completion celebration when an active lock finishes naturally, then exit cleanly.
+                // Exit immediately without stalling on recovery, failure, or missing session states.
+                LaunchedEffect(isEngineInitialized, activeSession?.state, isShowingCompletionCelebration) {
                     if (!isEngineInitialized) return@LaunchedEffect
                     val state = activeSession?.state
+                    if (state == SessionState.COMPLETED && sawActiveLockEnforcement && !isShowingCompletionCelebration) {
+                        isShowingCompletionCelebration = true
+                        lifecycleScope.launch {
+                            runCatching {
+                                mascotController.playSessionCompletionCelebration()
+                            }
+                            if (!isFinishing && !isDestroyed) {
+                                runCatching { engine.finalizeLockExit(this@LockScreenActivity) }
+                                runCatching { moveTaskToBack(true) }
+                                safeFinishAndRemoveTask()
+                            }
+                        }
+                        return@LaunchedEffect
+                    }
+                    if (isShowingCompletionCelebration) {
+                        return@LaunchedEffect
+                    }
                     if (state == null ||
                         state == SessionState.COMPLETED ||
                         state == SessionState.RECOVERED ||
@@ -357,6 +396,10 @@ class LockScreenActivity : ComponentActivity() {
                     (remainingMillis.toFloat() / totalDurationMs.toFloat()).coerceIn(0f, 1f)
                 } else 0f
 
+                val partnerUnlockEnabled = partnerConfig.enabled &&
+                    partnerConfig.hasPartnerPin &&
+                    partnerConfig.requireForStrictUnlock
+
                 ProvideSafeTextToolbar {
                     SignatureLockScreen(
                         remainingMillis = remainingMillis,
@@ -370,6 +413,10 @@ class LockScreenActivity : ComponentActivity() {
                         onLaunchPhone = { container.phoneAccessManager.launchSystemDialer() },
                         onLaunchAllowedApp = { pkg -> container.installedAppsRepository.launchAllowedApp(pkg) },
                         onSubmitRecoveryCode = { code -> engine.submitRecoveryCode(code) },
+                        emergencyCooldownSeconds = emergencyCooldownSeconds,
+                        partnerUnlockAvailable = partnerUnlockEnabled,
+                        partnerName = partnerConfig.partnerName,
+                        onSubmitPartnerUnlock = { pin -> engine.submitPartnerStrictUnlock(pin) },
                         mascotType = mascotPreferences.selectedMascot,
                         mascotControllerState = controllerUiState,
                         reducedMotion = effectiveReducedMotion,
@@ -392,9 +439,19 @@ class LockScreenActivity : ComponentActivity() {
                         lockReminderText = mascotPreferences.lockReminderText,
                         lockReminderStyle = mascotPreferences.lockReminderStyle,
                         allowLandscapeLayout = landscapeTiltMode,
+                        ambientSoundType = flipClockSettings.ambientSoundType,
+                        playAmbientDuringFocus = flipClockSettings.playAmbientSoundDuringFocusLock,
+                        onCycleAmbientSound = {
+                            lifecycleScope.launch {
+                                container.flipClockManager.cycleAmbientSoundFromLockScreen()
+                            }
+                        },
                         onDismissCelebration = {
-                            runCatching { moveTaskToBack(true) }
-                            safeFinishAndRemoveTask()
+                            lifecycleScope.launch {
+                                runCatching { engine.finalizeLockExit(this@LockScreenActivity) }
+                                runCatching { moveTaskToBack(true) }
+                                safeFinishAndRemoveTask()
+                            }
                         }
                     )
                 }
@@ -620,6 +677,10 @@ internal fun SignatureLockScreen(
     onLaunchPhone: () -> Unit,
     onLaunchAllowedApp: (String) -> Unit,
     onSubmitRecoveryCode: suspend (String) -> RecoveryVerificationResult,
+    emergencyCooldownSeconds: Int = 0,
+    partnerUnlockAvailable: Boolean = false,
+    partnerName: String = "",
+    onSubmitPartnerUnlock: suspend (String) -> AppLockVerificationResult = { AppLockVerificationResult.NotConfigured },
     mascotType: MascotType = MascotType.BABY_CLOUD,
     mascotControllerState: MascotControllerUiState = MascotControllerUiState(),
     reducedMotion: Boolean = false,
@@ -632,6 +693,9 @@ internal fun SignatureLockScreen(
     lockReminderText: String = DefaultLockReminders.DEFAULT_TEXT,
     lockReminderStyle: LockReminderStyle = LockReminderStyle.SOFT_BOX,
     allowLandscapeLayout: Boolean = true,
+    ambientSoundType: AmbientSoundType = AmbientSoundType.OFF,
+    playAmbientDuringFocus: Boolean = false,
+    onCycleAmbientSound: () -> Unit = {},
     onDismissCelebration: () -> Unit = {}
 ) {
     val palette = LocalResolveExtendedPalette.current
@@ -639,6 +703,8 @@ internal fun SignatureLockScreen(
     val haptic = LocalHapticFeedback.current
     var showAllowedAppsSheet by remember { mutableStateOf(false) }
     var showRecoverySheet by remember { mutableStateOf(false) }
+    var showPartnerUnlockDialog by remember { mutableStateOf(false) }
+    var partnerError by remember { mutableStateOf<String?>(null) }
     var recoveryFeedback by remember { mutableStateOf<RecoveryVerificationResult?>(null) }
     var isVerifying by remember { mutableStateOf(false) }
     var entered by remember { mutableStateOf(false) }
@@ -707,8 +773,8 @@ internal fun SignatureLockScreen(
             lockReminderEnabled &&
             lockReminderText.isNotBlank()
         val mascotStageSize = when {
-            isLandscape && availableHeight < 390.dp -> 100.dp
-            isLandscape -> 122.dp
+            isLandscape && availableHeight < 390.dp -> 144.dp
+            isLandscape -> 166.dp
             compactHeight -> 122.dp
             else -> 184.dp
         }
@@ -800,6 +866,7 @@ internal fun SignatureLockScreen(
                 ) {
                     Row(
                         modifier = Modifier
+                            .padding(top = 12.dp)
                             .clip(CircleShape)
                             .background(palette.navPillContainer.copy(alpha = 0.94f))
                             .border(1.dp, palette.navPillBorder, CircleShape)
@@ -846,9 +913,9 @@ internal fun SignatureLockScreen(
                                 modifier = Modifier
                                     .fillMaxWidth()
                                     .verticalScroll(rememberScrollState())
-                                    .padding(bottom = 14.dp),
+                                    .padding(bottom = 6.dp),
                                 horizontalAlignment = Alignment.CenterHorizontally,
-                                verticalArrangement = Arrangement.spacedBy(6.dp, Alignment.CenterVertically)
+                                verticalArrangement = Arrangement.spacedBy(4.dp, Alignment.CenterVertically)
                             ) {
                                 LockScreenMascotStage(
                                     activeMascot = mascotType,
@@ -856,7 +923,7 @@ internal fun SignatureLockScreen(
                                     reducedMotion = reducedMotion,
                                     isPaused = isAnimationPaused,
                                     mascotStageSize = mascotStageSize,
-                                    bubbleSlotMinHeight = 38.dp
+                                    bubbleSlotMinHeight = 32.dp
                                 )
                                 LockScreenCountdownCard(
                                     remainingMillis = remainingMillis,
@@ -889,11 +956,19 @@ internal fun SignatureLockScreen(
                                     )
                                 }
 
+                                if (!isCompletionCelebration && (ambientSoundType != AmbientSoundType.OFF || playAmbientDuringFocus)) {
+                                    LockScreenAmbientSoundPill(
+                                        ambientSoundType = ambientSoundType,
+                                        onCycleSound = onCycleAmbientSound
+                                    )
+                                }
+
                                 if (!isCompletionCelebration) {
                                     LandscapeVerticalActionButtons(
                                         allowedAppsCount = allowedApps.size,
                                         phoneAccessEnabled = phoneAccessEnabled,
                                         isStrictMode = isStrictMode,
+                                        partnerUnlockAvailable = partnerUnlockAvailable,
                                         showFlipClockShortcut = showFlipClockShortcut,
                                         onOpenAllowedApps = {
                                             haptic.performHapticFeedback(HapticFeedbackType.TextHandleMove)
@@ -909,8 +984,13 @@ internal fun SignatureLockScreen(
                                         },
                                         onOpenRecovery = {
                                             haptic.performHapticFeedback(HapticFeedbackType.TextHandleMove)
-                                            recoveryFeedback = null
-                                            showRecoverySheet = true
+                                            if (isStrictMode && partnerUnlockAvailable) {
+                                                partnerError = null
+                                                showPartnerUnlockDialog = true
+                                            } else {
+                                                recoveryFeedback = null
+                                                showRecoverySheet = true
+                                            }
                                         }
                                     )
                                 }
@@ -1001,14 +1081,23 @@ internal fun SignatureLockScreen(
                                 compactHeight = compactHeight
                             )
                         }
+
+                        if (!isCompletionCelebration && (ambientSoundType != AmbientSoundType.OFF || playAmbientDuringFocus)) {
+                            Spacer(modifier = Modifier.height(if (compactHeight) 8.dp else 12.dp))
+                            LockScreenAmbientSoundPill(
+                                ambientSoundType = ambientSoundType,
+                                onCycleSound = onCycleAmbientSound
+                            )
+                        }
                     }
                 }
 
-                // Floating Frosted Bottom Dock: Allowed Apps, Phone Call, Flip Clock (optional), Recovery (hidden in Strict Mode)
+                // Floating Frosted Bottom Dock: Allowed Apps, Phone Call, Flip Clock (optional), Recovery or Partner Unlock
                 val hasPortraitDockItems = allowedApps.isNotEmpty() ||
                     phoneAccessEnabled ||
                     showFlipClockShortcut ||
-                    !isStrictMode
+                    !isStrictMode ||
+                    partnerUnlockAvailable
                 if (!isCompletionCelebration && hasPortraitDockItems) {
                     Row(
                         modifier = Modifier
@@ -1124,23 +1213,38 @@ internal fun SignatureLockScreen(
                             }
                         }
 
-                        if (!isStrictMode) {
+                        if (!isStrictMode || partnerUnlockAvailable) {
                             IconButton(
                                 onClick = {
                                     haptic.performHapticFeedback(HapticFeedbackType.TextHandleMove)
-                                    recoveryFeedback = null
-                                    showRecoverySheet = true
+                                    if (isStrictMode && partnerUnlockAvailable) {
+                                        partnerError = null
+                                        showPartnerUnlockDialog = true
+                                    } else {
+                                        recoveryFeedback = null
+                                        showRecoverySheet = true
+                                    }
                                 },
                                 modifier = Modifier
                                     .size(48.dp)
                                     .clip(CircleShape)
                                     .background(palette.controlSurface)
                                     .border(1.dp, palette.controlBorder, CircleShape)
-                                    .testTag("lock_screen_recovery_button")
+                                    .testTag(
+                                        if (isStrictMode && partnerUnlockAvailable) {
+                                            "lock_screen_partner_unlock_button"
+                                        } else {
+                                            "lock_screen_recovery_button"
+                                        }
+                                    )
                             ) {
                                 Icon(
                                     imageVector = ResolveIcons.Key,
-                                    contentDescription = "Enter recovery code",
+                                    contentDescription = if (isStrictMode && partnerUnlockAvailable) {
+                                        "Unlock with partner PIN"
+                                    } else {
+                                        "Enter recovery code"
+                                    },
                                     tint = palette.textSecondary,
                                     modifier = Modifier.size(20.dp)
                                 )
@@ -1209,6 +1313,7 @@ internal fun SignatureLockScreen(
             expectedLength = expectedRecoveryLength,
             verificationFeedback = recoveryFeedback,
             isVerifying = isVerifying,
+            cooldownSeconds = emergencyCooldownSeconds,
             onDismiss = { showRecoverySheet = false },
             onSubmitCode = { code ->
                 scope.launch {
@@ -1224,6 +1329,93 @@ internal fun SignatureLockScreen(
             }
         )
     }
+
+    if (showPartnerUnlockDialog) {
+        PartnerStrictUnlockDialog(
+            partnerName = partnerName,
+            errorText = partnerError,
+            onDismiss = { showPartnerUnlockDialog = false },
+            onSubmitPin = { pin ->
+                scope.launch {
+                    when (val res = onSubmitPartnerUnlock(pin)) {
+                        AppLockVerificationResult.Verified -> showPartnerUnlockDialog = false
+                        is AppLockVerificationResult.InvalidCredential ->
+                            partnerError = "Incorrect PIN (${res.remainingAttemptsBeforeCooldown} left)."
+                        is AppLockVerificationResult.Throttled ->
+                            partnerError = "Wait ${res.retryAfterSeconds}s before retrying."
+                        AppLockVerificationResult.NotConfigured ->
+                            partnerError = "Partner PIN is not active."
+                    }
+                }
+            }
+        )
+    }
+}
+
+@Composable
+private fun PartnerStrictUnlockDialog(
+    partnerName: String,
+    errorText: String?,
+    onDismiss: () -> Unit,
+    onSubmitPin: (String) -> Unit
+) {
+    val palette = LocalResolveExtendedPalette.current
+    var pin by remember { mutableStateOf("") }
+    AlertDialog(
+        onDismissRequest = onDismiss,
+        containerColor = palette.surfaceSecondary,
+        title = {
+            Text(
+                text = "${partnerName.ifBlank { "Partner" }} Unlock",
+                color = palette.textPrimary
+            )
+        },
+        text = {
+            Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                Text(
+                    text = "Strict Mode is active. Ask your accountability partner to enter their PIN to end this lock.",
+                    style = MaterialTheme.typography.bodySmall,
+                    color = palette.textSecondary
+                )
+                OutlinedTextField(
+                    value = pin,
+                    onValueChange = { pin = it.filter { ch -> ch.isDigit() }.take(12) },
+                    singleLine = true,
+                    visualTransformation = PasswordVisualTransformation(),
+                    keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.NumberPassword),
+                    label = { Text("Partner PIN") },
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .testTag("lock_partner_pin_input")
+                )
+                if (!errorText.isNullOrBlank()) {
+                    Text(
+                        text = errorText,
+                        style = MaterialTheme.typography.bodySmall,
+                        color = palette.error
+                    )
+                }
+            }
+        },
+        confirmButton = {
+            Button(
+                onClick = { onSubmitPin(pin) },
+                enabled = pin.length >= 4,
+                colors = ButtonDefaults.buttonColors(
+                    containerColor = palette.primaryButton,
+                    contentColor = palette.onPrimaryButton
+                ),
+                modifier = Modifier.testTag("lock_partner_pin_submit")
+            ) {
+                Text("Unlock")
+            }
+        },
+        dismissButton = {
+            TextButton(onClick = onDismiss) {
+                Text("Cancel", color = palette.textSecondary)
+            }
+        }
+    )
 }
 
 @Composable
@@ -1459,6 +1651,7 @@ private fun LandscapeVerticalActionButtons(
     allowedAppsCount: Int,
     phoneAccessEnabled: Boolean,
     isStrictMode: Boolean = false,
+    partnerUnlockAvailable: Boolean = false,
     showFlipClockShortcut: Boolean = false,
     onOpenAllowedApps: () -> Unit,
     onLaunchPhone: () -> Unit,
@@ -1466,7 +1659,11 @@ private fun LandscapeVerticalActionButtons(
     onOpenRecovery: () -> Unit
 ) {
     val palette = LocalResolveExtendedPalette.current
-    val hasAnyButton = phoneAccessEnabled || allowedAppsCount > 0 || !isStrictMode || showFlipClockShortcut
+    val hasAnyButton = phoneAccessEnabled ||
+        allowedAppsCount > 0 ||
+        !isStrictMode ||
+        partnerUnlockAvailable ||
+        showFlipClockShortcut
     if (!hasAnyButton) return
 
     Column(
@@ -1555,7 +1752,7 @@ private fun LandscapeVerticalActionButtons(
             }
         }
 
-        if (!isStrictMode) {
+        if (!isStrictMode || partnerUnlockAvailable) {
             val recoveryInteraction = remember { MutableInteractionSource() }
             Surface(
                 onClick = onOpenRecovery,
@@ -1576,12 +1773,12 @@ private fun LandscapeVerticalActionButtons(
                 ) {
                     Icon(
                         imageVector = ResolveIcons.Key,
-                        contentDescription = "Emergency",
+                        contentDescription = if (isStrictMode && partnerUnlockAvailable) "Partner Unlock" else "Emergency",
                         tint = palette.textSecondary,
                         modifier = Modifier.size(18.dp)
                     )
                     Text(
-                        text = "Emergency",
+                        text = if (isStrictMode && partnerUnlockAvailable) "Partner Unlock" else "Emergency",
                         style = MaterialTheme.typography.labelLarge,
                         color = palette.textPrimary,
                         maxLines = 1,
@@ -1629,4 +1826,44 @@ private fun LandscapeVerticalActionButtons(
         }
     }
 }
+
+@Composable
+private fun LockScreenAmbientSoundPill(
+    ambientSoundType: AmbientSoundType,
+    onCycleSound: () -> Unit
+) {
+    val palette = LocalResolveExtendedPalette.current
+    val isActive = ambientSoundType != AmbientSoundType.OFF
+    Surface(
+        onClick = onCycleSound,
+        shape = CircleShape,
+        color = if (isActive) palette.slateTealContainer else palette.surfaceElevated.copy(alpha = 0.85f),
+        border = BorderStroke(
+            1.dp,
+            if (isActive) palette.slateTeal.copy(alpha = 0.42f) else palette.cardBorder
+        ),
+        modifier = Modifier
+            .minimumInteractiveComponentSize()
+            .testTag("lock_screen_ambient_pill")
+    ) {
+        Row(
+            modifier = Modifier.padding(horizontal = 14.dp, vertical = 8.dp),
+            verticalAlignment = Alignment.CenterVertically,
+            horizontalArrangement = Arrangement.spacedBy(8.dp)
+        ) {
+            PulsingStatusDot(
+                color = if (isActive) palette.emeraldStrong else palette.textSecondary,
+                size = 7.dp
+            )
+            Text(
+                text = if (isActive) "Sound: ${ambientSoundType.label}" else "Sound: Off (Tap)",
+                style = MaterialTheme.typography.labelMedium,
+                color = if (isActive) palette.textPrimary else palette.textSecondary,
+                maxLines = 1,
+                overflow = TextOverflow.Ellipsis
+            )
+        }
+    }
+}
+
 

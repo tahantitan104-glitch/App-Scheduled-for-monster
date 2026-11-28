@@ -14,8 +14,12 @@ import com.example.data.repository.ScheduleRepository
 import com.example.data.repository.SessionRepository
 import com.example.devicepolicy.AndroidDevicePolicyController
 import com.example.devicepolicy.DevicePolicyController
+import com.example.domain.model.AppUsageQuotaRule
+import com.example.domain.model.ContentBlockerConfig
+import com.example.domain.model.MindfulPauseConfig
 import com.example.domain.time.ClockProvider
 import com.example.domain.time.SystemClockProvider
+import com.example.flipclock.FlipAmbientAudioEngine
 import com.example.flipclock.FlipClockManager
 import com.example.flipclock.FlipTimerNotificationHelper
 import com.example.mascot.FocusMessageManager
@@ -28,6 +32,7 @@ import com.example.platform.NotificationControlManager
 import com.example.platform.SystemCapabilityChecker
 import com.example.scheduling.AndroidLockAlarmScheduler
 import com.example.scheduling.LockAlarmScheduler
+import com.example.security.AccountabilityPartnerManager
 import com.example.security.AppLockCredentialManager
 import com.example.security.AppLockSessionGuard
 import com.example.security.RecoveryCodeManager
@@ -40,10 +45,15 @@ import com.example.sync.CloudSyncGateway
 import com.example.sync.MultiDeviceSyncCoordinator
 import com.example.sync.RestCloudAccountRepository
 import com.example.telephony.PhoneAccessManager
+import com.example.vpn.ResolveDnsVpnService
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.SupervisorJob
+import kotlinx.coroutines.flow.SharingStarted
+import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.combine
+import kotlinx.coroutines.flow.distinctUntilChanged
+import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.launch
 
 class AppContainer(private val appContext: Context) {
@@ -113,6 +123,9 @@ class AppContainer(private val appContext: Context) {
     val recoveryCodeManager: RecoveryCodeManager by lazy {
         RecoveryCodeManager(preferencesRepository, clockProvider)
     }
+    val accountabilityPartnerManager: AccountabilityPartnerManager by lazy {
+        AccountabilityPartnerManager(preferencesRepository, clockProvider)
+    }
     val appLockCredentialManager: AppLockCredentialManager by lazy {
         AppLockCredentialManager(preferencesRepository, clockProvider)
     }
@@ -120,21 +133,27 @@ class AppContainer(private val appContext: Context) {
         AppLockSessionGuard()
     }
 
-    init {
-        appScope.launch {
-            combine(
-                appLockCredentialManager.appLockEnabledFlow,
-                appLockCredentialManager.hasCredentialFlow,
-                appLockRepository.observeProtectedPackages()
-            ) { enabled, hasCred, packages ->
-                Triple(enabled, hasCred, packages.toSet())
-            }.collect { (enabled, hasCred, pkgSet) ->
-                appLockSessionGuard.updateState(
-                    enabled = enabled,
-                    hasCredential = hasCred,
-                    protectedPackages = pkgSet
-                )
-            }
+    val antiBypassStrictGuardState: StateFlow<Boolean> = preferencesRepository.antiBypassStrictGuardFlow
+        .stateIn(appScope, SharingStarted.Eagerly, true)
+    val mindfulPauseConfigState: StateFlow<MindfulPauseConfig> = preferencesRepository.mindfulPauseConfigFlow
+        .stateIn(appScope, SharingStarted.Eagerly, MindfulPauseConfig())
+    val dailyQuotaRulesState: StateFlow<List<AppUsageQuotaRule>> = preferencesRepository.dailyQuotaRulesFlow
+        .stateIn(appScope, SharingStarted.Eagerly, emptyList())
+    val contentBlockerConfigState: StateFlow<ContentBlockerConfig> = preferencesRepository.contentBlockerConfigFlow
+        .stateIn(appScope, SharingStarted.Eagerly, ContentBlockerConfig())
+    val excludedScreenTimePackagesState: StateFlow<Set<String>> = preferencesRepository.excludedScreenTimePackagesFlow
+        .stateIn(appScope, SharingStarted.Eagerly, emptySet())
+
+    fun recordInterceptedAppAsync(packageName: String) {
+        if (packageName.isBlank() || packageName == appContext.packageName) return
+        appScope.launch(Dispatchers.IO) {
+            runCatching { preferencesRepository.incrementInterceptedAppCount(packageName) }
+        }
+    }
+
+    fun recordDnsBlockedAsync() {
+        appScope.launch(Dispatchers.IO) {
+            runCatching { preferencesRepository.incrementDnsBlockedCount() }
         }
     }
 
@@ -156,7 +175,9 @@ class AppContainer(private val appContext: Context) {
             foregroundGuard.showBriefBarrierAndLaunchLockScreen()
         }
 
-        override fun notifyLockStateChanged() = Unit
+        override fun notifyLockStateChanged() {
+            runCatching { com.example.widget.ResolveHomeWidgetProvider.requestWidgetUpdate(appContext) }
+        }
 
         override fun isForegroundServiceBlocked(): Boolean = fgsStartBlocked
 
@@ -181,12 +202,17 @@ class AppContainer(private val appContext: Context) {
             capabilityChecker = capabilityChecker,
             clockProvider = clockProvider,
             platformBridge = platformBridge,
-            notificationControlManager = notificationControlManager
+            notificationControlManager = notificationControlManager,
+            accountabilityPartnerManager = accountabilityPartnerManager
         )
     }
 
     val flipTimerNotificationHelper: FlipTimerNotificationHelper by lazy {
         FlipTimerNotificationHelper(appContext)
+    }
+
+    val ambientAudioEngine: FlipAmbientAudioEngine by lazy {
+        FlipAmbientAudioEngine().apply { attachContext(appContext) }
     }
 
     val flipClockManager: FlipClockManager by lazy {
@@ -195,7 +221,9 @@ class AppContainer(private val appContext: Context) {
             presetRepository = flipTimerPresetRepository,
             notificationHelper = flipTimerNotificationHelper,
             sessionEngine = sessionEngine,
-            clockProvider = clockProvider
+            clockProvider = clockProvider,
+            ambientAudioEngine = ambientAudioEngine,
+            appContext = appContext
         )
     }
 
@@ -220,5 +248,35 @@ class AppContainer(private val appContext: Context) {
             flipTimerPresetRepository = flipTimerPresetRepository,
             flipClockManager = flipClockManager
         )
+    }
+
+    init {
+        appScope.launch {
+            combine(
+                appLockCredentialManager.appLockEnabledFlow,
+                appLockCredentialManager.hasCredentialFlow,
+                appLockRepository.observeProtectedPackages()
+            ) { enabled, hasCred, packages ->
+                Triple(enabled, hasCred, packages.toSet())
+            }.collect { (enabled, hasCred, pkgSet) ->
+                appLockSessionGuard.updateState(
+                    enabled = enabled,
+                    hasCredential = hasCred,
+                    protectedPackages = pkgSet
+                )
+            }
+        }
+        appScope.launch {
+            combine(
+                contentBlockerConfigState,
+                sessionEngine.activeSession
+            ) { cfg, active ->
+                cfg to (active?.isEnforcementPhase == true)
+            }
+                .distinctUntilChanged()
+                .collect { (cfg, locked) ->
+                    runCatching { ResolveDnsVpnService.reconcileState(appContext, cfg, locked) }
+                }
+        }
     }
 }

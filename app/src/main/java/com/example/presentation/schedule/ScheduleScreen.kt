@@ -80,7 +80,7 @@ fun ScheduleScreen(
             contentPadding = PaddingValues(
                 start = 20.dp,
                 end = 20.dp,
-                top = 12.dp,
+                top = 6.dp,
                 bottom = 92.dp + dockClearance
             ),
             verticalArrangement = Arrangement.spacedBy(12.dp)

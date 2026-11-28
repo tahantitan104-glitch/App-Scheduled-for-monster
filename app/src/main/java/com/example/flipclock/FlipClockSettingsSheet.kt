@@ -44,6 +44,8 @@ import androidx.compose.material3.ModalBottomSheet
 import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.OutlinedTextFieldDefaults
+import androidx.compose.material3.Slider
+import androidx.compose.material3.SliderDefaults
 import androidx.compose.material3.Switch
 import androidx.compose.material3.SwitchDefaults
 import androidx.compose.material3.Text
@@ -66,6 +68,7 @@ import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.example.designsystem.ResolveColors
+import com.example.domain.model.AmbientSoundType
 import com.example.domain.model.FlipClockSettings
 import com.example.domain.model.FlipDateFormat
 import com.example.domain.model.FlipTimerPreset
@@ -73,6 +76,7 @@ import com.example.presentation.components.ProvideSafeTextToolbar
 import kotlin.math.roundToInt
 
 private val SLEEP_TIMER_OPTIONS = listOf(0, 15, 30, 45, 60, 90)
+private val POMODORO_PRESETS = listOf(25 to 5, 50 to 10, 45 to 15, 15 to 3)
 
 @OptIn(ExperimentalMaterial3Api::class, ExperimentalLayoutApi::class)
 @Composable
@@ -100,7 +104,19 @@ fun FlipClockSettingsSheet(
     onResetZoom: () -> Unit,
     onSavePreset: (presetId: String?, name: String, durationSeconds: Long) -> String?,
     onDeletePreset: (presetId: String) -> Unit,
-    onResetSettingsOnly: () -> Unit
+    onResetSettingsOnly: () -> Unit,
+    onSetPomodoroEnabled: (Boolean) -> Unit = {},
+    onSetPomodoroDurations: (focusMinutes: Int, breakMinutes: Int) -> Unit = { _, _ -> },
+    onSetAmbientSoundType: (AmbientSoundType) -> Unit = {},
+    onSetAmbientVolume: (Float) -> Unit = {},
+    onSetOledBurnInProtection: (Boolean) -> Unit = {},
+    onOpenLayoutEditor: () -> Unit = {},
+    onSetWeatherUseFahrenheit: (Boolean) -> Unit = {},
+    onSetWeatherAutoDetect: (Boolean) -> Unit = {},
+    onSetPlayAmbientDuringFocusLock: (Boolean) -> Unit = {},
+    onSetAmbientPlayInBackground: (Boolean) -> Unit = {},
+    onSetSyncFlipTimerWithFocusLock: (Boolean) -> Unit = {},
+    onOpenWhiteNoiseStudio: () -> Unit = {}
 ) {
     val sheetState = rememberModalBottomSheetState(skipPartiallyExpanded = true)
     var editingPreset by remember { mutableStateOf<FlipTimerPreset?>(null) }
@@ -157,6 +173,66 @@ fun FlipClockSettingsSheet(
                             tint = FlipClockPalette.SubTextGrey
                         )
                     }
+                }
+
+                // DEDICATED SECTION: White Noise & Focus Soundscapes
+                SettingsSectionLabel("WHITE NOISE & SOUNDSCAPES")
+
+                Row(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .clip(RoundedCornerShape(16.dp))
+                        .background(
+                            if (settings.ambientSoundType != AmbientSoundType.OFF) {
+                                FlipClockPalette.PanelActive
+                            } else {
+                                FlipClockPalette.PanelElevated
+                            }
+                        )
+                        .border(
+                            1.dp,
+                            if (settings.ambientSoundType != AmbientSoundType.OFF) {
+                                FlipClockPalette.PrimaryCta.copy(alpha = 0.72f)
+                            } else {
+                                FlipClockPalette.PrimaryCta.copy(alpha = 0.45f)
+                            },
+                            RoundedCornerShape(16.dp)
+                        )
+                        .clickable { onOpenWhiteNoiseStudio() }
+                        .padding(horizontal = 16.dp, vertical = 14.dp)
+                        .testTag("flip_open_white_noise_studio_btn"),
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.SpaceBetween
+                ) {
+                    Column(modifier = Modifier.weight(1f).padding(end = 12.dp)) {
+                        Text(
+                            text = if (settings.ambientSoundType != AmbientSoundType.OFF) {
+                                "White Noise Studio · ${settings.ambientSoundType.label}"
+                            } else {
+                                "White Noise & Nature Soundscapes"
+                            },
+                            style = MaterialTheme.typography.titleSmall.copy(fontWeight = FontWeight.SemiBold),
+                            color = FlipClockPalette.AccentSoft
+                        )
+                        Text(
+                            text = if (settings.ambientSoundType != AmbientSoundType.OFF) {
+                                "${settings.ambientSoundType.subtitle} · ${(settings.ambientVolume * 100f).roundToInt()}% volume"
+                            } else {
+                                "White Noise, Soft Rain, Bonfire, Forest Wind, River Waves & more"
+                            },
+                            style = MaterialTheme.typography.bodySmall,
+                            color = FlipClockPalette.SubTextGrey
+                        )
+                    }
+                    Text(
+                        text = if (settings.ambientSoundType != AmbientSoundType.OFF) "Playing" else "Open Studio",
+                        style = MaterialTheme.typography.labelLarge.copy(fontWeight = FontWeight.SemiBold),
+                        color = FlipClockPalette.PrimaryCtaText,
+                        modifier = Modifier
+                            .clip(CircleShape)
+                            .background(FlipClockPalette.PrimaryCta)
+                            .padding(horizontal = 12.dp, vertical = 6.dp)
+                    )
                 }
 
                 // SECTION 1: Time & Date Format
@@ -239,6 +315,41 @@ fun FlipClockSettingsSheet(
                 // SECTION 2: Clock Display & Split Axis
                 SettingsSectionLabel("DISPLAY & FLIP AXIS")
 
+                Row(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .clip(RoundedCornerShape(14.dp))
+                        .background(FlipClockPalette.PanelElevated)
+                        .border(1.dp, FlipClockPalette.PrimaryCta.copy(alpha = 0.45f), RoundedCornerShape(14.dp))
+                        .clickable { onOpenLayoutEditor() }
+                        .padding(horizontal = 16.dp, vertical = 14.dp)
+                        .testTag("flip_open_layout_editor_btn"),
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.SpaceBetween
+                ) {
+                    Column(modifier = Modifier.weight(1f).padding(end = 12.dp)) {
+                        Text(
+                            text = "On-Screen Layout Editor",
+                            style = MaterialTheme.typography.titleSmall.copy(fontWeight = FontWeight.SemiBold),
+                            color = FlipClockPalette.AccentSoft
+                        )
+                        Text(
+                            text = "Drag Hour, Minute, AM/PM, Seconds, Date, Weekday, Weather & Battery % directly on screen",
+                            style = MaterialTheme.typography.bodySmall,
+                            color = FlipClockPalette.SubTextGrey
+                        )
+                    }
+                    Text(
+                        text = "Customize",
+                        style = MaterialTheme.typography.labelLarge.copy(fontWeight = FontWeight.SemiBold),
+                        color = FlipClockPalette.PrimaryCtaText,
+                        modifier = Modifier
+                            .clip(CircleShape)
+                            .background(FlipClockPalette.PrimaryCta)
+                            .padding(horizontal = 12.dp, vertical = 6.dp)
+                    )
+                }
+
                 SettingsSwitchRow(
                     title = "Flip Axis Seam",
                     subtitle = "Show central split-flap dividing line through digit midpoint",
@@ -292,56 +403,116 @@ fun FlipClockSettingsSheet(
 
                 SettingsSwitchRow(
                     title = "Weather Info",
-                    subtitle = "Show live local weather for your configured city (no GPS)",
+                    subtitle = "Show live local weather on the Flip Clock face (no GPS)",
                     checked = settings.showWeather,
                     onCheckedChange = onSetShowWeather,
                     testTag = "flip_setting_show_weather"
                 )
 
                 AnimatedVisibility(visible = settings.showWeather) {
-                    Row(
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .clip(RoundedCornerShape(14.dp))
-                            .background(FlipClockPalette.PanelElevated)
-                            .padding(horizontal = 14.dp, vertical = 10.dp),
-                        verticalAlignment = Alignment.CenterVertically,
-                        horizontalArrangement = Arrangement.spacedBy(8.dp)
-                    ) {
-                        OutlinedTextField(
-                            value = weatherCityDraft,
-                            onValueChange = { weatherCityDraft = it.take(48) },
-                            label = { Text("City Name (e.g. Dhaka, London)") },
-                            singleLine = true,
-                            keyboardOptions = KeyboardOptions(imeAction = ImeAction.Done),
-                            keyboardActions = KeyboardActions(
-                                onDone = {
+                    Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                        Row(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .clip(RoundedCornerShape(14.dp))
+                                .background(FlipClockPalette.PanelElevated)
+                                .padding(horizontal = 14.dp, vertical = 10.dp),
+                            verticalAlignment = Alignment.CenterVertically,
+                            horizontalArrangement = Arrangement.spacedBy(8.dp)
+                        ) {
+                            OutlinedTextField(
+                                value = weatherCityDraft,
+                                onValueChange = { weatherCityDraft = it.take(48) },
+                                label = {
+                                    Text(
+                                        if (settings.weatherAutoDetect) {
+                                            "City Override (optional)"
+                                        } else {
+                                            "City Name (e.g. Dhaka, London)"
+                                        }
+                                    )
+                                },
+                                singleLine = true,
+                                keyboardOptions = KeyboardOptions(imeAction = ImeAction.Done),
+                                keyboardActions = KeyboardActions(
+                                    onDone = {
+                                        focusManager.clearFocus()
+                                        onSetWeatherLocationQuery(weatherCityDraft)
+                                    }
+                                ),
+                                colors = OutlinedTextFieldDefaults.colors(
+                                    focusedTextColor = FlipClockPalette.AccentSoft,
+                                    unfocusedTextColor = FlipClockPalette.AccentSoft,
+                                    focusedBorderColor = FlipClockPalette.SageAccent,
+                                    unfocusedBorderColor = FlipClockPalette.PanelOutline
+                                ),
+                                modifier = Modifier
+                                    .weight(1f)
+                                    .testTag("flip_setting_weather_city_input")
+                            )
+                            Button(
+                                onClick = {
                                     focusManager.clearFocus()
                                     onSetWeatherLocationQuery(weatherCityDraft)
-                                }
-                            ),
-                            colors = OutlinedTextFieldDefaults.colors(
-                                focusedTextColor = FlipClockPalette.AccentSoft,
-                                unfocusedTextColor = FlipClockPalette.AccentSoft,
-                                focusedBorderColor = FlipClockPalette.SageAccent,
-                                unfocusedBorderColor = FlipClockPalette.PanelOutline
-                            ),
-                            modifier = Modifier
-                                .weight(1f)
-                                .testTag("flip_setting_weather_city_input")
+                                },
+                                colors = ButtonDefaults.buttonColors(
+                                    containerColor = FlipClockPalette.PrimaryCta,
+                                    contentColor = FlipClockPalette.PrimaryCtaText
+                                ),
+                                shape = RoundedCornerShape(12.dp)
+                            ) {
+                                Text("Set")
+                            }
+                        }
+
+                        SettingsSwitchRow(
+                            title = "Auto-Detect City (No GPS)",
+                            subtitle = "Resolves approximate city via network or timezone when city is blank",
+                            checked = settings.weatherAutoDetect,
+                            onCheckedChange = onSetWeatherAutoDetect,
+                            testTag = "flip_setting_weather_auto_detect"
                         )
-                        Button(
-                            onClick = {
-                                focusManager.clearFocus()
-                                onSetWeatherLocationQuery(weatherCityDraft)
-                            },
-                            colors = ButtonDefaults.buttonColors(
-                                containerColor = FlipClockPalette.PrimaryCta,
-                                contentColor = FlipClockPalette.PrimaryCtaText
-                            ),
-                            shape = RoundedCornerShape(12.dp)
+
+                        Row(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .clip(RoundedCornerShape(14.dp))
+                                .background(FlipClockPalette.PanelElevated)
+                                .padding(horizontal = 16.dp, vertical = 10.dp),
+                            verticalAlignment = Alignment.CenterVertically,
+                            horizontalArrangement = Arrangement.SpaceBetween
                         ) {
-                            Text("Set")
+                            Text(
+                                text = "Temperature Unit",
+                                style = MaterialTheme.typography.titleSmall,
+                                color = FlipClockPalette.AccentSoft
+                            )
+                            Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                                FilterChip(
+                                    selected = !settings.weatherUseFahrenheit,
+                                    onClick = { onSetWeatherUseFahrenheit(false) },
+                                    label = { Text("°C") },
+                                    colors = FilterChipDefaults.filterChipColors(
+                                        selectedContainerColor = FlipClockPalette.PrimaryCta,
+                                        selectedLabelColor = FlipClockPalette.PrimaryCtaText,
+                                        containerColor = FlipClockPalette.PanelDark,
+                                        labelColor = FlipClockPalette.SubTextGrey
+                                    ),
+                                    modifier = Modifier.testTag("flip_setting_weather_celsius")
+                                )
+                                FilterChip(
+                                    selected = settings.weatherUseFahrenheit,
+                                    onClick = { onSetWeatherUseFahrenheit(true) },
+                                    label = { Text("°F") },
+                                    colors = FilterChipDefaults.filterChipColors(
+                                        selectedContainerColor = FlipClockPalette.PrimaryCta,
+                                        selectedLabelColor = FlipClockPalette.PrimaryCtaText,
+                                        containerColor = FlipClockPalette.PanelDark,
+                                        labelColor = FlipClockPalette.SubTextGrey
+                                    ),
+                                    modifier = Modifier.testTag("flip_setting_weather_fahrenheit")
+                                )
+                            }
                         }
                     }
                 }
@@ -426,6 +597,98 @@ fun FlipClockSettingsSheet(
                     verticalArrangement = Arrangement.spacedBy(8.dp)
                 ) {
                     Text(
+                        text = "Ambient Focus Sound",
+                        style = MaterialTheme.typography.titleSmall,
+                        color = FlipClockPalette.AccentSoft
+                    )
+                    Text(
+                        text = "Offline synthesized focus soundscape across Flip Clock & Focus Lock",
+                        style = MaterialTheme.typography.bodySmall,
+                        color = FlipClockPalette.SubTextGrey
+                    )
+                    FlowRow(
+                        horizontalArrangement = Arrangement.spacedBy(8.dp),
+                        verticalArrangement = Arrangement.spacedBy(6.dp)
+                    ) {
+                        AmbientSoundType.entries.forEach { sound ->
+                            val selected = settings.ambientSoundType == sound
+                            FilterChip(
+                                selected = selected,
+                                onClick = { onSetAmbientSoundType(sound) },
+                                label = { Text(sound.label, style = MaterialTheme.typography.labelMedium) },
+                                colors = FilterChipDefaults.filterChipColors(
+                                    selectedContainerColor = FlipClockPalette.PrimaryCta,
+                                    selectedLabelColor = FlipClockPalette.PrimaryCtaText,
+                                    containerColor = FlipClockPalette.PanelDark,
+                                    labelColor = FlipClockPalette.SubTextGrey
+                                ),
+                                border = FilterChipDefaults.filterChipBorder(
+                                    enabled = true,
+                                    selected = selected,
+                                    borderColor = FlipClockPalette.PanelOutline,
+                                    selectedBorderColor = FlipClockPalette.SageLabel.copy(alpha = 0.75f)
+                                ),
+                                modifier = Modifier.testTag("flip_ambient_${sound.name.lowercase()}")
+                            )
+                        }
+                    }
+                    AnimatedVisibility(visible = settings.ambientSoundType != AmbientSoundType.OFF) {
+                        Column(verticalArrangement = Arrangement.spacedBy(2.dp)) {
+                            Row(
+                                modifier = Modifier.fillMaxWidth(),
+                                horizontalArrangement = Arrangement.SpaceBetween
+                            ) {
+                                Text(
+                                    text = "Ambient Volume",
+                                    style = MaterialTheme.typography.labelMedium,
+                                    color = FlipClockPalette.SubTextGrey
+                                )
+                                Text(
+                                    text = "${(settings.ambientVolume * 100f).roundToInt()}%",
+                                    style = MaterialTheme.typography.labelMedium,
+                                    color = FlipClockPalette.AccentSoft
+                                )
+                            }
+                            Slider(
+                                value = settings.ambientVolume.coerceIn(0.05f, 1f),
+                                onValueChange = onSetAmbientVolume,
+                                valueRange = 0.05f..1f,
+                                colors = SliderDefaults.colors(
+                                    thumbColor = FlipClockPalette.SageLabel,
+                                    activeTrackColor = FlipClockPalette.SageAccent,
+                                    inactiveTrackColor = FlipClockPalette.PanelDark
+                                ),
+                                modifier = Modifier.testTag("flip_ambient_volume_slider")
+                            )
+                        }
+                    }
+                }
+
+                SettingsSwitchRow(
+                    title = "Play Soundscape During Focus Lock",
+                    subtitle = "Continue playing the selected ambient sound on the Lock Screen",
+                    checked = settings.playAmbientSoundDuringFocusLock,
+                    onCheckedChange = onSetPlayAmbientDuringFocusLock,
+                    testTag = "flip_setting_ambient_during_focus_lock"
+                )
+
+                SettingsSwitchRow(
+                    title = "Continue Soundscape in Background",
+                    subtitle = "Keep soothing soundscape running even after closing Flip Clock or locking screen",
+                    checked = settings.ambientPlayInBackground,
+                    onCheckedChange = onSetAmbientPlayInBackground,
+                    testTag = "flip_setting_ambient_background"
+                )
+
+                Column(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .clip(RoundedCornerShape(14.dp))
+                        .background(FlipClockPalette.PanelElevated)
+                        .padding(horizontal = 16.dp, vertical = 12.dp),
+                    verticalArrangement = Arrangement.spacedBy(8.dp)
+                ) {
+                    Text(
                         text = "Sleep Timer",
                         style = MaterialTheme.typography.titleSmall,
                         color = FlipClockPalette.AccentSoft
@@ -472,6 +735,14 @@ fun FlipClockSettingsSheet(
                     checked = settings.keepScreenAwake,
                     onCheckedChange = onSetKeepScreenAwake,
                     testTag = "flip_setting_keep_awake"
+                )
+
+                SettingsSwitchRow(
+                    title = "OLED Burn-in Protection",
+                    subtitle = "Gently shifts numerals by a few pixels every minute on pure black canvas",
+                    checked = settings.oledBurnInProtection,
+                    onCheckedChange = onSetOledBurnInProtection,
+                    testTag = "flip_setting_oled_shift"
                 )
 
                 Row(
@@ -538,15 +809,76 @@ fun FlipClockSettingsSheet(
                     }
                 }
 
-                // SECTION 5: Timer Settings & Presets
-                SettingsSectionLabel("TIMER & PRESETS")
+                // SECTION 5: Timer Settings, Pomodoro & Presets
+                SettingsSectionLabel("POMODORO, TIMER & PRESETS")
+
+                SettingsSwitchRow(
+                    title = "Pomodoro Focus / Break Cycle",
+                    subtitle = "Automatically alternates ${settings.pomodoroFocusMinutes}m focus and ${settings.pomodoroBreakMinutes}m break with chime",
+                    checked = settings.pomodoroEnabled,
+                    onCheckedChange = onSetPomodoroEnabled,
+                    testTag = "flip_setting_pomodoro"
+                )
+
+                AnimatedVisibility(visible = settings.pomodoroEnabled) {
+                    Column(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .clip(RoundedCornerShape(14.dp))
+                            .background(FlipClockPalette.PanelElevated)
+                            .padding(horizontal = 16.dp, vertical = 12.dp),
+                        verticalArrangement = Arrangement.spacedBy(8.dp)
+                    ) {
+                        Text(
+                            text = "Pomodoro Interval (Focus / Break)",
+                            style = MaterialTheme.typography.titleSmall,
+                            color = FlipClockPalette.AccentSoft
+                        )
+                        FlowRow(
+                            horizontalArrangement = Arrangement.spacedBy(8.dp),
+                            verticalArrangement = Arrangement.spacedBy(6.dp)
+                        ) {
+                            POMODORO_PRESETS.forEach { (focusM, breakM) ->
+                                val selected = settings.pomodoroFocusMinutes == focusM &&
+                                    settings.pomodoroBreakMinutes == breakM
+                                FilterChip(
+                                    selected = selected,
+                                    onClick = { onSetPomodoroDurations(focusM, breakM) },
+                                    label = { Text("${focusM}m / ${breakM}m") },
+                                    colors = FilterChipDefaults.filterChipColors(
+                                        selectedContainerColor = FlipClockPalette.PrimaryCta,
+                                        selectedLabelColor = FlipClockPalette.PrimaryCtaText,
+                                        containerColor = FlipClockPalette.PanelDark,
+                                        labelColor = FlipClockPalette.SubTextGrey
+                                    ),
+                                    border = FilterChipDefaults.filterChipBorder(
+                                        enabled = true,
+                                        selected = selected,
+                                        borderColor = FlipClockPalette.PanelOutline,
+                                        selectedBorderColor = FlipClockPalette.SageLabel.copy(alpha = 0.75f)
+                                    ),
+                                    modifier = Modifier.testTag("flip_pomodoro_${focusM}_${breakM}")
+                                )
+                            }
+                        }
+                    }
+                }
 
                 SettingsSwitchRow(
                     title = "Timer Auto-Repeat",
                     subtitle = "Automatically restart after the 5s completion message",
                     checked = settings.autoRepeat,
+                    enabled = !settings.pomodoroEnabled,
                     onCheckedChange = onSetAutoRepeat,
                     testTag = "flip_setting_auto_repeat"
+                )
+
+                SettingsSwitchRow(
+                    title = "Sync Flip Timer with Focus Lock",
+                    subtitle = "Show live Focus Lock countdown & start Focus Lock from Flip Timer",
+                    checked = settings.syncFlipTimerWithFocusLock,
+                    onCheckedChange = onSetSyncFlipTimerWithFocusLock,
+                    testTag = "flip_setting_sync_flip_timer_lock"
                 )
 
                 HorizontalDivider(color = FlipClockPalette.PanelOutline)

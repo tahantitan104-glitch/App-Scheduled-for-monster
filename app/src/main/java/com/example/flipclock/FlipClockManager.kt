@@ -1,14 +1,21 @@
 package com.example.flipclock
 
+import android.content.Context
 import com.example.data.preferences.ResolvePreferencesRepository
 import com.example.data.repository.FlipPresetMutationResult
 import com.example.data.repository.FlipTimerPresetRepository
+import com.example.domain.model.ActiveSession
+import com.example.domain.model.AmbientSoundType
+import com.example.domain.model.FlipClockCustomLayout
 import com.example.domain.model.FlipClockSettings
+import com.example.domain.model.FlipDateFormat
 import com.example.domain.model.FlipStopwatchState
 import com.example.domain.model.FlipTimerPreset
 import com.example.domain.model.FlipTimerState
+import com.example.domain.model.LockMode
 import com.example.domain.model.SessionState
 import com.example.domain.time.ClockProvider
+import com.example.session.EngineStartResult
 import com.example.session.LockSessionEngine
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
@@ -22,6 +29,8 @@ import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asSharedFlow
 import kotlinx.coroutines.flow.asStateFlow
+import kotlinx.coroutines.flow.combine
+import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.isActive
 import kotlinx.coroutines.launch
@@ -33,12 +42,25 @@ sealed interface FlipPresetSyncEvent {
     data class Deleted(val presetId: String, val deletedAtWallMs: Long) : FlipPresetSyncEvent
 }
 
+enum class PomodoroPhase {
+    FOCUS,
+    BREAK
+}
+
+data class FlipPomodoroStatus(
+    val active: Boolean = false,
+    val phase: PomodoroPhase = PomodoroPhase.FOCUS,
+    val completedCycles: Int = 0
+)
+
 class FlipClockManager(
     private val preferencesRepository: ResolvePreferencesRepository,
     private val presetRepository: FlipTimerPresetRepository,
     private val notificationHelper: FlipTimerNotificationHelper,
     private val sessionEngine: LockSessionEngine,
-    private val clockProvider: ClockProvider
+    private val clockProvider: ClockProvider,
+    val ambientAudioEngine: FlipAmbientAudioEngine = FlipAmbientAudioEngine(),
+    private val appContext: Context? = null
 ) {
     private val scope = CoroutineScope(SupervisorJob() + Dispatchers.Default)
     private val mutex = Mutex()
@@ -48,6 +70,83 @@ class FlipClockManager(
 
     val presets: StateFlow<List<FlipTimerPreset>> = presetRepository.observePresets()
         .stateIn(scope, SharingStarted.Eagerly, FlipTimerPresetRepository.DEFAULT_BUILT_IN_PRESETS)
+
+    val focusLockSession: StateFlow<ActiveSession?> = sessionEngine.activeSession
+    val focusLockRemainingMs: StateFlow<Long> = sessionEngine.remainingMillis
+
+    private val _isFlipClockUiOpen = MutableStateFlow(false)
+    private var bgSleepTimerJob: Job? = null
+
+    init {
+        appContext?.let { ambientAudioEngine.attachContext(it) }
+        scope.launch {
+            combine(
+                settings,
+                _isFlipClockUiOpen,
+                sessionEngine.activeSession
+            ) { s, flipOpen, activeLock ->
+                val shouldPlay = s.ambientSoundType != AmbientSoundType.OFF &&
+                    (flipOpen || s.ambientPlayInBackground || (s.playAmbientSoundDuringFocusLock && activeLock?.isEnforcementPhase == true))
+                val shouldRunBgService = s.ambientSoundType != AmbientSoundType.OFF && s.ambientPlayInBackground
+                Pair(
+                    Triple(shouldPlay, s.ambientSoundType, s.ambientVolume),
+                    shouldRunBgService
+                )
+            }.collect { (playback, shouldRunBgService) ->
+                val (shouldPlay, soundType, volume) = playback
+                if (shouldPlay) {
+                    ambientAudioEngine.updatePlayback(soundType, volume)
+                } else {
+                    ambientAudioEngine.setSleepFadeGain(1f)
+                    ambientAudioEngine.stop()
+                }
+                appContext?.let { ctx ->
+                    ResolveAmbientAudioService.reconcile(ctx, shouldRunBgService)
+                }
+            }
+        }
+        scope.launch {
+            combine(settings, _isFlipClockUiOpen) { s, flipOpen ->
+                Triple(
+                    s.ambientPlayInBackground && !flipOpen && s.ambientSoundType != AmbientSoundType.OFF,
+                    s.sleepTimerMinutes,
+                    s.ambientSoundType
+                )
+            }.collect { (needsBgTimer, sleepMins, _) ->
+                bgSleepTimerJob?.cancel()
+                if (needsBgTimer && sleepMins > 0) {
+                    bgSleepTimerJob = scope.launch {
+                        val totalMs = sleepMins * 60_000L
+                        val fadeWindowMs = 8_000L
+                        val startWall = clockProvider.wallClockMs()
+                        while (isActive) {
+                            val elapsed = clockProvider.wallClockMs() - startWall
+                            val remaining = totalMs - elapsed
+                            if (remaining <= 0L) {
+                                ambientAudioEngine.setSleepFadeGain(0f)
+                                setSleepTimerMinutes(0)
+                                stopAmbientSound()
+                                ambientAudioEngine.setSleepFadeGain(1f)
+                                break
+                            }
+                            if (remaining <= fadeWindowMs) {
+                                ambientAudioEngine.setSleepFadeGain((remaining.toFloat() / fadeWindowMs).coerceIn(0.02f, 1f))
+                            } else {
+                                ambientAudioEngine.setSleepFadeGain(1f)
+                            }
+                            delay(500L)
+                        }
+                    }
+                } else if (!needsBgTimer) {
+                    ambientAudioEngine.setSleepFadeGain(1f)
+                }
+            }
+        }
+    }
+
+    fun setFlipClockUiOpen(open: Boolean) {
+        _isFlipClockUiOpen.value = open
+    }
 
     private val _timerState = MutableStateFlow(FlipTimerState())
     val timerState: StateFlow<FlipTimerState> = _timerState.asStateFlow()
@@ -63,6 +162,12 @@ class FlipClockManager(
 
     private val _stopwatchElapsedMs = MutableStateFlow(0L)
     val stopwatchElapsedMs: StateFlow<Long> = _stopwatchElapsedMs.asStateFlow()
+
+    private val _pomodoroStatus = MutableStateFlow(FlipPomodoroStatus())
+    val pomodoroStatus: StateFlow<FlipPomodoroStatus> = _pomodoroStatus.asStateFlow()
+
+    private val _pomodoroChimeEvents = MutableSharedFlow<PomodoroPhase>(extraBufferCapacity = 8)
+    val pomodoroChimeEvents: SharedFlow<PomodoroPhase> = _pomodoroChimeEvents.asSharedFlow()
 
     private val _presetSyncEvents = MutableSharedFlow<FlipPresetSyncEvent>(extraBufferCapacity = 16)
     val presetSyncEvents: SharedFlow<FlipPresetSyncEvent> = _presetSyncEvents.asSharedFlow()
@@ -319,29 +424,74 @@ class FlipClockManager(
             if (nowWall + 250L < targetEnd && expectedWallMs == null) return@withLock
 
             notificationHelper.cancelAllTimerAlarms()
-            val autoRepeat = settings.value.autoRepeat
-            val messageUntil = nowWall + COMPLETION_BANNER_DURATION_MS
-            val nextRepeatAt = if (autoRepeat) messageUntil else null
+            val currentSettings = settings.value
+            if (currentSettings.pomodoroEnabled) {
+                val curPom = _pomodoroStatus.value
+                val nextPhase = if (curPom.phase == PomodoroPhase.FOCUS) PomodoroPhase.BREAK else PomodoroPhase.FOCUS
+                val nextCycles = if (curPom.phase == PomodoroPhase.BREAK) curPom.completedCycles + 1 else curPom.completedCycles
+                val nextMins = if (nextPhase == PomodoroPhase.FOCUS) {
+                    currentSettings.pomodoroFocusMinutes
+                } else {
+                    currentSettings.pomodoroBreakMinutes
+                }
+                val nextDurationMs = nextMins.coerceAtLeast(1) * 60_000L
+                val nextTarget = nowWall + nextDurationMs
+                val nextName = if (nextPhase == PomodoroPhase.FOCUS) {
+                    "Pomodoro Focus (${nextMins}m)"
+                } else {
+                    "Pomodoro Break (${nextMins}m)"
+                }
+                val nextTimer = current.copy(
+                    activePresetId = null,
+                    timerName = nextName,
+                    selectedDurationMs = nextDurationMs,
+                    targetEndWallMs = nextTarget,
+                    remainingWhenPausedMs = null,
+                    isRunning = true,
+                    isPaused = false,
+                    finishedAtWallMs = targetEnd,
+                    completionMessageUntilWallMs = null,
+                    autoRepeatScheduledAtWallMs = null
+                )
+                _pomodoroStatus.value = FlipPomodoroStatus(
+                    active = true,
+                    phase = nextPhase,
+                    completedCycles = nextCycles
+                )
+                _timerState.value = nextTimer
+                _timerRemainingMs.value = nextDurationMs
+                _timerFinishedBannerVisible.value = false
+                preferencesRepository.saveFlipTimerState(nextTimer)
+                notificationHelper.scheduleTimerAlarm(nextTarget)
+                _pomodoroChimeEvents.tryEmit(nextPhase)
+                didComplete = true
+                completedName = current.timerName
+                repeatAtWallMs = null
+            } else {
+                val autoRepeat = currentSettings.autoRepeat
+                val messageUntil = nowWall + COMPLETION_BANNER_DURATION_MS
+                val nextRepeatAt = if (autoRepeat) messageUntil else null
 
-            val updated = current.copy(
-                targetEndWallMs = null,
-                remainingWhenPausedMs = null,
-                isRunning = false,
-                isPaused = false,
-                finishedAtWallMs = targetEnd,
-                completionMessageUntilWallMs = messageUntil,
-                autoRepeatScheduledAtWallMs = nextRepeatAt
-            )
-            _timerState.value = updated
-            _timerRemainingMs.value = updated.selectedDurationMs
-            _timerFinishedBannerVisible.value = true
-            preferencesRepository.saveFlipTimerState(updated)
-            if (nextRepeatAt != null) {
-                notificationHelper.scheduleAutoRepeatAlarm(nextRepeatAt)
+                val updated = current.copy(
+                    targetEndWallMs = null,
+                    remainingWhenPausedMs = null,
+                    isRunning = false,
+                    isPaused = false,
+                    finishedAtWallMs = targetEnd,
+                    completionMessageUntilWallMs = messageUntil,
+                    autoRepeatScheduledAtWallMs = nextRepeatAt
+                )
+                _timerState.value = updated
+                _timerRemainingMs.value = updated.selectedDurationMs
+                _timerFinishedBannerVisible.value = true
+                preferencesRepository.saveFlipTimerState(updated)
+                if (nextRepeatAt != null) {
+                    notificationHelper.scheduleAutoRepeatAlarm(nextRepeatAt)
+                }
+                didComplete = true
+                completedName = updated.timerName
+                repeatAtWallMs = nextRepeatAt
             }
-            didComplete = true
-            completedName = updated.timerName
-            repeatAtWallMs = nextRepeatAt
         }
 
         if (didComplete) {
@@ -517,6 +667,14 @@ class FlipClockManager(
         updateSyncedSettings { it.copy(weatherLocationQuery = cleaned) }
     }
 
+    suspend fun setWeatherUseFahrenheit(enabled: Boolean) {
+        updateSyncedSettings { it.copy(weatherUseFahrenheit = enabled) }
+    }
+
+    suspend fun setWeatherAutoDetect(enabled: Boolean) {
+        updateSyncedSettings { it.copy(weatherAutoDetect = enabled) }
+    }
+
     suspend fun setSleepTimerMinutes(minutes: Int) {
         val clamped = minutes.coerceIn(0, 240)
         mutex.withLock {
@@ -566,6 +724,114 @@ class FlipClockManager(
         updateSyncedSettings { it.copy(zoomFraction = FlipClockSettings.DEFAULT_ZOOM_FRACTION) }
     }
 
+    suspend fun setPomodoroEnabled(enabled: Boolean) {
+        updateSyncedSettings { it.copy(pomodoroEnabled = enabled) }
+        val snap = preferencesRepository.getFlipClockSettingsSnapshot()
+        if (enabled) {
+            val focusMs = snap.pomodoroFocusMinutes.coerceIn(5, 90) * 60_000L
+            mutex.withLock {
+                _pomodoroStatus.value = FlipPomodoroStatus(
+                    active = true,
+                    phase = PomodoroPhase.FOCUS,
+                    completedCycles = 0
+                )
+                if (!_timerState.value.isRunning) {
+                    val updated = _timerState.value.copy(
+                        activePresetId = null,
+                        timerName = "Pomodoro Focus (${snap.pomodoroFocusMinutes}m)",
+                        selectedDurationMs = focusMs,
+                        remainingWhenPausedMs = null,
+                        isPaused = false
+                    )
+                    _timerState.value = updated
+                    _timerRemainingMs.value = focusMs
+                    preferencesRepository.saveFlipTimerState(updated)
+                }
+            }
+        } else {
+            _pomodoroStatus.value = FlipPomodoroStatus(active = false)
+        }
+    }
+
+    suspend fun setPomodoroDurations(focusMinutes: Int, breakMinutes: Int) {
+        val safeFocus = focusMinutes.coerceIn(5, 90)
+        val safeBreak = breakMinutes.coerceIn(1, 30)
+        updateSyncedSettings {
+            it.copy(pomodoroFocusMinutes = safeFocus, pomodoroBreakMinutes = safeBreak)
+        }
+        val current = _timerState.value
+        val pom = _pomodoroStatus.value
+        if (settings.value.pomodoroEnabled && !current.isRunning && !current.isPaused) {
+            val mins = if (pom.phase == PomodoroPhase.BREAK) safeBreak else safeFocus
+            val ms = mins * 60_000L
+            mutex.withLock {
+                val updated = _timerState.value.copy(
+                    timerName = if (pom.phase == PomodoroPhase.BREAK) "Pomodoro Break (${mins}m)" else "Pomodoro Focus (${mins}m)",
+                    selectedDurationMs = ms
+                )
+                _timerState.value = updated
+                _timerRemainingMs.value = ms
+                preferencesRepository.saveFlipTimerState(updated)
+            }
+        }
+    }
+
+    suspend fun setAmbientSoundType(type: AmbientSoundType) {
+        ambientAudioEngine.setSleepFadeGain(1f)
+        updateSyncedSettings { it.copy(ambientSoundType = type) }
+    }
+
+    suspend fun setAmbientVolume(volume: Float) {
+        updateSyncedSettings { it.copy(ambientVolume = volume.coerceIn(0.05f, 1f)) }
+    }
+
+    suspend fun setPlayAmbientSoundDuringFocusLock(enabled: Boolean) {
+        updateSyncedSettings { it.copy(playAmbientSoundDuringFocusLock = enabled) }
+    }
+
+    suspend fun setAmbientPlayInBackground(enabled: Boolean) {
+        updateSyncedSettings { it.copy(ambientPlayInBackground = enabled) }
+    }
+
+    suspend fun stopAmbientSound() {
+        ambientAudioEngine.setSleepFadeGain(1f)
+        updateSyncedSettings { it.copy(ambientSoundType = AmbientSoundType.OFF) }
+    }
+
+    suspend fun setSyncFlipTimerWithFocusLock(enabled: Boolean) {
+        updateSyncedSettings { it.copy(syncFlipTimerWithFocusLock = enabled) }
+    }
+
+    suspend fun cycleAmbientSoundFromLockScreen() {
+        val all = AmbientSoundType.entries
+        val current = preferencesRepository.getFlipClockSettingsSnapshot().ambientSoundType
+        val next = all[(all.indexOf(current) + 1) % all.size]
+        updateSyncedSettings {
+            it.copy(
+                ambientSoundType = next,
+                playAmbientSoundDuringFocusLock = if (next != AmbientSoundType.OFF) true else it.playAmbientSoundDuringFocusLock
+            )
+        }
+    }
+
+    suspend fun startFocusLockFromFlipTimer(): EngineStartResult {
+        val durationMs = _timerRemainingMs.value.coerceAtLeast(60_000L)
+        val lockMinutes = ((durationMs + 59_999L) / 60_000L).coerceIn(1L, 1440L)
+        val profile = preferencesRepository.getLockProfileSettingsSnapshot(LockMode.INSTANT)
+        val phoneAccess = preferencesRepository.defaultPhoneAccessFlow.first()
+        return sessionEngine.startInstantLock(
+            lockDurationMinutes = lockMinutes,
+            allowedPackages = profile.effectiveAllowedPackages,
+            phoneAccessEnabled = phoneAccess,
+            isStrictMode = profile.strictMode,
+            showFlipClockShortcut = true
+        )
+    }
+
+    suspend fun setOledBurnInProtection(enabled: Boolean) {
+        updateSyncedSettings { it.copy(oledBurnInProtection = enabled) }
+    }
+
     suspend fun saveLastBrightnessPercent(percent: Float) {
         val clamped = percent.coerceIn(
             FlipClockSettings.MIN_BRIGHTNESS_PERCENT,
@@ -576,6 +842,44 @@ class FlipClockManager(
             preferencesRepository.saveFlipClockSettings(
                 current.copy(lastBrightnessPercent = clamped)
             )
+        }
+    }
+
+    suspend fun saveCustomLayout(layout: FlipClockCustomLayout) {
+        mutex.withLock {
+            preferencesRepository.saveFlipClockCustomLayout(layout)
+        }
+    }
+
+    suspend fun saveCustomLayoutAndDisplay(
+        layout: FlipClockCustomLayout,
+        showSeconds: Boolean,
+        showDate: Boolean,
+        showWeekday: Boolean,
+        showWeather: Boolean,
+        showBattery: Boolean,
+        dateFormatPattern: String
+    ) {
+        val nowWall = clockProvider.wallClockMs()
+        mutex.withLock {
+            val current = preferencesRepository.getFlipClockSettingsSnapshot()
+            val updated = current.copy(
+                customLayout = layout,
+                showSeconds = showSeconds,
+                showDate = showDate,
+                showWeekday = showWeekday,
+                showWeather = showWeather,
+                showBattery = showBattery,
+                dateFormatPattern = FlipDateFormat.fromPattern(dateFormatPattern).pattern,
+                updatedAtWallMs = nowWall
+            )
+            preferencesRepository.saveFlipClockSettings(updated)
+        }
+    }
+
+    suspend fun resetCustomLayout() {
+        mutex.withLock {
+            preferencesRepository.saveFlipClockCustomLayout(FlipClockCustomLayout())
         }
     }
 

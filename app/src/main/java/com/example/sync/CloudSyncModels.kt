@@ -57,6 +57,10 @@ data class CloudDeviceInfo(
     val androidVersion: Long = Build.VERSION.SDK_INT.toLong(),
     val appVersion: String = BuildConfig.VERSION_NAME,
     val syncEnabled: Boolean = true,
+    val activeLockMode: String = "",
+    val activeLockExpiresWallMs: Long = 0L,
+    val activeLockFreeUseWallMs: Long = 0L,
+    val activeLockUpdatedWallMs: Long = 0L,
     @ServerTimestamp val lastSeenAt: Timestamp? = null,
     @ServerTimestamp val createdAt: Timestamp? = null,
     @ServerTimestamp val updatedAt: Timestamp? = null
@@ -70,6 +74,9 @@ data class CloudLockCommand(
     val commandId: String = "",
     val originDeviceId: String = "",
     val originDeviceName: String = "",
+    val commandAction: String = "START",
+    val targetDeviceId: String = "",
+    val extendMinutes: Long = 0L,
     val mode: String = LockMode.INSTANT.name,
     val freeUseDurationMinutes: Long = 0L,
     val lockDurationMinutes: Long = 0L,
@@ -175,10 +182,21 @@ data class CloudFlipClockSettings(
     val showBattery: Boolean = false,
     val showWeather: Boolean = false,
     val weatherLocationQuery: String = "",
+    val weatherUseFahrenheit: Boolean = false,
+    val weatherAutoDetect: Boolean = false,
     val clockTickerSoundEnabled: Boolean = false,
     val customTag: String = "",
     val autoRepeat: Boolean = false,
     val zoomFraction: Double = 1.0,
+    val pomodoroEnabled: Boolean = false,
+    val pomodoroFocusMinutes: Int = 25,
+    val pomodoroBreakMinutes: Int = 5,
+    val ambientSoundType: String = "off",
+    val ambientVolume: Double = 0.55,
+    val oledBurnInProtection: Boolean = false,
+    val syncFlipTimerWithFocusLock: Boolean = false,
+    val playAmbientSoundDuringFocusLock: Boolean = false,
+    val ambientPlayInBackground: Boolean = false,
     val originDeviceId: String = "",
     val updatedAtWallMs: Long = 0L,
     @ServerTimestamp val createdAt: Timestamp? = null,
@@ -225,14 +243,44 @@ data class AccountSyncUiState(
         get() = connectedDevices.count { it.syncEnabled }
 }
 
-fun resolveReadableDeviceName(): String {
-    val manufacturer = Build.MANUFACTURER?.trim().orEmpty()
-    val model = Build.MODEL?.trim().orEmpty()
-    val combined = when {
-        model.isEmpty() -> "Android Phone"
-        manufacturer.isEmpty() -> model
-        model.startsWith(manufacturer, ignoreCase = true) -> model
-        else -> "${manufacturer.replaceFirstChar { it.uppercase() }} $model"
+fun CloudDeviceInfo.resolvedDisplayName(): String {
+    val clean = deviceName.trim()
+    return if (clean.isEmpty() || clean.equals("unknown", ignoreCase = true)) {
+        "Android Device"
+    } else {
+        clean
     }
-    return combined.take(80).ifBlank { "Android Phone" }
+}
+
+fun CloudDeviceInfo.hasActiveRemoteLock(
+    nowWallMs: Long = System.currentTimeMillis(),
+    serverOffsetMs: Long = 0L
+): Boolean {
+    if (activeLockMode.isBlank()) return false
+    return activeLockExpiresWallMs <= 0L || activeLockExpiresWallMs > (nowWallMs + serverOffsetMs)
+}
+
+private fun cleanDeviceToken(raw: String?): String {
+    val trimmed = raw?.trim().orEmpty()
+    if (trimmed.isEmpty()) return ""
+    if (trimmed.equals("unknown", ignoreCase = true)) return ""
+    if (trimmed.equals("generic", ignoreCase = true)) return ""
+    return trimmed
+}
+
+fun resolveReadableDeviceName(): String {
+    val manufacturer = cleanDeviceToken(Build.MANUFACTURER)
+    val brand = cleanDeviceToken(Build.BRAND)
+    val model = cleanDeviceToken(Build.MODEL)
+    val device = cleanDeviceToken(Build.DEVICE)
+    val vendor = manufacturer.ifEmpty { brand }
+    val hardware = model.ifEmpty { device }
+    val combined = when {
+        hardware.isEmpty() && vendor.isEmpty() -> "Android Device"
+        hardware.isEmpty() -> vendor.replaceFirstChar { it.uppercase() }
+        vendor.isEmpty() -> hardware
+        hardware.startsWith(vendor, ignoreCase = true) -> hardware
+        else -> "${vendor.replaceFirstChar { it.uppercase() }} $hardware"
+    }
+    return combined.take(80).ifBlank { "Android Device" }
 }

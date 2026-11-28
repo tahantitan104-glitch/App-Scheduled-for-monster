@@ -316,6 +316,7 @@ fun FeatureTipNote(
     modifier: Modifier = Modifier,
     tint: Color? = null
 ) {
+    if (!com.example.designsystem.LocalShowSetupTips.current) return
     val palette = LocalResolveExtendedPalette.current
     val resolvedTint = tint ?: palette.accentSecondary
     Row(

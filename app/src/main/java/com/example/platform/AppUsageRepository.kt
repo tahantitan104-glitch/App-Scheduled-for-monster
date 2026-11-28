@@ -14,14 +14,17 @@ import java.time.Instant
 
 /**
  * Reads genuine device-local screen time and per-app foreground usage from Android's
- * UsageStatsManager for the current local calendar day. Never fabricates usage data.
+ * UsageStatsManager for the current local calendar day. Filters out user-excluded apps.
  */
 class AppUsageRepository(
     private val context: Context,
     private val capabilityChecker: SystemCapabilityChecker,
     private val clockProvider: ClockProvider
 ) {
-    suspend fun queryTodayUsageSummary(maxApps: Int = 6): DailyAppUsageSummary =
+    suspend fun queryTodayUsageSummary(
+        maxApps: Int = 8,
+        excludedPackages: Set<String> = emptySet()
+    ): DailyAppUsageSummary =
         withContext(Dispatchers.IO) {
             val nowWall = clockProvider.wallClockMs()
             if (!capabilityChecker.hasUsageStatsAccess()) {
@@ -29,54 +32,17 @@ class AppUsageRepository(
                     hasUsagePermission = false,
                     totalScreenTimeMs = 0L,
                     topApps = emptyList(),
+                    excludedCount = excludedPackages.size,
                     refreshedAtWallMs = nowWall
                 )
             }
 
-            val zone = clockProvider.zoneId()
-            val startOfDayWall = Instant.ofEpochMilli(nowWall)
-                .atZone(zone)
-                .toLocalDate()
-                .atStartOfDay(zone)
-                .toInstant()
-                .toEpochMilli()
-
-            val usageManager = runCatching {
-                context.getSystemService(Context.USAGE_STATS_SERVICE) as? UsageStatsManager
-            }.getOrNull() ?: return@withContext DailyAppUsageSummary(
-                hasUsagePermission = true,
-                totalScreenTimeMs = 0L,
-                topApps = emptyList(),
-                refreshedAtWallMs = nowWall
-            )
-
+            val usageMap = queryTodayPerAppUsageMs(nowWall)
             val launchablePackages = resolveLaunchablePackages()
             val pm = context.packageManager
-
-            val aggregated = runCatching {
-                usageManager.queryAndAggregateUsageStats(startOfDayWall, nowWall)
-            }.getOrNull().orEmpty()
-
-            val fallbackStats = if (aggregated.isEmpty()) {
-                runCatching {
-                    usageManager.queryUsageStats(
-                        UsageStatsManager.INTERVAL_DAILY,
-                        startOfDayWall,
-                        nowWall
-                    )
-                }.getOrNull().orEmpty()
-                    .groupBy { it.packageName }
-                    .mapValues { (_, list) ->
-                        list.sumOf { it.totalTimeInForeground.coerceAtLeast(0L) }
-                    }
-            } else {
-                aggregated.mapValues { (_, stats) ->
-                    stats.totalTimeInForeground.coerceAtLeast(0L)
-                }
-            }
-
             val selfPackage = context.packageName
-            val appItems = fallbackStats.entries
+
+            val validEntries = usageMap.entries
                 .asSequence()
                 .filter { (pkg, timeMs) ->
                     pkg != selfPackage &&
@@ -84,6 +50,13 @@ class AppUsageRepository(
                         (launchablePackages.isEmpty() || launchablePackages.contains(pkg)) &&
                         !EXCLUDED_SYSTEM_PACKAGES.contains(pkg)
                 }
+                .toList()
+
+            val excludedMatched = validEntries.count { excludedPackages.contains(it.key) }
+
+            val appItems = validEntries
+                .asSequence()
+                .filterNot { (pkg, _) -> excludedPackages.contains(pkg) }
                 .map { (pkg, timeMs) ->
                     val label = runCatching {
                         val appInfo = pm.getApplicationInfo(pkg, 0)
@@ -103,9 +76,51 @@ class AppUsageRepository(
                 hasUsagePermission = true,
                 totalScreenTimeMs = totalMs,
                 topApps = appItems.take(maxApps.coerceAtLeast(1)),
+                excludedCount = excludedPackages.size.coerceAtLeast(excludedMatched),
                 refreshedAtWallMs = nowWall
             )
         }
+
+    fun queryTodayUsageForPackageMs(packageName: String, nowWall: Long = clockProvider.wallClockMs()): Long {
+        if (!capabilityChecker.hasUsageStatsAccess()) return 0L
+        return queryTodayPerAppUsageMs(nowWall)[packageName] ?: 0L
+    }
+
+    private fun queryTodayPerAppUsageMs(nowWall: Long): Map<String, Long> {
+        val zone = clockProvider.zoneId()
+        val startOfDayWall = Instant.ofEpochMilli(nowWall)
+            .atZone(zone)
+            .toLocalDate()
+            .atStartOfDay(zone)
+            .toInstant()
+            .toEpochMilli()
+
+        val usageManager = runCatching {
+            context.getSystemService(Context.USAGE_STATS_SERVICE) as? UsageStatsManager
+        }.getOrNull() ?: return emptyMap()
+
+        val aggregated = runCatching {
+            usageManager.queryAndAggregateUsageStats(startOfDayWall, nowWall)
+        }.getOrNull().orEmpty()
+
+        return if (aggregated.isEmpty()) {
+            runCatching {
+                usageManager.queryUsageStats(
+                    UsageStatsManager.INTERVAL_DAILY,
+                    startOfDayWall,
+                    nowWall
+                )
+            }.getOrNull().orEmpty()
+                .groupBy { it.packageName }
+                .mapValues { (_, list) ->
+                    list.sumOf { it.totalTimeInForeground.coerceAtLeast(0L) }
+                }
+        } else {
+            aggregated.mapValues { (_, stats) ->
+                stats.totalTimeInForeground.coerceAtLeast(0L)
+            }
+        }
+    }
 
     private fun resolveLaunchablePackages(): Set<String> {
         val intent = Intent(Intent.ACTION_MAIN).apply {

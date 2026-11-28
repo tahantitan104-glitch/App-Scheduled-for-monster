@@ -260,11 +260,22 @@ fun RecoveryCodeVerifySheet(
     expectedLength: Int,
     verificationFeedback: RecoveryVerificationResult?,
     isVerifying: Boolean,
+    cooldownSeconds: Int = 0,
     onDismiss: () -> Unit,
     onSubmitCode: (String) -> Unit
 ) {
     val palette = LocalResolveExtendedPalette.current
     var input by remember { mutableStateOf("") }
+    var remainingCooldown by remember(cooldownSeconds) {
+        androidx.compose.runtime.mutableIntStateOf(cooldownSeconds.coerceAtLeast(0))
+    }
+
+    androidx.compose.runtime.LaunchedEffect(cooldownSeconds) {
+        while (remainingCooldown > 0) {
+            kotlinx.coroutines.delay(1_000L)
+            remainingCooldown--
+        }
+    }
 
     ModalBottomSheet(
         onDismissRequest = onDismiss,
@@ -289,7 +300,11 @@ fun RecoveryCodeVerifySheet(
                     color = palette.textPrimary
                 )
                 Text(
-                    text = "Enter your $expectedLength-digit recovery code to exit Lock Task Mode.",
+                    text = if (remainingCooldown > 0) {
+                        "Emergency cooldown active (${remainingCooldown}s remaining) before $expectedLength-digit recovery is enabled."
+                    } else {
+                        "Enter your $expectedLength-digit recovery code to exit Lock Task Mode."
+                    },
                     style = MaterialTheme.typography.bodyMedium,
                     color = palette.textSecondary
                 )
@@ -341,7 +356,7 @@ fun RecoveryCodeVerifySheet(
                         dismissTextInteractions(focusManager, textToolbar, keyboardController)
                         onSubmitCode(input)
                     },
-                    enabled = !isVerifying && input.length == expectedLength,
+                    enabled = !isVerifying && remainingCooldown <= 0 && input.length == expectedLength,
                     colors = ButtonDefaults.buttonColors(
                         containerColor = palette.primaryButton,
                         contentColor = palette.onPrimaryButton
@@ -352,7 +367,13 @@ fun RecoveryCodeVerifySheet(
                         .height(52.dp)
                         .testTag("recovery_verify_submit_button")
                 ) {
-                    Text(if (isVerifying) "Verifying…" else "Verify & End Lock")
+                    Text(
+                        when {
+                            isVerifying -> "Verifying…"
+                            remainingCooldown > 0 -> "Cooldown (${remainingCooldown}s)…"
+                            else -> "Verify & End Lock"
+                        }
+                    )
                 }
             }
         }
